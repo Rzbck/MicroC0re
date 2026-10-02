@@ -145,6 +145,7 @@ func begin_lysis() -> void:
 	if dying:
 		return
 	dying = true
+	alive = false
 	dividing = false
 	division_progress = 0.0
 	lysis_progress = 0.0
