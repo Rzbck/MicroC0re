@@ -481,6 +481,15 @@ func _draw_ciliates() -> void:
 		texture_size.y *= 2.0 - pulse
 
 		var color := Color(0.68, 0.72, 1.0, 1.0)
+		if float(ciliate.engulf_progress) > 0.0:
+			var engulf_progress: float = clampf(
+				float(ciliate.engulf_progress),
+				0.0,
+				1.0
+			)
+			var engulf_scale: float = 1.0 - 0.62 * engulf_progress
+			texture_size *= engulf_scale
+			color.a *= 1.0 - 0.70 * engulf_progress
 		if state == 1:
 			color = Color(0.86, 0.72, 1.0, 1.0)
 		if bool(ciliate.dying):
@@ -987,7 +996,11 @@ func _inspector_body(organism: Variant) -> String:
 			if int(organism.feeding_target_id) >= 0
 			else "grazing"
 		)
-		if bool(organism.dying):
+		if int(organism.engulfed_by_id) >= 0:
+			state = "being engulfed %.0f%%" % (
+				float(organism.engulf_progress) * 100.0
+			)
+		elif bool(organism.dying):
 			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
 
 		var text: String = (
