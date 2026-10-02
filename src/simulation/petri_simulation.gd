@@ -1117,7 +1117,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			eps.add_nearest_world(Vector2(cell.position), secretion)
 			cell.energy = maxf(0.0, float(cell.energy) - secretion * 0.7)
 
-	if consumed > 0.0 and not bool(cell.dividing):
+	if (consumed > 0.0 or scavenged > 0.0) and not bool(cell.dividing):
 		var growth_delta: float = (
 			growth_per_nutrient
 			* float(cell.gene_growth)
@@ -1215,10 +1215,60 @@ func _feed_environment(dt: float) -> void:
 	for source in nutrient_sources:
 		nutrient.add_radial_world(source, source_radius, amount_per_source)
 
+	# Producer mats are the first vegetation-like biome component: they use
+	# light to release oxygen and leak a small amount of dissolved organic
+	# material back into the microbial loop.
+	for source in producer_sources:
+		var local_light: float = float(_sample_light(source))
+		var mat: float = float(producer_biomass.sample_world(source))
+		var activity: float = local_light * clampf(mat * 1.8, 0.0, 1.0)
+		oxygen.add_radial_world(
+			source,
+			source_radius * 0.9,
+			producer_oxygen_rate * activity * dt
+		)
+		nutrient.add_radial_world(
+			source,
+			source_radius * 0.7,
+			producer_leak_rate * activity * dt
+		)
+
+
+func _advance_producer_mat(dt: float) -> void:
+	var count: int = producer_biomass.values.size()
+	for i in range(count):
+		var light_value: float = _light_value_for_index(i)
+		var biomass: float = float(producer_biomass.values[i])
+		var local_nutrient: float = float(nutrient.values[i])
+		var carrying: float = clampf(1.0 - biomass, 0.0, 1.0)
+		var growth: float = (
+			producer_growth_rate
+			* light_value
+			* (0.25 + 0.75 * clampf(local_nutrient * 2.0, 0.0, 1.0))
+			* carrying
+			* dt
+		)
+		producer_biomass.values[i] = clampf(
+			biomass + growth,
+			0.0,
+			1.0
+		)
+
+		if biomass > 0.002:
+			oxygen.values[i] = maxf(
+				0.0,
+				float(oxygen.values[i])
+				+ biomass * light_value * producer_oxygen_rate * 0.20 * dt
+			)
+
 
 func _prime_environment() -> void:
 	for source in nutrient_sources:
 		nutrient.add_radial_world(source, source_radius * 1.25, 0.90)
+
+	for source in producer_sources:
+		producer_biomass.add_radial_world(source, 12.0, 0.72)
+		oxygen.add_radial_world(source, 14.0, 0.55)
 
 
 func _build_sources() -> void:
@@ -1231,6 +1281,52 @@ func _build_sources() -> void:
 		Vector2(world_size.x * 0.19, world_size.y * 0.83),
 		Vector2(world_size.x * 0.80, world_size.y * 0.82),
 	]
+	producer_sources = [
+		Vector2(world_size.x * 0.18, world_size.y * 0.28),
+		Vector2(world_size.x * 0.42, world_size.y * 0.72),
+		Vector2(world_size.x * 0.64, world_size.y * 0.30),
+		Vector2(world_size.x * 0.86, world_size.y * 0.67),
+	]
+
+
+func _sample_light(position: Vector2) -> float:
+	var normalized_y: float = clampf(position.y / world_size.y, 0.0, 1.0)
+	var vertical: float = lerpf(1.0, 0.38, normalized_y)
+	var ripple: float = (
+		0.10
+		* sin(position.x * 0.055 + simulation_time * 0.07)
+		* cos(position.y * 0.045 - simulation_time * 0.05)
+	)
+	return clampf(vertical + ripple, 0.15, 1.0)
+
+
+func _light_value_for_index(index: int) -> float:
+	var x: int = index % FIELD_WIDTH
+	var y: int = index / FIELD_WIDTH
+	var position := Vector2(
+		(float(x) + 0.5) * FIELD_CELL_SIZE,
+		(float(y) + 0.5) * FIELD_CELL_SIZE
+	)
+	return _sample_light(position)
+
+
+func _water_flow(position: Vector2) -> Vector2:
+	# Small deterministic aqueous current. It gives the biome a water phase
+	# without turning every organism into a passive particle.
+	var x_wave: float = sin(
+		position.y * 0.045 + simulation_time * 0.11
+	)
+	var y_wave: float = cos(
+		position.x * 0.038 - simulation_time * 0.075
+	)
+	return Vector2(x_wave, y_wave) * water_flow_strength
+
+
+func _damage_cue_direction(position: Vector2) -> Vector2:
+	var gradient: Vector2 = Vector2(damage_cue.gradient_world(position))
+	if gradient.length_squared() <= 0.0000001:
+		return Vector2.ZERO
+	return gradient.normalized()
 
 
 func _allocate_id() -> int:
