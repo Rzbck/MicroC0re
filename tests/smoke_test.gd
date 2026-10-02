@@ -125,6 +125,14 @@ func _init() -> void:
 			or float(ciliate.lysis_progress) > 1.000001
 		):
 			errors.append("ecology: invalid ciliate lysis state %d" % ciliate.id)
+		if (
+			not is_finite(float(ciliate.engulf_progress))
+			or float(ciliate.engulf_progress) < 0.0
+			or float(ciliate.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid ciliate engulf state %d" % ciliate.id)
+		if bool(ciliate.consumed) and int(ciliate.engulfed_by_id) >= 0:
+			errors.append("ecology: consumed ciliate still owned by predator %d" % ciliate.id)
 
 	if errors.is_empty():
 		print(
