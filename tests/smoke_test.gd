@@ -1,6 +1,11 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+# Compile the visible app stack during every headless smoke run so renderer
+# script parse errors cannot survive until the manual GUI test.
+const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
+const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
+const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
