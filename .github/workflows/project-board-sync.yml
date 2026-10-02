@@ -157,8 +157,8 @@ jobs:
             exit 1
           fi
 
-          item_id="$(gh api graphql             -f content="$CONTENT_ID"             -f project="$project_id"             -f query='
-              query($content:ID!, $project:ID!) {
+          item_json="$(gh api graphql             -f content="$CONTENT_ID"             -f query='
+              query($content:ID!) {
                 node(id:$content) {
                   ... on Issue {
                     projectItems(first:50) {
@@ -171,7 +171,11 @@ jobs:
                     }
                   }
                 }
-              }'             --jq '.data.node.projectItems.nodes[] | select(.project.id == env.PROJECT_ID) | .id'             -f PROJECT_ID="$project_id" 2>/dev/null || true)"
+              }')"
+
+          item_id="$(jq -r --arg project "$project_id" '
+            [.data.node.projectItems.nodes[]? | select(.project.id == $project) | .id][0] // ""
+          ' <<<"$item_json")"
 
           if [[ -z "$item_id" ]]; then
             item_id="$(gh api graphql               -f project="$project_id"               -f content="$CONTENT_ID"               -f query='
