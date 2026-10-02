@@ -87,6 +87,15 @@ Useful ideas:
 
 MicroC0re differs by being primarily an autonomous generative ecosystem rather than a player-designed microbe game.
 
+
+### Biogenesis
+Useful ideas:
+- organisms expose function through visible morphology/color;
+- descendants inherit a visual genetic structure with mutations;
+- metabolism, environment, mutation and ecosystem feedback are all part of the same simulation.
+
+MicroC0re should take the same readability principle but use a more microscopic, membrane/appendage-oriented visual language rather than colored line-segment organisms.
+
 ### Lenia / Flow-Lenia
 Useful ideas:
 - continuous fields can create highly organic emergent motion and morphology;
