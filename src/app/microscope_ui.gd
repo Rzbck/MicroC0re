@@ -32,7 +32,10 @@ func _panel_style(alpha: float = 0.94) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.012, 0.020, 0.024, alpha)
 	style.border_color = Color(0.18, 0.36, 0.34, 0.90)
-	style.set_border_width_all(1)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
 	style.corner_radius_top_left = 3
 	style.corner_radius_top_right = 3
 	style.corner_radius_bottom_left = 3
@@ -99,23 +102,23 @@ func _build_menu() -> void:
 	box.add_child(spacer)
 
 	var resume := _make_button("RESUME")
-	resume.pressed.connect(func() -> void: resume_requested.emit())
+	resume.pressed.connect(_emit_resume)
 	box.add_child(resume)
 
 	var fit := _make_button("FIT MICROSCOPE")
-	fit.pressed.connect(func() -> void: fit_requested.emit())
+	fit.pressed.connect(_emit_fit)
 	box.add_child(fit)
 
 	var reset := _make_button("RESET SAME SEED")
-	reset.pressed.connect(func() -> void: reset_requested.emit())
+	reset.pressed.connect(_emit_reset)
 	box.add_child(reset)
 
 	var new_seed := _make_button("NEW SEED")
-	new_seed.pressed.connect(func() -> void: new_seed_requested.emit())
+	new_seed.pressed.connect(_emit_new_seed)
 	box.add_child(new_seed)
 
 	var quit := _make_button("QUIT")
-	quit.pressed.connect(func() -> void: quit_requested.emit())
+	quit.pressed.connect(_emit_quit)
 	box.add_child(quit)
 
 
@@ -200,3 +203,23 @@ func hide_inspector() -> void:
 
 func is_inspector_open() -> bool:
 	return inspector_panel.visible
+
+
+func _emit_resume() -> void:
+	resume_requested.emit()
+
+
+func _emit_fit() -> void:
+	fit_requested.emit()
+
+
+func _emit_reset() -> void:
+	reset_requested.emit()
+
+
+func _emit_new_seed() -> void:
+	new_seed_requested.emit()
+
+
+func _emit_quit() -> void:
+	quit_requested.emit()
