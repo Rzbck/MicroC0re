@@ -32,7 +32,7 @@ var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
 var far_renderer: Node2D
-var ui: CanvasLayer
+var ui: Variant
 var current_seed: int = 1337
 
 var accumulator: float = 0.0
