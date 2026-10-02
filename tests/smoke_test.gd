@@ -48,6 +48,18 @@ func _init() -> void:
 
 	if first.waste.min_value() < -0.000001:
 		errors.append("waste: negative concentration detected")
+	if first.oxygen.min_value() < -0.000001:
+		errors.append("biome: negative oxygen detected")
+	if first.detritus.min_value() < -0.000001:
+		errors.append("biome: negative detritus detected")
+	if first.eps.min_value() < -0.000001:
+		errors.append("biome: negative EPS detected")
+	if first.damage_cue.min_value() < -0.000001:
+		errors.append("biome: negative damage cue detected")
+	if first.producer_biomass.min_value() < -0.000001:
+		errors.append("biome: negative producer biomass detected")
+	if first.producer_biomass.total() <= 0.0:
+		errors.append("biome: producer mat disappeared")
 
 	var ids := {}
 	var saw_genotype_variation: bool = false
@@ -77,6 +89,8 @@ func _init() -> void:
 		):
 			errors.append("state: invalid lysis progress for cell %d" % cell.id)
 
+		if int(cell.guild) < 0 or int(cell.guild) > 3:
+			errors.append("ecology: invalid bacterial guild for cell %d" % cell.id)
 		if int(cell.plasmid_mask) < 0 or int(cell.plasmid_mask) > 15:
 			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
 		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
@@ -96,20 +110,34 @@ func _init() -> void:
 	for proto in first.protozoa:
 		if not _finite_vector(proto.position) or not is_finite(proto.energy):
 			errors.append("ecology: invalid protozoan state %d" % proto.id)
+		if (
+			not is_finite(float(proto.lysis_progress))
+			or float(proto.lysis_progress) < 0.0
+			or float(proto.lysis_progress) > 1.000001
+		):
+			errors.append("ecology: invalid protozoan lysis state %d" % proto.id)
 	for ciliate in first.ciliates:
 		if not _finite_vector(ciliate.position) or not is_finite(ciliate.energy):
 			errors.append("ecology: invalid ciliate state %d" % ciliate.id)
+		if (
+			not is_finite(float(ciliate.lysis_progress))
+			or float(ciliate.lysis_progress) < 0.0
+			or float(ciliate.lysis_progress) > 1.000001
+		):
+			errors.append("ecology: invalid ciliate lysis state %d" % ciliate.id)
 
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d nutrient=%.3f waste=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
 				first.protozoa.size(),
 				first.ciliates.size(),
 				first.nutrient.total(),
-				first.waste.total(),
+				first.oxygen.total(),
+				first.detritus.total(),
+				first.producer_biomass.total(),
 			]
 		)
 		quit(0)
