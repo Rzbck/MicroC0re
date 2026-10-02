@@ -32,11 +32,17 @@ var rng := RandomNumberGenerator.new()
 
 var nutrient: Variant
 var waste: Variant
+var oxygen: Variant
+var detritus: Variant
+var eps: Variant
+var damage_cue: Variant
+var producer_biomass: Variant
 var bacteria: Array = []
 var protozoa: Array = []
 var ciliates: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
+var producer_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
 var _chemistry_accumulator: float = 0.0
@@ -65,6 +71,26 @@ var waste_diffusion: float = 1.25
 var waste_decay: float = 0.018
 var source_rate: float = 0.22
 var source_radius: float = 10.0
+
+# Living biome fields. Values are normalized qualitative concentrations.
+var oxygen_diffusion: float = 2.8
+var oxygen_decay: float = 0.0015
+var detritus_diffusion: float = 0.18
+var detritus_decay: float = 0.004
+var eps_diffusion: float = 0.035
+var eps_decay: float = 0.0012
+var damage_cue_diffusion: float = 3.8
+var damage_cue_decay: float = 0.72
+var producer_decay: float = 0.0006
+var producer_growth_rate: float = 0.014
+var producer_oxygen_rate: float = 0.018
+var producer_leak_rate: float = 0.0035
+var oxygen_half_saturation: float = 0.16
+var oxygen_consumption_rate: float = 0.020
+var detritus_scavenge_rate: float = 0.070
+var detritus_energy_yield: float = 3.4
+var eps_secretion_rate: float = 0.0045
+var water_flow_strength: float = 0.42
 
 # Motility / chemotaxis.
 var run_speed: float = 11.0
@@ -134,6 +160,11 @@ func _init(seed_value: int = 1) -> void:
 	rng.seed = seed_value
 	nutrient = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	waste = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	oxygen = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	detritus = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	eps = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	damage_cue = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	producer_biomass = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	_grid_head.resize(GRID_CELL_COUNT)
 	_grid_head.fill(-1)
 	_build_sources()
@@ -151,6 +182,11 @@ func seed_demo(count: int = 36) -> void:
 	rng.seed = fixed_seed
 	nutrient.fill(0.012)
 	waste.fill(0.0)
+	oxygen.fill(0.42)
+	detritus.fill(0.0)
+	eps.fill(0.0)
+	damage_cue.fill(0.0)
+	producer_biomass.fill(0.0)
 	_prime_environment()
 
 	for _i in range(maxi(0, count)):
@@ -257,8 +293,18 @@ func step(dt: float) -> void:
 	_chemistry_accumulator += dt
 	while _chemistry_accumulator >= CHEMISTRY_DT:
 		_feed_environment(CHEMISTRY_DT)
+		_advance_producer_mat(CHEMISTRY_DT)
 		nutrient.diffuse(nutrient_diffusion, CHEMISTRY_DT, nutrient_decay)
 		waste.diffuse(waste_diffusion, CHEMISTRY_DT, waste_decay)
+		oxygen.diffuse(oxygen_diffusion, CHEMISTRY_DT, oxygen_decay)
+		detritus.diffuse(detritus_diffusion, CHEMISTRY_DT, detritus_decay)
+		eps.diffuse(eps_diffusion, CHEMISTRY_DT, eps_decay)
+		damage_cue.diffuse(
+			damage_cue_diffusion,
+			CHEMISTRY_DT,
+			damage_cue_decay
+		)
+		producer_biomass.diffuse(0.0, CHEMISTRY_DT, producer_decay)
 		_chemistry_accumulator -= CHEMISTRY_DT
 	chemistry_ms_last = float(Time.get_ticks_usec() - chemistry_start) / 1000.0
 
