@@ -77,6 +77,16 @@ func _init() -> void:
 		):
 			errors.append("state: invalid lysis progress for cell %d" % cell.id)
 
+		if int(cell.plasmid_mask) < 0 or int(cell.plasmid_mask) > 15:
+			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
+		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
+			errors.append("evolution: invalid transfer role for cell %d" % cell.id)
+		if (
+			float(cell.transfer_progress) < 0.0
+			or float(cell.transfer_progress) > 1.000001
+		):
+			errors.append("evolution: invalid transfer progress for cell %d" % cell.id)
+
 		if absf(float(cell.gene_speed) - 1.0) > 0.001:
 			saw_genotype_variation = true
 
