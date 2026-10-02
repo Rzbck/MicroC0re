@@ -221,3 +221,166 @@ Why it matters:
 Use in MicroC0re:
 - #30 host-lineage-specific phage pressure;
 - diversity maintenance rather than unlimited dominance by one bacterial lineage.
+
+
+## Living aquatic biome research
+
+The current ecosystem expansion is summarized in `docs/BIOME.md`.
+
+### Spatial structure and niche construction
+
+Recent review:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC12892361/
+
+Use in MicroC0re:
+- local gradients rather than globally mixed resources;
+- patchy producer/carrion/biofilm niches;
+- short-range ecological and evolutionary interactions.
+
+### Aquatic microbial loop
+
+Protist predation / microbial loop review:
+https://www.nature.com/articles/nrmicro1180
+
+Aquatic viral-particle ecology:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC4962909/
+
+Use:
+- dissolved material -> bacteria -> protist grazers;
+- predation/lysis -> detritus / dissolved resources;
+- later viral shunt.
+
+### Cross-feeding
+
+Review:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC8721230/
+
+Use:
+- one guild's secreted/waste metabolite becomes another guild's resource;
+- optional vs obligate dependencies;
+- spatially local public goods.
+
+### Phytoplankton / phycosphere
+
+Review:
+https://www.nature.com/articles/nmicrobiol201765
+
+2026 attachment review:
+https://www.nature.com/articles/s41564-026-02287-6
+
+Use:
+- explicit producer organisms around #40;
+- microscale organic exudate halos;
+- bacterial attachment, mutualism/parasitism and nutrient exchange (#53).
+
+### Phytoplankton-associated recyclers
+
+Review:
+https://www.nature.com/articles/nrmicro3326
+
+Use:
+- producer bloom -> detrital/recycler succession;
+- decomposer guilds and organic-matter transformation.
+
+### Biofilm matrix / chemical heterogeneity
+
+Reviews:
+https://www.nature.com/articles/nrmicro2415
+https://www.nature.com/articles/s41579-022-00692-2
+
+Use:
+- EPS as ecosystem engineering;
+- local nutrient/oxygen/waste gradients;
+- increased contact/HGT;
+- motility/transport changes.
+
+### Dormancy / microbial seed banks
+
+Review:
+https://www.nature.com/articles/nrmicro2504
+
+Use:
+- reversible low-metabolism state;
+- persistence of rare lineages;
+- recovery after disturbance;
+- succession / long-term stability.
+
+### Predation and coevolution
+
+2026 review:
+https://www.nature.com/articles/s41579-026-01299-7
+
+Use:
+- different searching/handling modes;
+- visible predation states;
+- prey defence evolution;
+- community-level feedbacks.
+
+### Viral shunt
+
+Review:
+https://www.nature.com/articles/s41579-019-0270-x
+
+Use:
+- phage infection links top-down mortality to resource recycling;
+- later #30 host-specific kill-the-winner dynamics.
+
+### Chemotactic damage / carrion cues
+
+2024 amino-acid chemotaxis review:
+https://journals.asm.org/doi/10.1128/jb.00300-24
+
+The review emphasizes that bacteria can respond to amino acids plus many organic/inorganic chemoeffectors.
+
+Use:
+- current generic `damage_cue` for material released by lysis/predation;
+- scavenger chemotaxis;
+- predator search cue.
+
+This does **not** imply literal blood sensing in the current aquatic biome. Host-tissue chemistry is #52.
+
+### Microbial mats, light and oxygen gradients
+
+Review:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC12168310/
+
+Use:
+- producer-biomass field;
+- light-driven oxygenation;
+- diel cycle;
+- later pH/redox layering.
+
+### Aquatic micro-food web diversity
+
+Recent study/background:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC12372383/
+
+General aquatic microbiology reference:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC7120757/
+
+Use:
+- bacteria;
+- fungi;
+- microalgae;
+- protozoa;
+- later rotifer/nematode-like microfauna.
+
+### Resource trade-offs and coexistence
+
+Review:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC4389539/
+
+Use:
+- no universally best trait;
+- resource-use trade-offs;
+- spatial heterogeneity + predators + parasites support coexistence.
+
+### Succession / colonization trade-off
+
+Study:
+https://pmc.ncbi.nlm.nih.gov/articles/PMC9710175/
+
+Use:
+- explorer vs strong-competitor ecotypes;
+- patch disturbance/recolonization;
+- priority effects.
