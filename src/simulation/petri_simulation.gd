@@ -3,6 +3,7 @@ extends RefCounted
 
 const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
+const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
@@ -27,6 +28,7 @@ var rng := RandomNumberGenerator.new()
 var nutrient: Variant
 var waste: Variant
 var bacteria: Array = []
+var protozoa: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 
@@ -94,6 +96,15 @@ var adhesion_range: float = 0.55
 var adhesion_pull: float = 0.17
 var adhesion_memory: float = 0.22
 
+# Amoeboid/protist ecology. This is intentionally a distinct organism class:
+# bacteria do not magically fuse into blobs. The larger cell deforms, hunts,
+# and visibly engulfs bacterial prey over time.
+var protozoan_speed: float = 5.4
+var protozoan_perception: float = 28.0
+var protozoan_engulf_distance: float = 4.2
+var protozoan_engulf_duration: float = 1.35
+var protozoan_maintenance: float = 0.018
+
 
 func _init(seed_value: int = 1) -> void:
 	fixed_seed = seed_value
@@ -107,6 +118,7 @@ func _init(seed_value: int = 1) -> void:
 
 func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
+	protozoa.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
@@ -133,6 +145,23 @@ func seed_demo(count: int = 36) -> void:
 		cell.length = minimum_length * float(cell.gene_size) * rng.randf_range(0.96, 1.08)
 		cell.sensed_memory = nutrient.sample_world(position)
 		bacteria.append(cell)
+
+	# A few large amoeboid predators make the ecology observable immediately:
+	# they chase nearby bacteria and engulf them with a staged deformation.
+	for proto_index in range(3):
+		var proto_margin: float = 14.0
+		var proto_position := Vector2(
+			rng.randf_range(proto_margin, world_size.x - proto_margin),
+			rng.randf_range(proto_margin, world_size.y - proto_margin)
+		)
+		var proto: Variant = ProtozoanScript.new(
+			_allocate_id(),
+			proto_position,
+			rng.randf_range(-PI, PI),
+			rng.randf_range(0.0, TAU)
+		)
+		proto.lineage_hue = wrapf(0.48 + float(proto_index) * 0.055, 0.0, 1.0)
+		protozoa.append(proto)
 
 	_resolve_all_contacts()
 
