@@ -6,6 +6,7 @@ const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
@@ -31,6 +32,7 @@ var sim: Variant
 var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
+var ecology_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
 var current_seed: int = 1337
@@ -73,6 +75,7 @@ func _ready() -> void:
 	atlas = PixelAtlasScript.new()
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
+	ecology_atlas = PixelEcologyAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -216,6 +219,8 @@ func _draw() -> void:
 	_draw_gene_transfers()
 	_draw_protozoa()
 	_draw_ciliates()
+	_draw_microalgae()
+	_draw_decomposers()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
 
 	draw_ms = _smooth_metric(
@@ -528,6 +533,184 @@ func _draw_ciliates() -> void:
 
 		if selected_kind == "ciliate" and int(ciliate.id) == selected_id:
 			var marker_size: float = maxf(3.4, float(ciliate.radius) * 2.5)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.94, 1.0, 0.72, 0.90),
+				false,
+				maxf(0.12, 0.85 / zoom_value),
+				false
+			)
+
+
+func _draw_microalgae() -> void:
+	if sim == null or ecology_atlas == null:
+		return
+
+	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
+	var zoom_value: float = camera.zoom.x
+	var overview: bool = zoom_value < _minimum_camera_zoom() * 1.16
+
+	for alga in sim.microalgae:
+		var position: Vector2 = Vector2(alga.position)
+		if not visible_rect.has_point(position):
+			continue
+
+		if overview:
+			var marker_size: float = maxf(0.34, 0.95 / zoom_value)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.42, 1.0, 0.38, 0.95),
+				true
+			)
+			continue
+
+		var state: int = 0
+		if bool(alga.dying):
+			state = 2
+		elif bool(alga.reproducing):
+			state = 1
+
+		var frame: int = posmod(
+			int(floor(visual_time * 4.5 + float(alga.visual_phase))),
+			4
+		)
+		var texture: Texture2D = ecology_atlas.get_texture(0, state, frame)
+		var texture_size: Vector2 = texture.get_size() * (
+			0.26 + float(alga.radius) * 0.018
+		)
+		var color := Color(0.52, 1.0, 0.46, 1.0)
+
+		if float(alga.engulf_progress) > 0.0:
+			var p: float = clampf(float(alga.engulf_progress), 0.0, 1.0)
+			texture_size *= 1.0 - p * 0.66
+			color.a *= 1.0 - p * 0.74
+
+		if bool(alga.dying):
+			var death: float = clampf(float(alga.lysis_progress), 0.0, 1.0)
+			color = Color(
+				0.82,
+				0.80,
+				0.28,
+				clampf(1.0 - death * 0.82, 0.15, 1.0)
+			)
+
+		var angle_step: float = TAU / 24.0
+		var pixel_angle: float = roundf(float(alga.angle) / angle_step) * angle_step
+		draw_set_transform(position, pixel_angle, Vector2.ONE)
+		draw_texture_rect(
+			texture,
+			Rect2(-texture_size * 0.5, texture_size),
+			false,
+			color
+		)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		if bool(alga.dying):
+			_draw_lysis_fragments(
+				position,
+				int(alga.id),
+				float(alga.lysis_progress),
+				color,
+				zoom_value
+			)
+
+		if selected_kind == "alga" and int(alga.id) == selected_id:
+			var marker_size: float = maxf(2.7, float(alga.radius) * 2.6)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.94, 1.0, 0.72, 0.90),
+				false,
+				maxf(0.12, 0.85 / zoom_value),
+				false
+			)
+
+
+func _draw_decomposers() -> void:
+	if sim == null or ecology_atlas == null:
+		return
+
+	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
+	var zoom_value: float = camera.zoom.x
+	var overview: bool = zoom_value < _minimum_camera_zoom() * 1.16
+
+	for yeast in sim.decomposers:
+		var position: Vector2 = Vector2(yeast.position)
+		if not visible_rect.has_point(position):
+			continue
+
+		if overview:
+			var marker_size: float = maxf(0.36, 1.0 / zoom_value)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.96, 0.64, 0.27, 0.96),
+				true
+			)
+			continue
+
+		var state: int = 0
+		if bool(yeast.dying):
+			state = 2
+		elif bool(yeast.budding):
+			state = 1
+
+		var frame: int = posmod(
+			int(floor(visual_time * 5.5 + float(yeast.visual_phase))),
+			4
+		)
+		var texture: Texture2D = ecology_atlas.get_texture(1, state, frame)
+		var texture_size: Vector2 = texture.get_size() * (
+			0.26 + float(yeast.radius) * 0.017
+		)
+		var color := Color(1.0, 0.70, 0.34, 1.0)
+
+		if float(yeast.engulf_progress) > 0.0:
+			var p: float = clampf(float(yeast.engulf_progress), 0.0, 1.0)
+			texture_size *= 1.0 - p * 0.66
+			color.a *= 1.0 - p * 0.74
+
+		if bool(yeast.dying):
+			var death: float = clampf(float(yeast.lysis_progress), 0.0, 1.0)
+			color = Color(
+				0.90,
+				0.43,
+				0.25,
+				clampf(1.0 - death * 0.82, 0.15, 1.0)
+			)
+
+		var angle_step: float = TAU / 24.0
+		var pixel_angle: float = roundf(float(yeast.angle) / angle_step) * angle_step
+		draw_set_transform(position, pixel_angle, Vector2.ONE)
+		draw_texture_rect(
+			texture,
+			Rect2(-texture_size * 0.5, texture_size),
+			false,
+			color
+		)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		if bool(yeast.dying):
+			_draw_lysis_fragments(
+				position,
+				int(yeast.id),
+				float(yeast.lysis_progress),
+				color,
+				zoom_value
+			)
+
+		if selected_kind == "yeast" and int(yeast.id) == selected_id:
+			var marker_size: float = maxf(2.8, float(yeast.radius) * 2.6)
 			draw_rect(
 				Rect2(
 					position - Vector2(marker_size, marker_size) * 0.5,
