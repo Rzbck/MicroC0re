@@ -20,5 +20,5 @@ if ([string]::IsNullOrWhiteSpace($GodotBin)) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 # Compute shaders require a RenderingDevice renderer. Do NOT use --headless.
-& $GodotBin --rendering-method forward_plus --path $repoRoot --script "res://tests/gpu_compute_benchmark.gd"
+& $GodotBin --rendering-method forward_plus --rendering-driver vulkan --path $repoRoot --script "res://tests/gpu_compute_benchmark.gd"
 exit $LASTEXITCODE
