@@ -307,8 +307,8 @@ func _draw_pili(
 
 	for pilus_index in range(count):
 		var side: float = -1.0 if pilus_index % 2 == 0 else 1.0
-		var pair_index: int = pilus_index / 2
-		var pair_count: int = maxi(1, (count + 1) / 2)
+		var pair_index: int = floori(float(pilus_index) / 2.0)
+		var pair_count: int = maxi(1, ceili(float(count) / 2.0))
 		var along: float = (
 			(float(pair_index) + 0.5) / float(pair_count) * 2.0 - 1.0
 		)
