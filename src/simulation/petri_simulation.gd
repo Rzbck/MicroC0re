@@ -895,6 +895,14 @@ func count_adhering() -> int:
 	return count
 
 
+func count_engulfing() -> int:
+	var count: int = 0
+	for proto in protozoa:
+		if int(proto.feeding_target_id) >= 0:
+			count += 1
+	return count
+
+
 func find_cell_by_id(cell_id: int) -> Variant:
 	for cell in bacteria:
 		if int(cell.id) == cell_id:
@@ -908,6 +916,7 @@ func state_signature() -> String:
 	parts.append("n:%d" % bacteria.size())
 	parts.append("nut:%.5f" % nutrient.total())
 	parts.append("waste:%.5f" % waste.total())
+	parts.append("p:%d" % protozoa.size())
 
 	for cell in bacteria:
 		parts.append(
@@ -927,6 +936,20 @@ func state_signature() -> String:
 				float(cell.division_progress),
 				1 if bool(cell.dying) else 0,
 				float(cell.lysis_progress),
+			]
+		)
+
+	for proto in protozoa:
+		parts.append(
+			"p%d:%.5f:%.5f:%.5f:%.5f:%d:%.3f"
+			% [
+				int(proto.id),
+				float(proto.position.x),
+				float(proto.position.y),
+				float(proto.angle),
+				float(proto.energy),
+				int(proto.feeding_target_id),
+				float(proto.feeding_progress),
 			]
 		)
 
