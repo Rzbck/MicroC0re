@@ -102,6 +102,12 @@ var adhesion_range: float = 0.55
 var adhesion_pull: float = 0.17
 var adhesion_memory: float = 0.22
 
+# Direct-contact plasmid conjugation.
+var conjugation_contact_rate: float = 0.28
+var conjugation_duration: float = 1.15
+var conjugation_break_distance: float = 2.8
+var conjugation_pull: float = 0.10
+
 # Amoeboid/protist ecology. This is intentionally a distinct organism class:
 # bacteria do not magically fuse into blobs. The larger cell deforms, hunts,
 # and visibly engulfs bacterial prey over time.
@@ -110,7 +116,7 @@ var protozoan_perception: float = 28.0
 var protozoan_engulf_distance: float = 4.2
 var protozoan_engulf_duration: float = 1.35
 var protozoan_maintenance: float = 0.065
-var protozoan_reproduction_energy: float = 13.5
+var protozoan_reproduction_energy: float = 18.5
 
 # Fast ciliate-like grazer: a second predator guild that sweeps dense prey
 # patches. Fewer, faster predators help regulate bacterial blooms without
@@ -120,7 +126,7 @@ var ciliate_perception: float = 34.0
 var ciliate_feed_distance: float = 3.4
 var ciliate_feed_duration: float = 0.62
 var ciliate_maintenance: float = 0.090
-var ciliate_reproduction_energy: float = 11.5
+var ciliate_reproduction_energy: float = 16.5
 
 
 func _init(seed_value: int = 1) -> void:
@@ -179,7 +185,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# A few large amoeboid predators make the ecology observable immediately:
 	# they chase nearby bacteria and engulf them with a staged deformation.
-	for proto_index in range(3):
+	for proto_index in range(2):
 		var proto_margin: float = 14.0
 		var proto_source: Vector2 = nutrient_sources[
 			(proto_index * 2 + 1) % nutrient_sources.size()
@@ -211,7 +217,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# Faster ciliate-like grazers patrol dense bacterial patches and create a
 	# second top-down pressure with a different movement/feeding strategy.
-	for ciliate_index in range(2):
+	for ciliate_index in range(1):
 		var ciliate_margin: float = 12.0
 		var ciliate_source: Vector2 = nutrient_sources[
 			(ciliate_index * 3 + 2) % nutrient_sources.size()
@@ -327,6 +333,7 @@ func step(dt: float) -> void:
 		_mechanics_accumulator -= MECHANICS_DT
 	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 
+	_advance_gene_transfers(dt)
 	_advance_protozoa(dt)
 	_advance_ciliates(dt)
 
@@ -490,7 +497,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		prey.engulfed_by_id = -1
 		proto.energy = minf(
 			20.0,
-			float(proto.energy) + 2.5 + float(prey.length) * 0.35
+			float(proto.energy) + 1.35 + float(prey.length) * 0.18
 		)
 		proto.finish_engulf()
 
@@ -498,7 +505,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 func _divide_protozoan(parent: Variant) -> Array:
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.65
-	var daughter_energy: float = float(parent.energy) * 0.47
+	var daughter_energy: float = float(parent.energy) * 0.44
 
 	var a: Variant = ProtozoanScript.new(
 		_allocate_id(),
@@ -516,7 +523,7 @@ func _divide_protozoan(parent: Variant) -> Array:
 	for daughter in [a, b]:
 		daughter.inherit_and_mutate(parent, rng)
 		daughter.energy = daughter_energy
-		daughter.cooldown = 1.1
+		daughter.cooldown = 2.8
 		_constrain_protozoan(daughter)
 
 	return [a, b]
@@ -700,7 +707,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		prey.engulfed_by_id = -1
 		ciliate.energy = minf(
 			16.0,
-			float(ciliate.energy) + 1.8 + float(prey.length) * 0.26
+			float(ciliate.energy) + 0.95 + float(prey.length) * 0.14
 		)
 		ciliate.finish_feed()
 
@@ -726,7 +733,7 @@ func _divide_ciliate(parent: Variant) -> Array:
 	for daughter in [a, b]:
 		daughter.inherit_and_mutate(parent, rng)
 		daughter.energy = daughter_energy
-		daughter.cooldown = 0.9
+		daughter.cooldown = 2.2
 		_constrain_ciliate(daughter)
 
 	return [a, b]
@@ -764,6 +771,159 @@ func _release_predator_prey(prey_id: int, predator_id: int) -> void:
 	if int(prey.engulfed_by_id) == predator_id:
 		prey.engulfed_by_id = -1
 		prey.engulf_progress = 0.0
+
+
+func _advance_gene_transfers(dt: float) -> void:
+	for recipient in bacteria:
+		if int(recipient.transfer_role) != int(BacteriumScript.TRANSFER_RECIPIENT):
+			continue
+
+		var donor: Variant = find_cell_by_id(int(recipient.transfer_partner_id))
+		if (
+			donor == null
+			or bool(donor.dying)
+			or bool(donor.consumed)
+			or int(donor.transfer_role) != int(BacteriumScript.TRANSFER_DONOR)
+			or int(donor.transfer_partner_id) != int(recipient.id)
+		):
+			recipient.clear_transfer_state()
+			continue
+
+		var delta: Vector2 = Vector2(recipient.position) - Vector2(donor.position)
+		if delta.length() > conjugation_break_distance:
+			donor.clear_transfer_state()
+			recipient.clear_transfer_state()
+			continue
+
+		# Weakly hold the mating pair together while the bridge is active.
+		var midpoint: Vector2 = (
+			Vector2(donor.position) + Vector2(recipient.position)
+		) * 0.5
+		donor.position = Vector2(donor.position).lerp(
+			midpoint,
+			clampf(dt * conjugation_pull, 0.0, 1.0)
+		)
+		recipient.position = Vector2(recipient.position).lerp(
+			midpoint,
+			clampf(dt * conjugation_pull, 0.0, 1.0)
+		)
+
+		var progress: float = minf(
+			1.0,
+			float(recipient.transfer_progress)
+			+ dt / maxf(0.001, conjugation_duration)
+		)
+		recipient.transfer_progress = progress
+		donor.transfer_progress = progress
+
+		if progress < 1.0:
+			continue
+
+		var missing_mask: int = (
+			int(donor.plasmid_mask) & ~int(recipient.plasmid_mask)
+		)
+		var candidates := PackedInt32Array()
+		for bit in [
+			BacteriumScript.PLASMID_CONJUGATION,
+			BacteriumScript.PLASMID_SCAVENGE,
+			BacteriumScript.PLASMID_ADHESION,
+			BacteriumScript.PLASMID_STRESS,
+		]:
+			if (missing_mask & int(bit)) != 0:
+				candidates.append(int(bit))
+
+		if not candidates.is_empty():
+			var chosen: int = candidates[rng.randi_range(0, candidates.size() - 1)]
+			recipient.plasmid_mask = int(recipient.plasmid_mask) | chosen
+			recipient.hgt_events = int(recipient.hgt_events) + 1
+			if chosen == int(BacteriumScript.PLASMID_CONJUGATION):
+				recipient.pili_count = maxi(int(recipient.pili_count), 4)
+
+		donor.clear_transfer_state()
+		recipient.clear_transfer_state()
+
+
+func _maybe_start_conjugation(
+	a: Variant,
+	b: Variant,
+	distance: float,
+	target_distance: float
+) -> void:
+	if distance > target_distance + 0.22:
+		return
+	if (
+		int(a.transfer_role) != int(BacteriumScript.TRANSFER_NONE)
+		or int(b.transfer_role) != int(BacteriumScript.TRANSFER_NONE)
+		or bool(a.dividing)
+		or bool(b.dividing)
+		or bool(a.dying)
+		or bool(b.dying)
+	):
+		return
+
+	var donor: Variant = null
+	var recipient: Variant = null
+	var missing_ab: int = int(a.plasmid_mask) & ~int(b.plasmid_mask)
+	var missing_ba: int = int(b.plasmid_mask) & ~int(a.plasmid_mask)
+
+	if (
+		a.has_plasmid(BacteriumScript.PLASMID_CONJUGATION)
+		and missing_ab != 0
+	):
+		donor = a
+		recipient = b
+	elif (
+		b.has_plasmid(BacteriumScript.PLASMID_CONJUGATION)
+		and missing_ba != 0
+	):
+		donor = b
+		recipient = a
+
+	if donor == null:
+		return
+
+	var pili_factor: float = clampf(
+		float(donor.pili_count) / 4.0,
+		0.5,
+		2.0
+	)
+	var probability: float = 1.0 - exp(
+		-conjugation_contact_rate * pili_factor * MECHANICS_DT
+	)
+	if rng.randf() >= probability:
+		return
+
+	donor.transfer_role = BacteriumScript.TRANSFER_DONOR
+	donor.transfer_partner_id = int(recipient.id)
+	donor.transfer_progress = 0.0
+	recipient.transfer_role = BacteriumScript.TRANSFER_RECIPIENT
+	recipient.transfer_partner_id = int(donor.id)
+	recipient.transfer_progress = 0.0
+
+
+func _plasmid_uptake_factor(cell: Variant) -> float:
+	return 1.16 if cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE) else 1.0
+
+
+func _plasmid_adhesion_factor(cell: Variant) -> float:
+	return 1.18 if cell.has_plasmid(BacteriumScript.PLASMID_ADHESION) else 1.0
+
+
+func _plasmid_maintenance_factor(cell: Variant) -> float:
+	return 0.88 if cell.has_plasmid(BacteriumScript.PLASMID_STRESS) else 1.0
+
+
+func _plasmid_burden(cell: Variant) -> float:
+	var modules: int = 0
+	for bit in [
+		BacteriumScript.PLASMID_CONJUGATION,
+		BacteriumScript.PLASMID_SCAVENGE,
+		BacteriumScript.PLASMID_ADHESION,
+		BacteriumScript.PLASMID_STRESS,
+	]:
+		if cell.has_plasmid(bit):
+			modules += 1
+	return 0.0018 * float(modules)
 
 
 func _advance_cell(cell: Variant, dt: float) -> void:
@@ -845,7 +1005,9 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		)
 		+ uptake_capacity_cost * maxf(0.0, float(cell.gene_uptake) - 0.75)
 		+ 0.006 * maxf(0.0, float(cell.gene_adhesion) - 0.7)
+		+ _plasmid_burden(cell)
 	)
+	morphology_cost *= _plasmid_maintenance_factor(cell)
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
 	if consumed > 0.0 and not bool(cell.dividing):
@@ -1112,7 +1274,8 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 			normal = -normal
 
 	var adhesion_gene: float = (
-		float(a.gene_adhesion) + float(b.gene_adhesion)
+		float(a.gene_adhesion) * _plasmid_adhesion_factor(a)
+		+ float(b.gene_adhesion) * _plasmid_adhesion_factor(b)
 	) * 0.5
 
 	if adhesion_gene > 0.92:
@@ -1130,6 +1293,8 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 			a.position = Vector2(a.position) + pull
 			b.position = Vector2(b.position) - pull
 			return
+
+	_maybe_start_conjugation(a, b, distance, target_distance)
 
 	if distance >= target_distance:
 		return
