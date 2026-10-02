@@ -822,33 +822,30 @@ func _inspector_body(organism: Variant) -> String:
 		elif bool(organism.dividing):
 			state = "fission"
 		elif int(organism.engulfed_by_id) >= 0:
-			state = "being engulfed"
+			state = "engulfed"
 		elif int(organism.transfer_role) == 1:
-			state = "conjugation donor"
+			state = "HGT donor"
 		elif int(organism.transfer_role) == 2:
-			state = "conjugation recipient"
+			state = "HGT receiver"
 		elif float(organism.adhesion_timer) > 0.0:
 			state = "adhering"
 
-		return (
-			"STATE\n%s\n\n"
-			+ "LINEAGE\n"
-			+ "generation  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
-			+ "ENERGY / BODY\n"
-			+ "energy      %.2f\nlength      %.2f\n\n"
-			+ "HERITABLE TRAITS\n"
-			+ "speed       %.2f\nchemotaxis  %.2f\nuptake      %.2f\ngrowth      %.2f\n"
-			+ "size        %.2f\ntumble      %.2f\nadhesion    %.2f\nmutation    %.3f\n\n"
-			+ "APPENDAGES\nflagella    %d\npili        %d\n\n"
-			+ "MOBILE DNA\nplasmids    %s\nHGT events  %d\ntransfer    %.0f%%"
+		var text: String = (
+			"%s | E %.2f | L %.2f\n"
+			+ "g%d  parent %d  lineage %d  age %.1fs\n"
+			+ "speed %.2f  chemo %.2f  uptake %.2f\n"
+			+ "growth %.2f  size %.2f  tumble %.2f\n"
+			+ "adh %.2f  mut %.3f\n"
+			+ "flag %d  pili %d\n"
+			+ "DNA %s\nHGT %d  transfer %.0f%%"
 		) % [
 			state,
+			float(organism.energy),
+			float(organism.length),
 			int(organism.generation),
 			int(organism.parent_id),
 			int(organism.lineage_id),
 			float(organism.age),
-			float(organism.energy),
-			float(organism.length),
 			float(organism.gene_speed),
 			float(organism.gene_chemotaxis),
 			float(organism.gene_uptake),
@@ -862,28 +859,32 @@ func _inspector_body(organism: Variant) -> String:
 			String(organism.plasmid_names()),
 			int(organism.hgt_events),
 			float(organism.transfer_progress) * 100.0,
-		] + _local_biome_text(Vector2(organism.position))
+		]
+		return text + _local_biome_text(Vector2(organism.position))
 
 	if selected_kind == "amoeba":
 		var state: String = (
-			"engulfing prey #%d" % int(organism.feeding_target_id)
+			"feeding #%d" % int(organism.feeding_target_id)
 			if int(organism.feeding_target_id) >= 0
 			else "hunting"
 		)
-		return (
-			"STATE\n%s\n\n"
-			+ "LINEAGE\ngeneration  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
-			+ "ENERGY / BODY\nenergy      %.2f\nradius      %.2f\nfeeding     %.0f%%\n\n"
-			+ "HERITABLE TRAITS\nspeed       %.2f\nperception  %.2f\nengulf      %.2f\n"
-			+ "size        %.2f\nmetabolism  %.2f\nmutation    %.3f"
+		if bool(organism.dying):
+			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
+
+		var text: String = (
+			"%s | E %.2f | R %.2f\n"
+			+ "g%d  parent %d  lineage %d  age %.1fs\n"
+			+ "feed %.0f%%  speed %.2f  sense %.2f\n"
+			+ "engulf %.2f  size %.2f  metab %.2f\n"
+			+ "mutation %.3f"
 		) % [
 			state,
+			float(organism.energy),
+			float(organism.radius),
 			int(organism.generation),
 			int(organism.parent_id),
 			int(organism.lineage_id),
 			float(organism.age),
-			float(organism.energy),
-			float(organism.radius),
 			float(organism.feeding_progress) * 100.0,
 			float(organism.gene_speed),
 			float(organism.gene_perception),
@@ -891,28 +892,32 @@ func _inspector_body(organism: Variant) -> String:
 			float(organism.gene_size),
 			float(organism.gene_metabolism),
 			float(organism.mutation_rate),
-		] + _local_biome_text(Vector2(organism.position))
+		]
+		return text + _local_biome_text(Vector2(organism.position))
 
 	if selected_kind == "ciliate":
 		var state: String = (
-			"feeding on #%d" % int(organism.feeding_target_id)
+			"feeding #%d" % int(organism.feeding_target_id)
 			if int(organism.feeding_target_id) >= 0
 			else "grazing"
 		)
-		return (
-			"STATE\n%s\n\n"
-			+ "LINEAGE\ngeneration  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
-			+ "ENERGY / BODY\nenergy      %.2f\nradius      %.2f\nfeeding     %.0f%%\n\n"
-			+ "HERITABLE TRAITS\nspeed       %.2f\nperception  %.2f\ncapture     %.2f\n"
-			+ "size        %.2f\nmetabolism  %.2f\nmutation    %.3f"
+		if bool(organism.dying):
+			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
+
+		var text: String = (
+			"%s | E %.2f | R %.2f\n"
+			+ "g%d  parent %d  lineage %d  age %.1fs\n"
+			+ "feed %.0f%%  speed %.2f  sense %.2f\n"
+			+ "capture %.2f  size %.2f  metab %.2f\n"
+			+ "mutation %.3f"
 		) % [
 			state,
+			float(organism.energy),
+			float(organism.radius),
 			int(organism.generation),
 			int(organism.parent_id),
 			int(organism.lineage_id),
 			float(organism.age),
-			float(organism.energy),
-			float(organism.radius),
 			float(organism.feeding_progress) * 100.0,
 			float(organism.gene_speed),
 			float(organism.gene_perception),
@@ -920,10 +925,10 @@ func _inspector_body(organism: Variant) -> String:
 			float(organism.gene_size),
 			float(organism.gene_metabolism),
 			float(organism.mutation_rate),
-		] + _local_biome_text(Vector2(organism.position))
+		]
+		return text + _local_biome_text(Vector2(organism.position))
 
 	return ""
-
 
 func _local_biome_text(position: Vector2) -> String:
 	if sim == null:
