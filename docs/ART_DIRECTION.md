@@ -86,8 +86,10 @@ The first atlas is intentionally simple. Its purpose is to establish the correct
 Performance is now a product requirement, not a later polish step.
 
 Baseline contract:
-- target 120 FPS during normal microscope inspection;
+- target 120+ FPS during normal microscope inspection;
 - 60 FPS development floor;
+- biological simulation runs at a deterministic 60 Hz;
+- chemistry currently runs at a deterministic 30 Hz;
 - organism simulation tick and render FPS are separate;
 - explicit far/mid/near/macro LOD;
 - off-screen culling;
