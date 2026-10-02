@@ -971,7 +971,11 @@ func _resolve_all_contacts() -> void:
 	var count: int = bacteria.size()
 	for i in range(count):
 		var cell: Variant = bacteria[i]
-		if bool(cell.dying):
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
 			continue
 
 		var position: Vector2 = Vector2(cell.position)
@@ -1005,7 +1009,12 @@ func _resolve_all_contacts() -> void:
 			for x in range(min_x, max_x + 1):
 				var j: int = _grid_head[row_offset + x]
 				while j >= 0:
-					if j > i and not bool(bacteria[j].dying):
+					if (
+						j > i
+						and not bool(bacteria[j].dying)
+						and not bool(bacteria[j].consumed)
+						and int(bacteria[j].engulfed_by_id) < 0
+					):
 						pair_candidates_last += 1
 						_resolve_pair(cell, bacteria[j])
 					j = _grid_next[j]
