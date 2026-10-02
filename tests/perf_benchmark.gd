@@ -19,9 +19,18 @@ func _init() -> void:
 		for _warmup in range(WARMUP_STEPS):
 			sim.step(DT)
 
+		var candidate_sum: int = 0
+		var narrow_sum: int = 0
+		var interaction_sum: int = 0
+		var contact_sum: int = 0
+
 		var start_usec: int = Time.get_ticks_usec()
 		for _step in range(MEASURE_STEPS):
 			sim.step(DT)
+			candidate_sum += int(sim.pair_candidates_last)
+			narrow_sum += int(sim.pair_narrow_checks_last)
+			interaction_sum += int(sim.pair_interactions_last)
+			contact_sum += int(sim.pair_contacts_last)
 		var elapsed_usec: int = Time.get_ticks_usec() - start_usec
 
 		var total_ms: float = float(elapsed_usec) / 1000.0
@@ -30,14 +39,19 @@ func _init() -> void:
 
 		var realtime_factor: float = ticks_per_second / 60.0
 
+		var denom: float = float(MEASURE_STEPS)
 		print(
-			"population=%d final=%d | %.3f ms/tick | %.1f ticks/s | realtime x%.2f"
+			"population=%d final=%d | %.3f ms/tick | %.1f ticks/s | realtime x%.2f | pairs %.0f -> narrow %.0f -> interact %.0f -> contact %.0f"
 			% [
 				population,
 				sim.bacteria.size(),
 				ms_per_tick,
 				ticks_per_second,
 				realtime_factor,
+				float(candidate_sum) / denom,
+				float(narrow_sum) / denom,
+				float(interaction_sum) / denom,
+				float(contact_sum) / denom,
 			]
 		)
 
