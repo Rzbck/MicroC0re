@@ -131,10 +131,23 @@ func seed_demo(count: int = 36) -> void:
 
 	for _i in range(maxi(0, count)):
 		var margin: float = 8.0
-		var position := Vector2(
-			rng.randf_range(margin, world_size.x - margin),
-			rng.randf_range(margin, world_size.y - margin)
-		)
+		var position: Vector2
+
+		# Seed most founders in loose patches around food sources. This creates
+		# observable competition/contact immediately instead of a uniformly
+		# sparse screen, while keeping some explorers in the background.
+		if _i % 4 != 0 and not nutrient_sources.is_empty():
+			var source: Vector2 = nutrient_sources[_i % nutrient_sources.size()]
+			var radius: float = rng.randf_range(4.0, 14.0)
+			var theta: float = rng.randf_range(-PI, PI)
+			position = source + Vector2.RIGHT.rotated(theta) * radius
+			position.x = clampf(position.x, margin, world_size.x - margin)
+			position.y = clampf(position.y, margin, world_size.y - margin)
+		else:
+			position = Vector2(
+				rng.randf_range(margin, world_size.x - margin),
+				rng.randf_range(margin, world_size.y - margin)
+			)
 		var cell: Variant = BacteriumScript.new(
 			_allocate_id(),
 			position,
@@ -150,9 +163,23 @@ func seed_demo(count: int = 36) -> void:
 	# they chase nearby bacteria and engulf them with a staged deformation.
 	for proto_index in range(3):
 		var proto_margin: float = 14.0
-		var proto_position := Vector2(
-			rng.randf_range(proto_margin, world_size.x - proto_margin),
-			rng.randf_range(proto_margin, world_size.y - proto_margin)
+		var proto_source: Vector2 = nutrient_sources[
+			(proto_index * 2 + 1) % nutrient_sources.size()
+		]
+		var proto_position: Vector2 = (
+			proto_source
+			+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+			* rng.randf_range(10.0, 18.0)
+		)
+		proto_position.x = clampf(
+			proto_position.x,
+			proto_margin,
+			world_size.x - proto_margin
+		)
+		proto_position.y = clampf(
+			proto_position.y,
+			proto_margin,
+			world_size.y - proto_margin
 		)
 		var proto: Variant = ProtozoanScript.new(
 			_allocate_id(),
