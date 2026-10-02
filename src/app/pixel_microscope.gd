@@ -1038,6 +1038,22 @@ func _select_nearest_organism(world_position: Vector2) -> void:
 			best_id = int(ciliate.id)
 			best_kind = "ciliate"
 
+	for alga in sim.microalgae:
+		var distance: float = Vector2(alga.position).distance_to(world_position)
+		var radius: float = maxf(base_radius, float(alga.radius) * 1.7)
+		if distance <= radius and distance < best_distance:
+			best_distance = distance
+			best_id = int(alga.id)
+			best_kind = "alga"
+
+	for yeast in sim.decomposers:
+		var distance: float = Vector2(yeast.position).distance_to(world_position)
+		var radius: float = maxf(base_radius, float(yeast.radius) * 1.7)
+		if distance <= radius and distance < best_distance:
+			best_distance = distance
+			best_id = int(yeast.id)
+			best_kind = "yeast"
+
 	if best_id < 0:
 		_clear_selection()
 		return
@@ -1069,6 +1085,16 @@ func _selected_organism() -> Variant:
 			if int(ciliate.id) == selected_id:
 				return ciliate
 
+	if selected_kind == "alga":
+		for alga in sim.microalgae:
+			if int(alga.id) == selected_id:
+				return alga
+
+	if selected_kind == "yeast":
+		for yeast in sim.decomposers:
+			if int(yeast.id) == selected_id:
+				return yeast
+
 	return null
 
 
@@ -1087,6 +1113,10 @@ func _inspector_title(organism: Variant) -> String:
 			return "AMOEBA  #%d" % int(organism.id)
 		"ciliate":
 			return "CILIATE  #%d" % int(organism.id)
+		"alga":
+			return "MICROALGA  #%d" % int(organism.id)
+		"yeast":
+			return "DECOMPOSER  #%d" % int(organism.id)
 		_:
 			return "ORGANISM"
 
@@ -1204,6 +1234,80 @@ func _inspector_body(organism: Variant) -> String:
 			float(organism.gene_speed),
 			float(organism.gene_perception),
 			float(organism.gene_capture),
+			float(organism.gene_size),
+			float(organism.gene_metabolism),
+			float(organism.mutation_rate),
+		]
+		return text + _local_biome_text(Vector2(organism.position))
+
+	if selected_kind == "alga":
+		var state: String = "photosynthesizing"
+		if int(organism.engulfed_by_id) >= 0:
+			state = "being grazed %.0f%%" % (
+				float(organism.engulf_progress) * 100.0
+			)
+		elif bool(organism.dying):
+			state = "lysing %.0f%%" % (
+				float(organism.lysis_progress) * 100.0
+			)
+		elif bool(organism.reproducing):
+			state = "dividing %.0f%%" % (
+				float(organism.reproduction_progress) * 100.0
+			)
+
+		var text: String = (
+			"%s | E %.2f | R %.2f\n"
+			+ "g%d  parent %d  lineage %d  age %.1fs\n"
+			+ "light %.2f  growth %.2f  size %.2f\n"
+			+ "exudate %.2f  drift %.2f  mut %.3f"
+		) % [
+			state,
+			float(organism.energy),
+			float(organism.radius),
+			int(organism.generation),
+			int(organism.parent_id),
+			int(organism.lineage_id),
+			float(organism.age),
+			float(organism.gene_light_use),
+			float(organism.gene_growth),
+			float(organism.gene_size),
+			float(organism.gene_exudate),
+			float(organism.gene_drift),
+			float(organism.mutation_rate),
+		]
+		return text + _local_biome_text(Vector2(organism.position))
+
+	if selected_kind == "yeast":
+		var state: String = "decomposing"
+		if int(organism.engulfed_by_id) >= 0:
+			state = "being grazed %.0f%%" % (
+				float(organism.engulf_progress) * 100.0
+			)
+		elif bool(organism.dying):
+			state = "lysing %.0f%%" % (
+				float(organism.lysis_progress) * 100.0
+			)
+		elif bool(organism.budding):
+			state = "budding %.0f%%" % (
+				float(organism.budding_progress) * 100.0
+			)
+
+		var text: String = (
+			"%s | E %.2f | R %.2f\n"
+			+ "g%d  parent %d  lineage %d  age %.1fs\n"
+			+ "detritus %.2f  mineral %.2f  growth %.2f\n"
+			+ "size %.2f  metab %.2f  mut %.3f"
+		) % [
+			state,
+			float(organism.energy),
+			float(organism.radius),
+			int(organism.generation),
+			int(organism.parent_id),
+			int(organism.lineage_id),
+			float(organism.age),
+			float(organism.gene_detritus),
+			float(organism.gene_mineralize),
+			float(organism.gene_growth),
 			float(organism.gene_size),
 			float(organism.gene_metabolism),
 			float(organism.mutation_rate),
