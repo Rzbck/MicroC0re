@@ -8,7 +8,7 @@ const ITERATIONS := 1200
 
 func _init() -> void:
 	print("MicroC0re GPU compute benchmark")
-	print("renderer=", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
+	print("renderer=", RenderingServer.get_current_rendering_method())
 	print("gpu=", RenderingServer.get_video_adapter_name())
 	print("api=", RenderingServer.get_video_adapter_api_version())
 
@@ -18,14 +18,36 @@ func _init() -> void:
 		quit(1)
 		return
 
-	var shader_file: RDShaderFile = load("res://src/gpu/field_diffusion.glsl") as RDShaderFile
-	if shader_file == null:
-		push_error("Failed to load compute shader.")
+	var shader_code: String = FileAccess.get_file_as_string(
+		"res://src/gpu/field_diffusion.glsl"
+	)
+	if shader_code.is_empty():
+		push_error("Failed to read compute shader source.")
 		quit(1)
 		return
 
-	var shader_spirv: RDShaderSPIRV = shader_file.get_spirv()
-	var shader: RID = rd.shader_create_from_spirv(shader_spirv)
+	# #[compute] is an import hint for RDShaderFile. We compile source directly
+	# here so this benchmark works from a fresh git clone without editor import.
+	shader_code = shader_code.replace("#[compute]\n", "")
+
+	var shader_source := RDShaderSource.new()
+	shader_source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
+	shader_source.source_compute = shader_code
+
+	var shader_spirv: RDShaderSPIRV = rd.shader_compile_spirv_from_source(
+		shader_source,
+		true
+	)
+	if shader_spirv.compile_error_compute != "":
+		push_error("Compute shader compilation failed:")
+		push_error(shader_spirv.compile_error_compute)
+		quit(1)
+		return
+
+	var shader: RID = rd.shader_create_from_spirv(
+		shader_spirv,
+		"MicroC0re field diffusion benchmark"
+	)
 	if not shader.is_valid():
 		push_error("Failed to create compute shader RID.")
 		quit(1)
@@ -42,9 +64,9 @@ func _init() -> void:
 	initial.resize(FIELD_SIZE)
 	initial.fill(0.0)
 
-	initial[(HEIGHT / 2) * WIDTH + WIDTH / 2] = 1.0
-	initial[(HEIGHT / 3) * WIDTH + WIDTH / 4] = 0.65
-	initial[(HEIGHT * 2 / 3) * WIDTH + WIDTH * 3 / 4] = 0.85
+	initial[floori(float(HEIGHT) / 2.0) * WIDTH + floori(float(WIDTH) / 2.0)] = 1.0
+	initial[floori(float(HEIGHT) / 3.0) * WIDTH + floori(float(WIDTH) / 4.0)] = 0.65
+	initial[floori(float(HEIGHT) * 2.0 / 3.0) * WIDTH + floori(float(WIDTH) * 3.0 / 4.0)] = 0.85
 
 	var zero := PackedFloat32Array()
 	zero.resize(FIELD_SIZE)
