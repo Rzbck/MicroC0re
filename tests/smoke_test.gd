@@ -30,6 +30,31 @@ func _init() -> void:
 
 	var errors := PackedStringArray()
 
+	# Regression: ciliate prey lookup must remain generic after capture.
+	# Otherwise algae/yeast can become permanently "engulfed" after the
+	# first frame because the feeding continuation only searches bacteria.
+	var trophic = PetriSimulationScript.new(5150)
+	trophic.seed_demo(0)
+	trophic.protozoa.clear()
+	trophic.decomposers.clear()
+	if trophic.ciliates.is_empty() or trophic.microalgae.is_empty():
+		errors.append("ecology: missing ciliate/alga regression fixtures")
+	else:
+		var grazer = trophic.ciliates[0]
+		var alga = trophic.microalgae[0]
+		grazer.position = Vector2(alga.position)
+		grazer.cooldown = 0.0
+		trophic._advance_ciliates(DT)
+		if int(grazer.feeding_target_id) != int(alga.id):
+			errors.append("ecology: ciliate failed to capture microalga")
+		else:
+			var before_progress: float = float(grazer.feeding_progress)
+			trophic._advance_ciliates(DT)
+			if float(grazer.feeding_progress) <= before_progress:
+				errors.append("ecology: ciliate lost non-bacterial prey after capture")
+			if int(alga.engulfed_by_id) != int(grazer.id):
+				errors.append("ecology: microalga capture ownership was lost")
+
 	if first.state_signature() != second.state_signature():
 		errors.append("determinism: identical seeds produced different signatures")
 
