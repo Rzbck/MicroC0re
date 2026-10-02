@@ -61,9 +61,17 @@ var minimum_length: float = 2.15
 var maximum_length: float = 7.0
 var waste_fraction: float = 0.30
 
-# Contact solver.
+# Observable state transition durations. These do not trigger reproduction;
+# they stage an already resource-triggered biological transition.
+var division_duration: float = 0.70
+var lysis_duration: float = 1.20
+
+# Contact / adhesion.
 var mechanical_iterations: int = 2
 var angular_contact_response: float = 0.055
+var adhesion_range: float = 0.55
+var adhesion_pull: float = 0.17
+var adhesion_memory: float = 0.22
 
 
 func _init(seed_value: int = 1) -> void:
@@ -118,20 +126,41 @@ func step(dt: float) -> void:
 	var next_population: Array = []
 
 	for cell in bacteria:
-		if not bool(cell.alive):
+		cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - dt)
+
+		if bool(cell.dying):
+			_advance_lysis(cell, dt)
+			if float(cell.lysis_progress) >= 1.0:
+				_recycle_dead_cell(cell)
+			else:
+				next_population.append(cell)
 			continue
 
 		_advance_cell(cell, dt)
 
-		if not bool(cell.alive):
-			_recycle_dead_cell(cell)
+		if bool(cell.dying):
+			next_population.append(cell)
 			continue
 
-		if _ready_to_divide(cell) and next_population.size() < SAFETY_POPULATION_LIMIT - 1:
-			var daughters: Array = _divide(cell)
-			next_population.append_array(daughters)
-		else:
-			next_population.append(cell)
+		if bool(cell.dividing):
+			cell.division_progress = minf(
+				1.0,
+				float(cell.division_progress) + dt / maxf(0.001, division_duration)
+			)
+			if (
+				float(cell.division_progress) >= 1.0
+				and next_population.size() < SAFETY_POPULATION_LIMIT - 1
+			):
+				var daughters: Array = _divide(cell)
+				next_population.append_array(daughters)
+			else:
+				next_population.append(cell)
+			continue
+
+		if _ready_to_begin_division(cell):
+			cell.begin_division()
+
+		next_population.append(cell)
 
 	bacteria = next_population
 
