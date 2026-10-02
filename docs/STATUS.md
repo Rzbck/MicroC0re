@@ -29,6 +29,8 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #38 living aquatic biome epic
 - #44 expanded organism guilds / morphologies
 - #45 visible killing / feeding / lysis / recycling
+- #48 water flow / hydrodynamics
+- #56 day/night / diel oxygen cycle
 - #57 fused GPU multi-field biome compute
 
 ## REVIEW
@@ -64,7 +66,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #40 explicit phototroph/cyanobacterial producer organisms
 - #42 metabolic cross-feeding
 - #43 mature biofilm/EPS ecosystem engineering
-- #48 water flow / hydrodynamics
 - #49 multi-trophic predation
 - #50 pH / temperature / redox / toxicity
 - #51 succession / disturbance / recolonization
@@ -72,7 +73,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #53 phycosphere symbiosis
 - #54 fungi / yeast / hyphal decomposers
 - #55 rotifer / nematode microfauna
-- #56 day/night / diel oxygen cycle
 
 ## DONE
 
