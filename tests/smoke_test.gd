@@ -3,7 +3,7 @@ extends SceneTree
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
 
 const STEPS := 600
-const DT := 1.0 / 60.0
+const DT := 1.0 / 120.0
 
 
 func _init() -> void:
@@ -31,6 +31,7 @@ func _init() -> void:
 		errors.append("waste: negative concentration detected")
 
 	var ids := {}
+	var saw_genotype_variation: bool = false
 	for cell in first.bacteria:
 		if ids.has(cell.id):
 			errors.append("identity: duplicate cell id %d" % cell.id)
@@ -44,6 +45,12 @@ func _init() -> void:
 			errors.append("state: invalid length for cell %d" % cell.id)
 		if not is_finite(cell.energy) or cell.energy < 0.0:
 			errors.append("state: invalid energy for cell %d" % cell.id)
+
+		if absf(float(cell.gene_speed) - 1.0) > 0.001:
+			saw_genotype_variation = true
+
+	if not saw_genotype_variation:
+		errors.append("genetics: founders did not expose any trait variation")
 
 	if errors.is_empty():
 		print(
