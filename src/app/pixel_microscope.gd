@@ -531,31 +531,79 @@ func _refresh_field_texture() -> void:
 
 	var nutrient_field: Variant = sim.nutrient
 	var waste_field: Variant = sim.waste
+	var oxygen_field: Variant = sim.oxygen
+	var detritus_field: Variant = sim.detritus
+	var eps_field: Variant = sim.eps
+	var cue_field: Variant = sim.damage_cue
+	var producer_field: Variant = sim.producer_biomass
 	var width: int = int(nutrient_field.width)
 	var height: int = int(nutrient_field.height)
 
 	for y in range(height):
 		for x in range(width):
 			var nutrient_value: float = clampf(
-				float(nutrient_field.get_cell(x, y)) * 1.9,
+				float(nutrient_field.get_cell(x, y)) * 1.65,
 				0.0,
 				1.0
 			)
 			var waste_value: float = clampf(
-				float(waste_field.get_cell(x, y)) * 2.4,
+				float(waste_field.get_cell(x, y)) * 2.2,
+				0.0,
+				1.0
+			)
+			var oxygen_value: float = clampf(
+				float(oxygen_field.get_cell(x, y)) * 1.35,
+				0.0,
+				1.0
+			)
+			var detritus_value: float = clampf(
+				float(detritus_field.get_cell(x, y)) * 4.2,
+				0.0,
+				1.0
+			)
+			var eps_value: float = clampf(
+				float(eps_field.get_cell(x, y)) * 5.0,
+				0.0,
+				1.0
+			)
+			var cue_value: float = clampf(
+				float(cue_field.get_cell(x, y)) * 7.0,
+				0.0,
+				1.0
+			)
+			var producer_value: float = clampf(
+				float(producer_field.get_cell(x, y)) * 1.35,
 				0.0,
 				1.0
 			)
 
 			var n: float = sqrt(nutrient_value)
 			var w: float = sqrt(waste_value)
+			var o: float = sqrt(oxygen_value)
+			var d: float = sqrt(detritus_value)
+			var e: float = sqrt(eps_value)
+			var cue: float = sqrt(cue_value)
+			var p: float = sqrt(producer_value)
+
 			field_image.set_pixel(
 				x,
 				y,
 				Color(
-					0.005 + n * 0.020 + w * 0.15,
-					0.010 + n * 0.26 + w * 0.025,
-					0.014 + n * 0.16 + w * 0.18,
+					clampf(
+						0.004 + n * 0.012 + w * 0.11 + d * 0.15 + cue * 0.24,
+						0.0,
+						1.0
+					),
+					clampf(
+						0.009 + n * 0.15 + o * 0.055 + p * 0.22 + e * 0.11,
+						0.0,
+						1.0
+					),
+					clampf(
+						0.014 + n * 0.08 + o * 0.12 + w * 0.10 + e * 0.15,
+						0.0,
+						1.0
+					),
 					1.0
 				)
 			)
@@ -757,11 +805,11 @@ func _clear_selection() -> void:
 func _inspector_title(organism: Variant) -> String:
 	match selected_kind:
 		"bacterium":
-			return "BACTERIUM  #%d" % int(organism.id)
+			return "BAC  #%d" % int(organism.id)
 		"amoeba":
-			return "AMOEBOID PREDATOR  #%d" % int(organism.id)
+			return "AMOEBA  #%d" % int(organism.id)
 		"ciliate":
-			return "CILIATE GRAZER  #%d" % int(organism.id)
+			return "CILIATE  #%d" % int(organism.id)
 		_:
 			return "ORGANISM"
 
@@ -814,7 +862,7 @@ func _inspector_body(organism: Variant) -> String:
 			String(organism.plasmid_names()),
 			int(organism.hgt_events),
 			float(organism.transfer_progress) * 100.0,
-		]
+		] + _local_biome_text(Vector2(organism.position))
 
 	if selected_kind == "amoeba":
 		var state: String = (
@@ -843,7 +891,7 @@ func _inspector_body(organism: Variant) -> String:
 			float(organism.gene_size),
 			float(organism.gene_metabolism),
 			float(organism.mutation_rate),
-		]
+		] + _local_biome_text(Vector2(organism.position))
 
 	if selected_kind == "ciliate":
 		var state: String = (
@@ -872,9 +920,26 @@ func _inspector_body(organism: Variant) -> String:
 			float(organism.gene_size),
 			float(organism.gene_metabolism),
 			float(organism.mutation_rate),
-		]
+		] + _local_biome_text(Vector2(organism.position))
 
 	return ""
+
+
+func _local_biome_text(position: Vector2) -> String:
+	if sim == null:
+		return ""
+	return (
+		"\n\nLOCAL BIOME\n"
+		+ "nutrient  %.3f\noxygen    %.3f\ndetritus  %.3f\n"
+		+ "EPS       %.3f\ndamage    %.3f\nproducer  %.3f"
+	) % [
+		float(sim.nutrient.sample_world(position)),
+		float(sim.oxygen.sample_world(position)),
+		float(sim.detritus.sample_world(position)),
+		float(sim.eps.sample_world(position)),
+		float(sim.damage_cue.sample_world(position)),
+		float(sim.producer_biomass.sample_world(position)),
+	]
 
 
 func _open_menu() -> void:
