@@ -4,7 +4,7 @@ This file is the working contract for coding agents.
 
 ### READ FIRST — current product direction
 
-Before changing code or art, read **`docs/CURRENT_DIRECTION.md`**.
+Before changing code or art, read **`docs/CURRENT_DIRECTION.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
 
 Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
 1. #17 performance/profiling/LOD;
@@ -87,13 +87,18 @@ If a local Godot binary is unavailable, state that tests were not executed inste
 Profile before optimizing and record measured before/after numbers.
 
 Current visible-performance contract:
-- target 120 FPS during normal microscope inspection;
+- target 120+ FPS during normal microscope inspection;
 - 60 FPS is the development floor;
+- biological simulation is currently 60 Hz and chemistry 30 Hz;
 - simulation tick rate and render FPS are separate metrics;
 - off-screen organisms must be culled;
 - use explicit far/mid/near/macro LOD;
 - distant organisms must never pay for close-up appendage/detail rendering;
-- prefer cached/batched sprite rendering over rebuilding procedural geometry every frame.
+- prefer cached/batched sprite rendering over rebuilding procedural geometry every frame;
+- no hot-loop Dictionary/temporary-array allocation when a preallocated packed structure can be used;
+- preserve stable biological IDs separately from dense simulation indices;
+- future parallel random draws must not depend on thread execution order;
+- never introduce synchronous full GPU readback in a per-tick path without measured justification.
 
 The contact broad-phase currently uses a deterministic spatial hash. Do not regress to global O(N²) contact checks without a measured reason.
 
