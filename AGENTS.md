@@ -18,6 +18,11 @@ Example on the maintainer's Windows machine:
 
 ```powershell
 $env:GODOT_BIN = "C:\Godot\Godot_v4.7.1-stable_win64_console.exe"
+
+# Normal visible simulation
+./scripts/run_simulation.ps1
+
+# Automated validation only
 ./scripts/run_headless.ps1
 ```
 
