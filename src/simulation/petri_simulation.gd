@@ -778,6 +778,17 @@ func _advance_gene_transfers(dt: float) -> void:
 		if int(recipient.transfer_role) != int(BacteriumScript.TRANSFER_RECIPIENT):
 			continue
 
+		if (
+			bool(recipient.dying)
+			or bool(recipient.consumed)
+			or int(recipient.engulfed_by_id) >= 0
+		):
+			var stale_donor: Variant = find_cell_by_id(int(recipient.transfer_partner_id))
+			if stale_donor != null:
+				stale_donor.clear_transfer_state()
+			recipient.clear_transfer_state()
+			continue
+
 		var donor: Variant = find_cell_by_id(int(recipient.transfer_partner_id))
 		if (
 			donor == null
@@ -1471,7 +1482,7 @@ func state_signature() -> String:
 
 	for cell in bacteria:
 		parts.append(
-			"%d:%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%d:%.3f:%d:%.3f"
+			"%d:%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%d:%.3f:%d:%.3f:pm%d:tr%d:tp%.3f:h%d"
 			% [
 				int(cell.id),
 				int(cell.generation),
@@ -1487,6 +1498,10 @@ func state_signature() -> String:
 				float(cell.division_progress),
 				1 if bool(cell.dying) else 0,
 				float(cell.lysis_progress),
+				int(cell.plasmid_mask),
+				int(cell.transfer_role),
+				float(cell.transfer_progress),
+				int(cell.hgt_events),
 			]
 		)
 
