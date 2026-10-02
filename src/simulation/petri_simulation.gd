@@ -391,6 +391,18 @@ func _advance_protozoa(dt: float) -> void:
 	var available_births: int = maxi(0, PROTOZOAN_SAFETY_LIMIT - protozoa.size())
 
 	for proto in protozoa:
+		if bool(proto.dying):
+			_advance_predator_lysis(proto, dt)
+			if float(proto.lysis_progress) >= 1.0:
+				_recycle_predator_body(
+					Vector2(proto.position),
+					float(proto.radius),
+					1.0
+				)
+			else:
+				next_protozoa.append(proto)
+			continue
+
 		if not bool(proto.alive):
 			continue
 
@@ -411,13 +423,10 @@ func _advance_protozoa(dt: float) -> void:
 		proto.energy = float(proto.energy) - maintenance * dt
 
 		if float(proto.energy) <= 0.0:
-			proto.alive = false
 			_release_predator_prey(int(proto.feeding_target_id), int(proto.id))
-			_recycle_predator_body(
-				Vector2(proto.position),
-				float(proto.radius),
-				1.0
-			)
+			proto.finish_engulf()
+			proto.begin_lysis()
+			next_protozoa.append(proto)
 			continue
 
 		if int(proto.feeding_target_id) >= 0:
@@ -635,6 +644,18 @@ func _advance_ciliates(dt: float) -> void:
 	var available_births: int = maxi(0, CILIATE_SAFETY_LIMIT - ciliates.size())
 
 	for ciliate in ciliates:
+		if bool(ciliate.dying):
+			_advance_predator_lysis(ciliate, dt)
+			if float(ciliate.lysis_progress) >= 1.0:
+				_recycle_predator_body(
+					Vector2(ciliate.position),
+					float(ciliate.radius),
+					0.75
+				)
+			else:
+				next_ciliates.append(ciliate)
+			continue
+
 		if not bool(ciliate.alive):
 			continue
 
@@ -654,16 +675,13 @@ func _advance_ciliates(dt: float) -> void:
 		ciliate.energy = float(ciliate.energy) - maintenance * dt
 
 		if float(ciliate.energy) <= 0.0:
-			ciliate.alive = false
 			_release_predator_prey(
 				int(ciliate.feeding_target_id),
 				int(ciliate.id)
 			)
-			_recycle_predator_body(
-				Vector2(ciliate.position),
-				float(ciliate.radius),
-				0.75
-			)
+			ciliate.finish_feed()
+			ciliate.begin_lysis()
+			next_ciliates.append(ciliate)
 			continue
 
 		if int(ciliate.feeding_target_id) >= 0:
@@ -870,6 +888,27 @@ func _constrain_ciliate(ciliate: Variant) -> void:
 
 	ciliate.position = position
 	ciliate.angle = wrapf(angle, -PI, PI)
+
+
+func _advance_predator_lysis(organism: Variant, dt: float) -> void:
+	organism.lysis_progress = minf(
+		1.0,
+		float(organism.lysis_progress) + dt / 1.55
+	)
+	organism.position = (
+		Vector2(organism.position)
+		+ _water_flow(Vector2(organism.position)) * dt * 0.38
+	)
+	damage_cue.add_radial_world(
+		Vector2(organism.position),
+		5.0 + float(organism.radius),
+		0.020 * dt * (1.0 + float(organism.lysis_progress) * 2.0)
+	)
+	detritus.add_radial_world(
+		Vector2(organism.position),
+		3.0 + float(organism.radius),
+		0.005 * dt
+	)
 
 
 func _recycle_predator_body(
