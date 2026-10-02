@@ -18,7 +18,7 @@ const GRID_HEIGHT := 43
 const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 # CPU-reference safety ceilings. These are performance guards, not biology.
 # Raise them only after GPU-resident agent mechanics is validated.
-const SAFETY_POPULATION_LIMIT := 480
+const SAFETY_POPULATION_LIMIT := 420
 const PROTOZOAN_SAFETY_LIMIT := 18
 const CILIATE_SAFETY_LIMIT := 16
 
