@@ -161,6 +161,7 @@ func _process(delta: float) -> void:
 	visual_time += delta
 	if ui == null or not ui.is_menu_open():
 		_handle_keyboard_pan(delta)
+	_clamp_camera_to_world()
 
 	var sim_start: int = Time.get_ticks_usec()
 	if not paused:
@@ -226,8 +227,9 @@ func _draw() -> void:
 func _draw_bacteria() -> void:
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var far_lod: bool = zoom_value < 1.10
-	var mid_lod: bool = zoom_value < 2.40
+	var overview_zoom: float = _minimum_camera_zoom()
+	var far_lod: bool = zoom_value < overview_zoom * 1.16
+	var mid_lod: bool = zoom_value < overview_zoom * 2.10
 	var frame: int = posmod(int(floor(visual_time * 8.0)), 4)
 
 	if far_lod:
@@ -361,7 +363,7 @@ func _draw_protozoa() -> void:
 		if not visible_rect.has_point(position):
 			continue
 
-		if zoom_value < 0.55:
+		if zoom_value < _minimum_camera_zoom() * 1.16:
 			var marker_size: float = maxf(0.55, 1.65 / zoom_value)
 			draw_rect(
 				Rect2(
