@@ -327,7 +327,7 @@ func _draw_phototroph_chain(
 	dark: Color
 ) -> void:
 	var count: int = 3 + size_class
-	var start_x: int = cx - (count * 4) / 2
+	var start_x: int = cx - floori(float(count * 4) / 2.0)
 	for i in range(count):
 		var x: int = start_x + i * 4
 		var y: int = cy + (1 if i % 2 == 0 else -1)
