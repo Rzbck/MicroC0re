@@ -60,7 +60,7 @@ For the agreed baseline scene on the maintainer workstation:
 - large populations should use batched/cached sprite approaches where appropriate;
 - do not claim an optimization worked without measured before/after numbers.
 
-Simulation tick rate and render FPS are separate concerns. A 120 Hz simulation is not evidence of 120 FPS rendering.
+Simulation tick rate and render FPS are separate concerns. Current contract: biology at deterministic 60 Hz, chemistry at 30 Hz, presentation targeting 120+ FPS. A high simulation tick rate is not evidence of fluid rendering.
 
 ## Pixel-art contract
 
