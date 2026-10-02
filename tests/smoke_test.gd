@@ -45,6 +45,18 @@ func _init() -> void:
 			errors.append("state: invalid length for cell %d" % cell.id)
 		if not is_finite(cell.energy) or cell.energy < 0.0:
 			errors.append("state: invalid energy for cell %d" % cell.id)
+		if (
+			not is_finite(float(cell.division_progress))
+			or float(cell.division_progress) < 0.0
+			or float(cell.division_progress) > 1.000001
+		):
+			errors.append("state: invalid division progress for cell %d" % cell.id)
+		if (
+			not is_finite(float(cell.lysis_progress))
+			or float(cell.lysis_progress) < 0.0
+			or float(cell.lysis_progress) > 1.000001
+		):
+			errors.append("state: invalid lysis progress for cell %d" % cell.id)
 
 		if absf(float(cell.gene_speed) - 1.0) > 0.001:
 			saw_genotype_variation = true
