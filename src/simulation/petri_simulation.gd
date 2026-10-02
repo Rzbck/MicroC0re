@@ -462,10 +462,354 @@ func step(dt: float) -> void:
 	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 
 	_advance_gene_transfers(dt)
+	_advance_microalgae(dt)
+	_advance_decomposers(dt)
 	_advance_protozoa(dt)
 	_advance_ciliates(dt)
 
 	simulation_time += dt
+
+
+func _advance_microalgae(dt: float) -> void:
+	var next_microalgae: Array = []
+	var available_births: int = maxi(
+		0,
+		MICROALGA_SAFETY_LIMIT - microalgae.size()
+	)
+
+	for alga in microalgae:
+		if bool(alga.consumed):
+			continue
+
+		if int(alga.engulfed_by_id) >= 0:
+			next_microalgae.append(alga)
+			continue
+
+		if bool(alga.dying):
+			_advance_small_lysis(alga, dt, 0.72)
+			if float(alga.lysis_progress) >= 1.0:
+				_recycle_small_body(
+					Vector2(alga.position),
+					float(alga.radius),
+					0.72,
+					true
+				)
+			else:
+				next_microalgae.append(alga)
+			continue
+
+		alga.age = float(alga.age) + dt
+		alga.cooldown = maxf(0.0, float(alga.cooldown) - dt)
+		alga.visual_phase = wrapf(
+			float(alga.visual_phase) + dt * (1.2 + 0.2 * float(alga.gene_drift)),
+			0.0,
+			TAU
+		)
+
+		var position: Vector2 = Vector2(alga.position)
+		var light_value: float = _sample_light(position)
+		var photo_gain: float = (
+			microalga_photo_rate
+			* light_value
+			* float(alga.gene_light_use)
+			* dt
+		)
+		var nutrient_taken: float = float(
+			nutrient.take_nearest_world(
+				position,
+				microalga_nutrient_rate * float(alga.gene_growth) * dt
+			)
+		)
+		var nutrient_gain: float = nutrient_taken * 1.8
+		var maintenance: float = (
+			microalga_maintenance
+			* (0.75 + 0.25 * float(alga.gene_size))
+			* dt
+		)
+
+		alga.energy = (
+			float(alga.energy)
+			+ photo_gain
+			+ nutrient_gain
+			- maintenance
+		)
+
+		oxygen.add_nearest_world(
+			position,
+			photo_gain * 0.42
+		)
+		nutrient.add_nearest_world(
+			position,
+			photo_gain * float(alga.gene_exudate) * 0.045
+		)
+		producer_biomass.add_nearest_world(
+			position,
+			photo_gain * 0.010
+		)
+
+		var upward_bias := Vector2(0.0, -0.08 * light_value)
+		alga.position = (
+			position
+			+ _water_flow(position) * float(alga.gene_drift) * dt * 0.52
+			+ upward_bias * dt
+		)
+		alga.angle = wrapf(
+			float(alga.angle) + sin(float(alga.visual_phase)) * 0.12 * dt,
+			-PI,
+			PI
+		)
+		_constrain_small_organism(alga)
+
+		if float(alga.energy) <= 0.0:
+			alga.energy = 0.0
+			alga.begin_lysis()
+			next_microalgae.append(alga)
+			continue
+
+		if bool(alga.reproducing):
+			alga.reproduction_progress = minf(
+				1.0,
+				float(alga.reproduction_progress)
+				+ dt / maxf(0.001, microalga_reproduction_duration)
+			)
+			if float(alga.reproduction_progress) >= 1.0:
+				if available_births > 0:
+					next_microalgae.append_array(_divide_microalga(alga))
+					available_births -= 1
+				else:
+					alga.reproducing = false
+					alga.reproduction_progress = 0.0
+					next_microalgae.append(alga)
+			else:
+				next_microalgae.append(alga)
+			continue
+
+		if (
+			available_births > 0
+			and float(alga.energy) >= microalga_reproduction_energy
+			and float(alga.age) >= 7.0
+			and float(alga.cooldown) <= 0.0
+		):
+			alga.begin_reproduction()
+
+		next_microalgae.append(alga)
+
+	microalgae = next_microalgae
+
+
+func _divide_microalga(parent: Variant) -> Array:
+	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
+	var offset: Vector2 = axis * float(parent.radius) * 0.72
+	var daughter_energy: float = float(parent.energy) * 0.46
+
+	var a: Variant = MicroalgaScript.new(
+		_allocate_id(),
+		Vector2(parent.position) - offset,
+		float(parent.angle) + rng.randfn(0.0, 0.20),
+		rng.randf_range(0.0, TAU)
+	)
+	var b: Variant = MicroalgaScript.new(
+		_allocate_id(),
+		Vector2(parent.position) + offset,
+		float(parent.angle) + PI + rng.randfn(0.0, 0.20),
+		rng.randf_range(0.0, TAU)
+	)
+
+	for daughter in [a, b]:
+		daughter.inherit_and_mutate(parent, rng)
+		daughter.energy = daughter_energy
+		daughter.cooldown = 1.5
+		_constrain_small_organism(daughter)
+
+	return [a, b]
+
+
+func _advance_decomposers(dt: float) -> void:
+	var next_decomposers: Array = []
+	var available_births: int = maxi(
+		0,
+		DECOMPOSER_SAFETY_LIMIT - decomposers.size()
+	)
+
+	for yeast in decomposers:
+		if bool(yeast.consumed):
+			continue
+
+		if int(yeast.engulfed_by_id) >= 0:
+			next_decomposers.append(yeast)
+			continue
+
+		if bool(yeast.dying):
+			_advance_small_lysis(yeast, dt, 0.82)
+			if float(yeast.lysis_progress) >= 1.0:
+				_recycle_small_body(
+					Vector2(yeast.position),
+					float(yeast.radius),
+					0.82,
+					false
+				)
+			else:
+				next_decomposers.append(yeast)
+			continue
+
+		yeast.age = float(yeast.age) + dt
+		yeast.cooldown = maxf(0.0, float(yeast.cooldown) - dt)
+		yeast.visual_phase = wrapf(
+			float(yeast.visual_phase) + dt * 1.7,
+			0.0,
+			TAU
+		)
+
+		var position: Vector2 = Vector2(yeast.position)
+		var consumed_detritus: float = float(
+			detritus.take_nearest_world(
+				position,
+				decomposer_detritus_rate
+				* float(yeast.gene_detritus)
+				* dt
+			)
+		)
+		var energy_gain: float = (
+			consumed_detritus
+			* decomposer_energy_yield
+			* float(yeast.gene_growth)
+		)
+		var maintenance: float = (
+			decomposer_maintenance
+			* float(yeast.gene_metabolism)
+			* (0.78 + 0.22 * float(yeast.gene_size))
+			* dt
+		)
+		yeast.energy = float(yeast.energy) + energy_gain - maintenance
+
+		if consumed_detritus > 0.0:
+			nutrient.add_nearest_world(
+				position,
+				consumed_detritus
+				* 0.24
+				* float(yeast.gene_mineralize)
+			)
+			waste.add_nearest_world(position, consumed_detritus * 0.055)
+			oxygen.take_nearest_world(position, consumed_detritus * 0.035)
+
+		var cue_gradient: Vector2 = Vector2(detritus.gradient_world(position))
+		var drift_bias := Vector2.ZERO
+		if cue_gradient.length_squared() > 0.000001:
+			drift_bias = cue_gradient.normalized() * 0.16
+		yeast.position = (
+			position
+			+ _water_flow(position) * dt * 0.34
+			+ drift_bias * dt
+		)
+		yeast.angle = wrapf(
+			float(yeast.angle) + sin(float(yeast.visual_phase)) * 0.08 * dt,
+			-PI,
+			PI
+		)
+		_constrain_small_organism(yeast)
+
+		if float(yeast.energy) <= 0.0:
+			yeast.energy = 0.0
+			yeast.begin_lysis()
+			next_decomposers.append(yeast)
+			continue
+
+		if bool(yeast.budding):
+			yeast.budding_progress = minf(
+				1.0,
+				float(yeast.budding_progress)
+				+ dt / maxf(0.001, decomposer_budding_duration)
+			)
+			if float(yeast.budding_progress) >= 1.0:
+				if available_births > 0:
+					next_decomposers.append_array(_bud_decomposer(yeast))
+					available_births -= 1
+				else:
+					yeast.budding = false
+					yeast.budding_progress = 0.0
+					next_decomposers.append(yeast)
+			else:
+				next_decomposers.append(yeast)
+			continue
+
+		if (
+			available_births > 0
+			and float(yeast.energy) >= decomposer_budding_energy
+			and float(yeast.age) >= 6.0
+			and float(yeast.cooldown) <= 0.0
+		):
+			yeast.begin_budding()
+
+		next_decomposers.append(yeast)
+
+	decomposers = next_decomposers
+
+
+func _bud_decomposer(parent: Variant) -> Array:
+	var old_energy: float = float(parent.energy)
+	var axis: Vector2 = Vector2.RIGHT.rotated(
+		float(parent.angle) + rng.randf_range(-0.7, 0.7)
+	)
+	var offset: Vector2 = axis * float(parent.radius) * 1.25
+	var daughter: Variant = DecomposerYeastScript.new(
+		_allocate_id(),
+		Vector2(parent.position) + offset,
+		float(parent.angle) + rng.randfn(0.0, 0.35),
+		rng.randf_range(0.0, TAU)
+	)
+	daughter.inherit_and_mutate(parent, rng)
+	daughter.energy = old_energy * 0.34
+	daughter.cooldown = 1.4
+
+	parent.energy = old_energy * 0.56
+	parent.budding = false
+	parent.budding_progress = 0.0
+	parent.cooldown = 1.2
+	_constrain_small_organism(parent)
+	_constrain_small_organism(daughter)
+
+	return [parent, daughter]
+
+
+func _advance_small_lysis(
+	organism: Variant,
+	dt: float,
+	speed_scale: float
+) -> void:
+	organism.lysis_progress = minf(
+		1.0,
+		float(organism.lysis_progress) + dt / 1.35
+	)
+	organism.position = (
+		Vector2(organism.position)
+		+ _water_flow(Vector2(organism.position)) * dt * 0.28 * speed_scale
+	)
+	damage_cue.add_radial_world(
+		Vector2(organism.position),
+		3.2 + float(organism.radius),
+		0.009 * dt * (1.0 + float(organism.lysis_progress))
+	)
+
+
+func _recycle_small_body(
+	position: Vector2,
+	radius: float,
+	scale: float,
+	is_producer: bool
+) -> void:
+	var biomass: float = maxf(0.035, radius * 0.032 * scale)
+	detritus.add_radial_world(position, 3.0 + radius, biomass)
+	damage_cue.add_radial_world(position, 3.8 + radius, biomass * 0.50)
+	if is_producer:
+		nutrient.add_radial_world(position, 2.8 + radius, biomass * 0.12)
+
+
+func _constrain_small_organism(organism: Variant) -> void:
+	var margin: float = float(organism.radius) + 0.7
+	var position: Vector2 = Vector2(organism.position)
+	position.x = clampf(position.x, margin, world_size.x - margin)
+	position.y = clampf(position.y, margin, world_size.y - margin)
+	organism.position = position
 
 
 func _advance_protozoa(dt: float) -> void:
