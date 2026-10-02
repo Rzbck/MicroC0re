@@ -10,6 +10,7 @@ const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
 const CHEMISTRY_DT := 1.0 / 30.0
+const SLOW_BIOME_DT := 1.0 / 10.0
 const MECHANICS_DT := 1.0 / 60.0
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
@@ -46,6 +47,7 @@ var producer_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
 var _chemistry_accumulator: float = 0.0
+var _slow_biome_accumulator: float = 0.0
 var _mechanics_accumulator: float = 0.0
 var _next_id: int = 1
 var _grid_head: PackedInt32Array = PackedInt32Array()
@@ -177,6 +179,7 @@ func seed_demo(count: int = 36) -> void:
 	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
+	_slow_biome_accumulator = 0.0
 	_mechanics_accumulator = 0.0
 	_next_id = 1
 	rng.seed = fixed_seed
@@ -293,18 +296,31 @@ func step(dt: float) -> void:
 	_chemistry_accumulator += dt
 	while _chemistry_accumulator >= CHEMISTRY_DT:
 		_feed_environment(CHEMISTRY_DT)
-		_advance_producer_mat(CHEMISTRY_DT)
 		nutrient.diffuse(nutrient_diffusion, CHEMISTRY_DT, nutrient_decay)
 		waste.diffuse(waste_diffusion, CHEMISTRY_DT, waste_decay)
 		oxygen.diffuse(oxygen_diffusion, CHEMISTRY_DT, oxygen_decay)
-		detritus.diffuse(detritus_diffusion, CHEMISTRY_DT, detritus_decay)
-		eps.diffuse(eps_diffusion, CHEMISTRY_DT, eps_decay)
 		damage_cue.diffuse(
 			damage_cue_diffusion,
 			CHEMISTRY_DT,
 			damage_cue_decay
 		)
-		producer_biomass.diffuse(0.0, CHEMISTRY_DT, producer_decay)
+
+		_slow_biome_accumulator += CHEMISTRY_DT
+		while _slow_biome_accumulator >= SLOW_BIOME_DT:
+			_advance_producer_mat(SLOW_BIOME_DT)
+			detritus.diffuse(
+				detritus_diffusion,
+				SLOW_BIOME_DT,
+				detritus_decay
+			)
+			eps.diffuse(eps_diffusion, SLOW_BIOME_DT, eps_decay)
+			producer_biomass.diffuse(
+				0.0,
+				SLOW_BIOME_DT,
+				producer_decay
+			)
+			_slow_biome_accumulator -= SLOW_BIOME_DT
+
 		_chemistry_accumulator -= CHEMISTRY_DT
 	chemistry_ms_last = float(Time.get_ticks_usec() - chemistry_start) / 1000.0
 
