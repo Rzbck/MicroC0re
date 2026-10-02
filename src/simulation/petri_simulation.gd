@@ -1100,7 +1100,20 @@ func _plasmid_burden(cell: Variant) -> float:
 func _advance_cell(cell: Variant, dt: float) -> void:
 	cell.age = float(cell.age) + dt
 
-	var sensed: float = float(nutrient.sample_world(Vector2(cell.position)))
+	var cell_position: Vector2 = Vector2(cell.position)
+	var sensed: float = float(nutrient.sample_world(cell_position))
+	if (
+		int(cell.guild) == int(BacteriumScript.GUILD_SCAVENGER)
+		or cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE)
+	):
+		# Scavengers treat detritus and the transient amino-acid/organic-rich
+		# damage plume as chemoattractants. This is the generic aquatic
+		# analogue of "smelling blood", not literal blood chemistry.
+		sensed += float(detritus.sample_world(cell_position)) * 1.30
+		sensed += float(damage_cue.sample_world(cell_position)) * 0.72
+	elif int(cell.guild) == int(BacteriumScript.GUILD_PHOTOTROPH):
+		sensed += _sample_light(cell_position) * 0.18
+
 	var improvement: float = sensed - float(cell.sensed_memory)
 	var memory_alpha: float = 1.0 - exp(-dt / maxf(0.001, chemotaxis_memory_tau))
 	cell.sensed_memory = lerpf(float(cell.sensed_memory), sensed, memory_alpha)
