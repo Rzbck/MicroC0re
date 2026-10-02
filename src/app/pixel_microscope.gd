@@ -114,7 +114,7 @@ func _setup_gpu_renderers() -> void:
 func _start_simulation(seed_value: int) -> void:
 	current_seed = seed_value
 	sim = PetriSimulationScript.new(current_seed)
-	sim.seed_demo(36)
+	sim.seed_demo(72)
 	accumulator = 0.0
 	selected_id = -1
 
