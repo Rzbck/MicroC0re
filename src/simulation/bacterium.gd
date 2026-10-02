@@ -270,6 +270,10 @@ func _apply_size_phenotype() -> void:
 	radius = clampf(0.34 + 0.16 * gene_size, 0.42, 0.63)
 
 
+func biomass_size() -> float:
+	return maxf(0.1, length)
+
+
 func axis() -> Vector2:
 	return Vector2.RIGHT.rotated(angle)
 
