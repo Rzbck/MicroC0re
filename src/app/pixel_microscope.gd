@@ -6,12 +6,12 @@ const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 12
 const FIELD_REFRESH_INTERVAL := 1.0 / 20.0
-const HUD_REFRESH_INTERVAL := 0.20
-const MIN_ZOOM := 0.03
+const INSPECTOR_REFRESH_INTERVAL := 0.15
 const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
 const ANGLE_STEPS := 32.0
@@ -32,6 +32,7 @@ var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
 var far_renderer: Node2D
+var ui: CanvasLayer
 var current_seed: int = 1337
 
 var accumulator: float = 0.0
@@ -46,11 +47,10 @@ var field_image: Image
 var field_texture: ImageTexture
 var field_refresh_accumulator: float = 0.0
 
-var hud_panel: ColorRect
-var hud_label: Label
-var hud_debug_expanded: bool = false
-var hud_refresh_accumulator: float = 0.0
+var inspector_refresh_accumulator: float = 0.0
 var selected_id: int = -1
+var selected_kind: String = ""
+var menu_pause_previous: bool = false
 
 var sim_ms: float = 0.0
 var field_ms: float = 0.0
@@ -78,7 +78,7 @@ func _ready() -> void:
 	_start_simulation(current_seed)
 	_setup_camera()
 	_setup_field_texture()
-	_setup_hud()
+	_setup_ui()
 	_refresh_field_texture()
 	call_deferred("_fit_camera")
 	queue_redraw()
@@ -120,6 +120,9 @@ func _start_simulation(seed_value: int) -> void:
 	sim.seed_demo(72)
 	accumulator = 0.0
 	selected_id = -1
+	selected_kind = ""
+	if ui != null:
+		ui.hide_inspector()
 
 
 func _setup_camera() -> void:
