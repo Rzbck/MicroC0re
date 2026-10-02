@@ -29,6 +29,7 @@ GitHub issue titles carry the same status prefix so the state is visible even wh
 - #21 Verlet half-neighbor lists + skin / stencil
 - #22 counter-based deterministic RNG
 - #24 parallel CPU pipeline
+- #30 bacteriophage kill-the-winner / viral recycling
 
 ## BACKLOG / GATED
 
@@ -55,7 +56,11 @@ Response implemented on current branch:
 - engulfment counter in diagnostics;
 - denser 72-bacterium visible demo;
 - clustered founder seeding around resource patches so contact/competition happens sooner;
-- protozoa seed near active resource patches to make predation observable sooner.
+- protozoa seed near active resource patches to make predation observable sooner;
+- ciliate-like grazers add a second faster predator niche;
+- both predator guilds now evolve heritable traits, reproduce from prey-derived energy and can starve;
+- live CPU-reference safety ceilings are 420 bacteria / 18 amoebae / 16 ciliates;
+- bacteriophage density-control layer is queued as #30.
 
 ## Rule for agents
 
