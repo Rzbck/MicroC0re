@@ -25,7 +25,8 @@ Core:
 - Issue #8 — validation and determinism.
 
 Presentation:
-- Issue #7 — pixel microscope renderer v0.
+- Issue #7 — living pixel microscope renderer, camera, HUD, appendages.
+- Issue #13 — heritable genotype, visible phenotype, mutations and lineages.
 
 Research lane:
 - Issue #6 — Turing / Gray-Scott laboratory.
@@ -59,12 +60,13 @@ Candidate systems:
 
 Each should arrive as a model + reference + validation plan, not as a visual shortcut.
 
-## Phase 3 — artificial evolution / art direction
+## Phase 3 — open-ended evolution / advanced art direction
 
-Only after the ecology is stable:
-- inheritable traits;
-- mutation;
-- selection pressures;
+The first heritable trait layer is already part of Phase 1. Later work can add:
+- neural / regulatory controllers;
+- explicit speciation and lineage trees;
+- horizontal gene transfer;
+- richer selection pressures;
 - ecosystem presets;
 - long-running deterministic seeds;
 - curated pixel palettes;
