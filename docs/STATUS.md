@@ -6,7 +6,7 @@ This file is the human/agent-readable mirror of the MicroC0re workflow.
 
 Issue titles must not contain workflow prefixes such as `[TODO]`, `[IN PROGRESS]`, `[REVIEW]` or `[BACKLOG]`. Bracketed title tags are reserved for technical/domain categories.
 
-When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1` synchronizes the real board through authenticated GitHub CLI / GraphQL.
+When an agent cannot mutate Project V2 directly, use the connector-writable `status:*` label protocol from `docs/HANDOFF.md`; the default-branch workflow synchronizes the real Project card.
 
 ## IN PROGRESS
 
@@ -26,6 +26,9 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #27 GPU-first desktop pipeline
 - #28 amoeboid deformation / staged engulfment
 - #29 trophic balance / evolving predators / population guard
+- #38 living aquatic biome epic
+- #44 expanded organism guilds / morphologies
+- #45 visible killing / feeding / lysis / recycling
 
 ## REVIEW
 
@@ -33,11 +36,16 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #4 temporal run-and-tumble chemotaxis
 - #5 uptake / metabolism / growth / death / binary fission
 - #16 camera / microscope framing / zoom / pan
-- #31 plasmid conjugation / horizontal gene transfer
-  - latest implementation is **overview-or-zoom-in only**;
+  - overview-or-zoom-in only;
   - minimum zoom is cover-fit;
-  - pan is clamped so the viewport cannot leave the simulated world;
-  - awaiting maintainer visual validation.
+  - pan is clamped to the simulated world.
+- #31 plasmid conjugation / horizontal gene transfer
+- #39 oxygen/light/detritus/EPS/damage biome fields
+- #41 scavengers / carrion / damage-cue chemotaxis
+- #46 compact organism inspector
+- #47 overview LOD consistency fix
+
+These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
 
 ## TODO
 
@@ -52,6 +60,18 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
 - #35 predator-prey coevolution / bacterial defence traits
 - #36 lineage tree / ancestry history / emergent phenotype clusters
+- #40 explicit phototroph/cyanobacterial producer organisms
+- #42 metabolic cross-feeding
+- #43 mature biofilm/EPS ecosystem engineering
+- #48 water flow / hydrodynamics
+- #49 multi-trophic predation
+- #50 pH / temperature / redox / toxicity
+- #51 succession / disturbance / recolonization
+- #52 optional host-tissue / heme / blood chemistry
+- #53 phycosphere symbiosis
+- #54 fungi / yeast / hyphal decomposers
+- #55 rotifer / nematode microfauna
+- #56 day/night / diel oxygen cycle
 
 ## DONE
 
@@ -68,45 +88,91 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 ## Latest maintainer feedback — 2026-10-02
 
 Observed:
-- pixel-art organisms are improving but the ecosystem still needs stronger visible evolution;
-- predator populations previously overshot prey;
-- zoom-out to a tiny world is rejected;
-- all permanent top-left debug/F1 UI is rejected;
-- clicking an organism should open a real detail panel;
-- Escape should open a clean menu;
-- evolution should include mutation, visible transformation, trait exchange and later richer ecological mechanisms;
-- desktop remains GPU-first.
+- the ecosystem still needs substantially more life, niches and interaction density;
+- the overview showed one accidentally huge organism while other organisms were tiny;
+- the left inspector was far too large;
+- the world should become a real biome with water, producer/vegetation-like life, many ecological guilds, death, feeding and environmental modification;
+- some organisms should seek damage/carrion-like chemical signals;
+- interactions such as killing, feeding and death must be visibly animated;
+- desktop remains GPU-first and population growth must never recreate the 1000-agent slowdown.
 
-Implemented on the current branch:
-- no permanent HUD / no F1 debug overlay;
-- Escape pause menu with Resume / Fit / Reset / New Seed / Quit;
-- click bacteria, amoebae or ciliates to open a left-side live inspector;
-- click empty world or Escape to close the inspector;
-- overview zoom fills the viewport and cannot zoom farther out;
-- camera pan is clamped to the simulated world;
-- LOD thresholds now scale from the overview zoom;
-- amoeboid and ciliate predators evolve, reproduce and starve;
-- initial predators reduced and predator reproduction/energy gain retuned after observed prey collapse;
-- CPU-reference safety ceilings remain 420 bacteria / 18 amoebae / 16 ciliates;
-- bacteria can now exchange mobile plasmid traits by staged direct-contact conjugation;
-- plasmid transfer has a visible pixel bridge and appears in the organism inspector;
-- researched next evolution layers are #32 natural transformation, #33 phenotype switching/division of labor, #34 quorum/EPS, and #30 phage-mediated kill-the-winner dynamics;
-- GPU compute benchmark is confirmed on the RTX 5080 at ~1455.3 M 96x64 field-cell updates/s in the dedicated benchmark;
-- GitHub Actions smoke validation is now automatic on PRs and main/current-branch pushes;
-- repository is public and the post-public security audit passed.
+## Implemented in the current biome pass
+
+### Rendering / UI
+- fixed the stale absolute ciliate LOD threshold that caused a giant full sprite at overview;
+- all three current organism classes now use overview-relative LOD logic;
+- organism inspector reduced to a compact ~218 x 374 px panel with smaller typography;
+- inspector remains scrollable and now exposes local biome values.
+
+### Living biome
+- dynamic oxygen field;
+- detritus/carrion field;
+- EPS/biofilm matrix field;
+- transient damage/lysis cue field;
+- producer-biomass / microbial-mat field;
+- deterministic spatial light model;
+- deterministic water-current advection;
+- producer mats grow under light and oxygenate/leak resource into the system;
+- aerobic energy yield responds to local oxygen;
+- death and active feeding return material to detritus and emit damage cues;
+- renderer composites nutrient, waste, oxygen, producers, EPS, detritus and damage plumes.
+
+### Functional diversity
+Bacteria now include four heritable functional ecotypes:
+- heterotroph;
+- scavenger;
+- biofilm builder;
+- phototroph.
+
+Current niche effects:
+- scavengers consume detritus and chemotax toward carrion/damage signals;
+- biofilm builders secrete more EPS and swim more slowly;
+- phototrophs gain light-assisted energy and release oxygen;
+- heterotrophs remain general dissolved-resource competitors.
+
+### Predation / death
+- amoebae and ciliates can bias search toward damage plumes when direct prey is absent;
+- active predation leaks detritus/damage cues into the local biome;
+- starved amoebae/ciliates now enter a staged lysis/death state instead of disappearing instantly;
+- predator death renders fragments/fade and recycles biomass.
+
+### Validation
+- deterministic smoke signature includes new biome totals, bacterial guild and predator death state;
+- smoke tests validate non-negative biome fields and guild/lysis invariants;
+- latest Godot Actions smoke passed after the biome implementation.
+
+## Research / roadmap
+
+See `docs/BIOME.md`.
+
+Key researched future layers:
+- microbial loop / dissolved-organic recycling;
+- phytoplankton/cyanobacteria and phycosphere symbiosis;
+- metabolic cross-feeding;
+- mature EPS/biofilm niche construction;
+- dormancy / seed-bank dynamics;
+- phage viral shunt / kill-the-winner;
+- fungi/yeast decomposition;
+- multi-trophic predation;
+- diel light/oxygen cycles;
+- larger microfauna such as rotifer/nematode-like consumers;
+- optional host-tissue chemistry.
 
 ## Rule for agents
 
 Before starting work:
-1. read `docs/CURRENT_DIRECTION.md`;
-2. read this file;
-3. read the issue being worked on;
-4. for evolution work, read `docs/EVOLUTION.md`;
-5. for performance/GPU work, read `docs/OPTIMIZATION_STRATEGY.md`;
-6. do not start a TODO/BACKLOG item merely because it is interesting while an IN PROGRESS gate is blocking the visible product.
+1. read `docs/HANDOFF.md`;
+2. read `docs/CURRENT_DIRECTION.md`;
+3. read this file;
+4. read the issue being worked on;
+5. for biome/ecology work, read `docs/BIOME.md`;
+6. for evolution work, read `docs/EVOLUTION.md`;
+7. for performance/GPU work, read `docs/OPTIMIZATION_STRATEGY.md`;
+8. finish blocking In Progress / Review work before starting unrelated Todo work.
 
 When status changes:
-1. update the GitHub Project `Status` field;
-2. update this file if the summarized workflow changed.
+1. update the GitHub Project Status directly when possible;
+2. otherwise use the matching `status:*` connector label;
+3. update this file when the summarized workflow materially changes.
 
 Do not put workflow state back into issue titles.
