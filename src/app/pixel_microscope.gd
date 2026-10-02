@@ -4,8 +4,8 @@ const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd"
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 
-const FIXED_DT := 1.0 / 120.0
-const MAX_STEPS_PER_FRAME := 24
+const FIXED_DT := 1.0 / 60.0
+const MAX_STEPS_PER_FRAME := 12
 const FIELD_REFRESH_INTERVAL := 1.0 / 20.0
 const HUD_REFRESH_INTERVAL := 0.20
 const MIN_ZOOM := 0.03
