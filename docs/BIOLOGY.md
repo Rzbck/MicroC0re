@@ -78,6 +78,85 @@ Later versions should distinguish:
 
 Dead biomass should eventually return material to environmental fields rather than simply vanish.
 
+## Predator guilds
+
+### Amoeboid / protist predators
+
+MicroC0re now includes a separate large amoeboid/protist class.
+
+It:
+- moves more slowly than bacteria;
+- visually deforms through discrete pixel-art poses;
+- senses nearby bacterial prey;
+- pulls prey inward over a visible engulfment interval;
+- gains energy only after ingestion completes;
+- spends energy continuously on maintenance;
+- can starve and disappear;
+- can reproduce after sufficient feeding.
+
+The predator phenotype is heritable and mutable:
+- speed;
+- perception range;
+- engulfment rate;
+- body size;
+- metabolism.
+
+This is intended as a qualitative protist-like phagocytosis model, not a calibrated amoeba species.
+
+### Ciliate-like grazers
+
+A second eukaryotic predator guild is faster and more directional.
+
+It:
+- swims using a cilia-inspired pixel animation;
+- searches a larger area;
+- captures bacteria at an oral-side feeding region;
+- has a shorter feeding cycle than the amoeboid predator;
+- spends energy continuously;
+- starves when prey is unavailable;
+- reproduces after accumulating prey-derived energy.
+
+Its heritable traits include:
+- swimming speed;
+- perception;
+- capture rate;
+- size;
+- metabolism.
+
+The two predator guilds intentionally occupy different ecological niches so that the food web can show more than one top-down control strategy.
+
+## Population regulation
+
+The live CPU-reference ecosystem is controlled by two distinct mechanisms.
+
+### Biological regulation
+- nutrient enters at a fixed finite rate;
+- bacteria compete for the same nutrient field;
+- bacterial growth is energy/resource limited;
+- amoeboid predators remove bacteria by staged engulfment;
+- ciliate-like grazers remove bacteria more quickly in dense patches;
+- predators pay maintenance costs and can starve;
+- predator reproduction requires successful feeding.
+
+### Performance safety guard
+Until GPU-resident agent mechanics replaces the current CPU-reference path:
+- bacteria are capped at 420 live agents;
+- amoeboid predators are capped at 18;
+- ciliates are capped at 16.
+
+The guard suppresses additional reproduction at the ceiling. It does **not** delete arbitrary live cells and is not claimed as biology.
+
+## Planned ecological control
+
+A later layer will investigate bacteriophage "kill-the-winner" dynamics:
+- host specificity;
+- infection latency;
+- lysis;
+- burst/replication;
+- nutrient recycling through a viral-shunt-like mechanism.
+
+This is tracked separately so phages can use a bounded/GPU-friendly representation rather than millions of literal virus agents.
+
 ## What is deliberately postponed
 
 - species-specific calibration;
@@ -86,8 +165,8 @@ Dead biomass should eventually return material to environmental fields rather th
 - explicit hydrodynamic flagellar bundles (the current flagella are a coarse phenotype/propulsion model);
 - quorum sensing;
 - explicit pilus attachment/conjugation mechanics (the current pili are visible morphology only);
-- biofilm ECM;
-- predator ingestion;
-- eukaryotic membranes/pseudopods.
+- mature biofilm ECM;
+- calibrated protozoan/ciliate physiology;
+- detailed membrane mechanics.
 
 Those systems should be added only with their own model notes and validation plan.
