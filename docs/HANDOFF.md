@@ -13,6 +13,8 @@ This file is deliberately kept on the default branch so a fresh ChatGPT/Codex/ag
 
 The GitHub Project **Status field is canonical**.
 
+Project automation details: `docs/PROJECT_AUTOMATION.md`.
+
 ## Mandatory fresh-session bootstrap
 
 1. Read `/AGENTS.md`.
