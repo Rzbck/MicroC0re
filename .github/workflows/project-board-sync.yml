@@ -7,9 +7,9 @@ on:
       - ".github/workflows/project-board-sync.yml"
   workflow_dispatch:
   issues:
-    types: [opened, reopened, labeled, unlabeled, closed]
+    types: [opened, reopened, labeled, closed]
   pull_request_target:
-    types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
+    types: [opened, reopened, ready_for_review, converted_to_draft, labeled, closed]
 
 permissions:
   contents: read
@@ -157,12 +157,30 @@ jobs:
             exit 1
           fi
 
-          item_id="$(gh api graphql             -f project="$project_id"             -f content="$CONTENT_ID"             -f query='
-              mutation($project:ID!, $content:ID!) {
-                addProjectV2ItemById(input:{projectId:$project, contentId:$content}) {
-                  item { id }
+          item_id="$(gh api graphql             -f content="$CONTENT_ID"             -f project="$project_id"             -f query='
+              query($content:ID!, $project:ID!) {
+                node(id:$content) {
+                  ... on Issue {
+                    projectItems(first:50) {
+                      nodes { id project { id } }
+                    }
+                  }
+                  ... on PullRequest {
+                    projectItems(first:50) {
+                      nodes { id project { id } }
+                    }
+                  }
                 }
-              }'             --jq '.data.addProjectV2ItemById.item.id')"
+              }'             --jq '.data.node.projectItems.nodes[] | select(.project.id == env.PROJECT_ID) | .id'             -f PROJECT_ID="$project_id" 2>/dev/null || true)"
+
+          if [[ -z "$item_id" ]]; then
+            item_id="$(gh api graphql               -f project="$project_id"               -f content="$CONTENT_ID"               -f query='
+                mutation($project:ID!, $content:ID!) {
+                  addProjectV2ItemById(input:{projectId:$project, contentId:$content}) {
+                    item { id }
+                  }
+                }'               --jq '.data.addProjectV2ItemById.item.id')"
+          fi
 
           gh api graphql             -f project="$project_id"             -f item="$item_id"             -f field="$status_field_id"             -f option="$status_option_id"             -f query='
               mutation($project:ID!, $item:ID!, $field:ID!, $option:String!) {
