@@ -47,6 +47,7 @@ See:
 - [Evolution model](docs/EVOLUTION.md)
 - [Art direction](docs/ART_DIRECTION.md)
 - [Performance budget](docs/PERFORMANCE.md)
+- [Optimization architecture](docs/OPTIMIZATION_STRATEGY.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Repository layout
