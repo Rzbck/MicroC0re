@@ -93,6 +93,8 @@ var detritus_scavenge_rate: float = 0.070
 var detritus_energy_yield: float = 3.4
 var eps_secretion_rate: float = 0.0045
 var water_flow_strength: float = 0.42
+var diel_cycle_seconds: float = 180.0
+var night_light_floor: float = 0.12
 
 # Motility / chemotaxis.
 var run_speed: float = 11.0
@@ -1466,12 +1468,19 @@ func _build_sources() -> void:
 func _sample_light(position: Vector2) -> float:
 	var normalized_y: float = clampf(position.y / world_size.y, 0.0, 1.0)
 	var vertical: float = lerpf(1.0, 0.38, normalized_y)
+	var daylight: float = (
+		0.5
+		+ 0.5 * cos(
+			TAU * simulation_time / maxf(1.0, diel_cycle_seconds)
+		)
+	)
+	daylight = lerpf(night_light_floor, 1.0, daylight)
 	var ripple: float = (
-		0.10
+		0.08
 		* sin(position.x * 0.055 + simulation_time * 0.07)
 		* cos(position.y * 0.045 - simulation_time * 0.05)
 	)
-	return clampf(vertical + ripple, 0.15, 1.0)
+	return clampf(vertical * daylight + ripple, 0.04, 1.0)
 
 
 func _light_value_for_index(index: int) -> float:
