@@ -47,6 +47,8 @@ GitHub issue titles carry the same status prefix so the state remains visible ev
 - #32 natural transformation / extracellular DNA / competence
 - #33 phenotypic switching / dormancy / division of labor
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
+- #35 predator-prey coevolution / bacterial defence traits
+- #36 lineage tree / ancestry history / emergent phenotype clusters
 
 ## BACKLOG / GATED
 
