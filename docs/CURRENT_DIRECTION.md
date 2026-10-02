@@ -43,9 +43,9 @@ Until Epic #14 is complete, work in this order:
 2. **#16 Camera / infinite-feel background / zoom**
 3. **#15 True pixel-art pipeline + art bible**
 4. **#18 Readable organic animation / interactions**
-5. Resume deeper ecology only after the visual/performance gate passes.
+5. Small, observable ecology slices may proceed when they stay inside the measured performance budget; deeper ecology remains gated.
 
-This priority order is intentional: do not add expensive visual detail before we know the render budget.
+This priority order is intentional: do not add expensive visual detail or unbounded species systems before we know the render budget.
 
 ## GPU-first desktop rule
 
@@ -118,7 +118,8 @@ Initial sprite/morphology families should include:
 - rod / bacillus;
 - coccus / clustered coccus;
 - curved / vibrio-like;
-- later an amoeboid/protist class for true engulfment/deformation behavior.
+- amoeboid/protist predator for true engulfment/deformation;
+- ciliate-like grazer for fast top-down control.
 
 At close zoom, morphology may expose:
 - wall/membrane;
@@ -150,6 +151,8 @@ Later:
 - biofilm matrix/adhesion;
 - predatory bacterial attacks;
 - amoeboid/protist engulfment;
+- ciliate grazing;
+- bacteriophage infection/lysis later;
 - artificial-life fusion only when clearly documented as fictional rather than ordinary bacterial biology.
 
 Important interactions should persist long enough to observe. Avoid `collision -> delete`.
