@@ -3,7 +3,7 @@ extends SceneTree
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
 
 const STEPS := 600
-const DT := 1.0 / 120.0
+const DT := 1.0 / 60.0
 
 
 func _init() -> void:
