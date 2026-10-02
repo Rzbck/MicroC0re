@@ -23,6 +23,13 @@ var dying: bool = false
 var lysis_progress: float = 0.0
 var adhesion_timer: float = 0.0
 
+# Engulfment is used by the amoeboid/protist class. The bacterium remains
+# visible while it is being pulled inside the predator; completion removes it
+# without pretending that ordinary bacteria "fuse" together.
+var engulfed_by_id: int = -1
+var engulf_progress: float = 0.0
+var consumed: bool = false
+
 # Temporal memory used by run-and-tumble chemotaxis.
 var sensed_memory: float = 0.0
 
