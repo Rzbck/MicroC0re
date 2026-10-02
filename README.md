@@ -39,6 +39,7 @@ Every approximation should be documented. Parameters are considered **uncalibrat
 
 See:
 - **[Current direction](docs/CURRENT_DIRECTION.md)** — read this first; it overrides stale visual priorities
+- **[Project status](docs/STATUS.md)** — IN PROGRESS / REVIEW / TODO / BACKLOG map
 - [Research references](docs/RESEARCH.md)
 - [Mathematical model](docs/MATH.md)
 - [Biology model](docs/BIOLOGY.md)
