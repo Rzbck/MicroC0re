@@ -46,6 +46,7 @@ See:
 - [Validation strategy](docs/VALIDATION.md)
 - [Evolution model](docs/EVOLUTION.md)
 - [Art direction](docs/ART_DIRECTION.md)
+- [Performance budget](docs/PERFORMANCE.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Repository layout
@@ -106,7 +107,7 @@ The local executable path is **not** stored in project settings.
 
 ## Status
 
-**Current gate: Epic #14 — Visual Rebuild v0.2.**
+**Current gate: Epic #14 — Visual Rebuild v0.2. First implementation pass: draft PR #19.**
 
 The first visible renderer is intentionally considered a rejected debug baseline: it exposed grey outside the world, dropped to ~5–8 FPS at close zoom in the observed test, and read as vector/procedural rather than true pixel art. Agents should read `docs/CURRENT_DIRECTION.md` before adding features.
 
