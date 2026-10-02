@@ -174,10 +174,25 @@ Later:
 
 Important interactions should persist long enough to observe. Avoid `collision -> delete`.
 
+## Living biome direction
+
+Epic #38 is now an active product direction alongside the visual rebuild.
+
+The simulated world should evolve into an aquatic micro-ecosystem with:
+- oxygen, light, detritus, EPS, damage cues and water flow;
+- producer, heterotroph, scavenger and biofilm niches;
+- protist grazing and later multi-trophic predation;
+- visible death/recycling;
+- cross-feeding and niche construction;
+- succession/dormancy;
+- later phages, fungi and larger microfauna.
+
+Read `docs/BIOME.md` before ecology/environment changes.
+
 ## What agents should NOT do right now
 
-Until Epic #14 is through its gate, do not:
-- add lots of new species just to make the screen busier;
+While Epic #14 remains open, do not:
+- add cosmetic species just to make the screen busier; new guilds are allowed when they occupy a real niche defined in `docs/BIOME.md`;
 - add expensive shaders/effects before profiling;
 - keep extending procedural line/circle organism art as the final style;
 - add complex predation that has no visual state machine;
