@@ -10,6 +10,11 @@ const TRANSFER_NONE := 0
 const TRANSFER_DONOR := 1
 const TRANSFER_RECIPIENT := 2
 
+const GUILD_HETEROTROPH := 0
+const GUILD_SCAVENGER := 1
+const GUILD_BIOFILM := 2
+const GUILD_PHOTOTROPH := 3
+
 var id: int
 var parent_id: int
 var lineage_id: int
@@ -23,6 +28,7 @@ var radius: float = 0.50
 var energy: float = 3.0
 var age: float = 0.0
 var alive: bool = true
+var guild: int = GUILD_HETEROTROPH
 
 # Life-cycle presentation states. Division remains resource-triggered; these
 # values only make the resulting process observable instead of instantaneous.
@@ -122,6 +128,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	lineage_id = int(parent.lineage_id)
 	generation = int(parent.generation) + 1
+	guild = int(parent.guild)
 	plasmid_mask = int(parent.plasmid_mask)
 	transfer_role = TRANSFER_NONE
 	transfer_partner_id = -1
@@ -175,6 +182,18 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	visual_phase = p_rng.randf_range(0.0, TAU)
 
 	_apply_size_phenotype()
+
+
+func guild_name() -> String:
+	match guild:
+		GUILD_SCAVENGER:
+			return "scavenger"
+		GUILD_BIOFILM:
+			return "biofilm"
+		GUILD_PHOTOTROPH:
+			return "phototroph"
+		_:
+			return "heterotroph"
 
 
 func has_plasmid(module_bit: int) -> bool:
