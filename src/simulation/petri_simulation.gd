@@ -1131,9 +1131,19 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var size_drag: float = 0.84 + 0.20 * float(cell.gene_size)
 	var energy_speed_factor: float = clampf(float(cell.energy) / 1.6, 0.18, 1.0)
 	var division_mobility: float = 0.16 if bool(cell.dividing) else 1.0
+	var guild_speed_factor: float = 1.0
+	match int(cell.guild):
+		BacteriumScript.GUILD_SCAVENGER:
+			guild_speed_factor = 0.90
+		BacteriumScript.GUILD_BIOFILM:
+			guild_speed_factor = 0.64
+		BacteriumScript.GUILD_PHOTOTROPH:
+			guild_speed_factor = 0.58
+
 	var speed: float = (
 		run_speed
 		* float(cell.gene_speed)
+		* guild_speed_factor
 		* flagella_propulsion
 		* energy_speed_factor
 		* division_mobility
@@ -1181,7 +1191,10 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		)
 
 	var scavenged: float = 0.0
-	if cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE):
+	if (
+		int(cell.guild) == int(BacteriumScript.GUILD_SCAVENGER)
+		or cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE)
+	):
 		scavenged = float(
 			detritus.take_nearest_world(
 				Vector2(cell.position),
@@ -1216,11 +1229,18 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
 	if (
-		float(cell.gene_adhesion) > 0.95
+		int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM)
+		or float(cell.gene_adhesion) > 0.95
 		or cell.has_plasmid(BacteriumScript.PLASMID_ADHESION)
 	):
+		var guild_eps_factor: float = (
+			2.2
+			if int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM)
+			else 1.0
+		)
 		var secretion: float = (
 			eps_secretion_rate
+			* guild_eps_factor
 			* maxf(0.0, float(cell.gene_adhesion) - 0.75)
 			* clampf(float(cell.energy) / 3.0, 0.2, 1.0)
 			* dt
@@ -1228,6 +1248,19 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		if secretion > 0.0:
 			eps.add_nearest_world(Vector2(cell.position), secretion)
 			cell.energy = maxf(0.0, float(cell.energy) - secretion * 0.7)
+
+	if int(cell.guild) == int(BacteriumScript.GUILD_PHOTOTROPH):
+		var local_light: float = _sample_light(Vector2(cell.position))
+		var photo_gain: float = 0.045 * local_light * dt
+		cell.energy = float(cell.energy) + photo_gain
+		oxygen.add_nearest_world(
+			Vector2(cell.position),
+			photo_gain * 0.34
+		)
+		nutrient.add_nearest_world(
+			Vector2(cell.position),
+			photo_gain * 0.025
+		)
 
 	if (consumed > 0.0 or scavenged > 0.0) and not bool(cell.dividing):
 		var growth_delta: float = (
