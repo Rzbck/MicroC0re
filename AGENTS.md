@@ -82,6 +82,20 @@ If a local Godot binary is unavailable, state that tests were not executed inste
 - Add acceptance criteria to issues before expanding scope.
 - Avoid giant “rewrite everything” commits.
 
+## GPU-first desktop policy
+
+For desktop performance work, prefer the GPU for workloads with high data parallelism:
+- MultiMesh/bulk-buffer rendering;
+- chemical/reaction-diffusion fields;
+- large independent per-agent kernels;
+- future spatial binning and local interaction kernels.
+
+The project uses Forward+ on desktop. Keep a CPU/headless reference path, but do not treat CPU as the default execution target for scalable workloads.
+
+Never add a design that requires synchronous full GPU -> CPU readback every tick. Godot RenderingDevice readbacks synchronize or consume significant transfer bandwidth; keep bulk state resident whenever possible.
+
+GPU migration is tracked by #27.
+
 ## Performance policy
 
 Profile before optimizing and record measured before/after numbers.
