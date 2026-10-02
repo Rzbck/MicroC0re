@@ -27,6 +27,7 @@ var rng := RandomNumberGenerator.new()
 var nutrient: Variant
 var waste: Variant
 var bacteria: Array = []
+var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
@@ -43,6 +44,11 @@ var pair_candidates_last: int = 0
 var pair_narrow_checks_last: int = 0
 var pair_interactions_last: int = 0
 var pair_contacts_last: int = 0
+
+# Latest subsystem timings for one simulation tick.
+var chemistry_ms_last: float = 0.0
+var agents_ms_last: float = 0.0
+var mechanics_ms_last: float = 0.0
 
 # Environmental coefficients. Concentration is normalized in v0.1.
 var nutrient_diffusion: float = 5.0
@@ -101,6 +107,7 @@ func _init(seed_value: int = 1) -> void:
 
 func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
+	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
 	_mechanics_accumulator = 0.0
@@ -134,14 +141,18 @@ func step(dt: float) -> void:
 	if dt <= 0.0:
 		return
 
+	var chemistry_start: int = Time.get_ticks_usec()
 	_chemistry_accumulator += dt
 	while _chemistry_accumulator >= CHEMISTRY_DT:
 		_feed_environment(CHEMISTRY_DT)
 		nutrient.diffuse(nutrient_diffusion, CHEMISTRY_DT, nutrient_decay)
 		waste.diffuse(waste_diffusion, CHEMISTRY_DT, waste_decay)
 		_chemistry_accumulator -= CHEMISTRY_DT
+	chemistry_ms_last = float(Time.get_ticks_usec() - chemistry_start) / 1000.0
 
-	var next_population: Array = []
+	var agents_start: int = Time.get_ticks_usec()
+	var next_population: Array = _population_buffer
+	next_population.clear()
 
 	for cell in bacteria:
 		cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - dt)
@@ -180,8 +191,13 @@ func step(dt: float) -> void:
 
 		next_population.append(cell)
 
+	var previous_population: Array = bacteria
 	bacteria = next_population
+	_population_buffer = previous_population
+	_population_buffer.clear()
+	agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
 
+	var mechanics_start: int = Time.get_ticks_usec()
 	_mechanics_accumulator += dt
 	while _mechanics_accumulator >= MECHANICS_DT:
 		pair_candidates_last = 0
@@ -191,6 +207,7 @@ func step(dt: float) -> void:
 		for _iteration in range(mechanical_iterations):
 			_resolve_all_contacts()
 		_mechanics_accumulator -= MECHANICS_DT
+	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 
 	simulation_time += dt
 
