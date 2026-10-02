@@ -29,6 +29,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #38 living aquatic biome epic
 - #44 expanded organism guilds / morphologies
 - #45 visible killing / feeding / lysis / recycling
+- #57 fused GPU multi-field biome compute
 
 ## REVIEW
 
@@ -115,6 +116,9 @@ Observed:
 - producer mats grow under light and oxygenate/leak resource into the system;
 - aerobic energy yield responds to local oxygen;
 - death and active feeding return material to detritus and emit damage cues;
+- scavenger ecotypes/plasmid carriers chemotax toward detritus/damage plumes;
+- water-current advection affects all current mobile organism classes;
+- a deterministic 180 s diel light cycle drives producer activity and oxygenation;
 - renderer composites nutrient, waste, oxygen, producers, EPS, detritus and damage plumes.
 
 ### Functional diversity
@@ -139,7 +143,9 @@ Current niche effects:
 ### Validation
 - deterministic smoke signature includes new biome totals, bacterial guild and predator death state;
 - smoke tests validate non-negative biome fields and guild/lysis invariants;
-- latest Godot Actions smoke passed after the biome implementation.
+- latest Godot Actions smoke passed after the biome implementation;
+- slow biome fields run at 10 Hz while fast chemistry remains 30 Hz to control CPU-reference cost;
+- #57 owns migration of the expanded biome fields into fused GPU compute.
 
 ## Research / roadmap
 
