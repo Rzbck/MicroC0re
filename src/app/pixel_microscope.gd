@@ -52,6 +52,8 @@ var draw_ms: float = 0.0
 var visible_cells: int = 0
 var far_cells: int = 0
 var sprite_cells: int = 0
+var gpu_name: String = ""
+var renderer_name: String = ""
 
 
 func _ready() -> void:
@@ -59,6 +61,10 @@ func _ready() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	RenderingServer.set_default_clear_color(Color(0.006, 0.010, 0.012, 1.0))
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	gpu_name = RenderingServer.get_video_adapter_name()
+	renderer_name = str(
+		ProjectSettings.get_setting("rendering/renderer/rendering_method")
+	)
 
 	atlas = PixelAtlasScript.new()
 	_setup_infinite_background()
@@ -138,14 +144,14 @@ func _setup_hud() -> void:
 
 	var panel := ColorRect.new()
 	panel.position = Vector2(6.0, 6.0)
-	panel.size = Vector2(420.0, 124.0)
+	panel.size = Vector2(500.0, 138.0)
 	panel.color = Color(0.005, 0.010, 0.012, 0.88)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(panel)
 
 	hud_label = Label.new()
 	hud_label.position = Vector2(10.0, 9.0)
-	hud_label.size = Vector2(410.0, 118.0)
+	hud_label.size = Vector2(490.0, 132.0)
 	hud_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_label.add_theme_font_size_override("font_size", 8)
 	hud_label.add_theme_color_override("font_color", Color(0.84, 0.94, 0.88))
@@ -380,14 +386,16 @@ func _update_hud() -> void:
 
 	var state_text: String = "PAUSE" if paused else "RUN"
 	hud_label.text = (
-		"MICROC0RE  %s  FPS %d  zoom %.2f  sim %.1fx"
+		"MICROC0RE  %s  FPS %d  zoom %.2f  sim %.1fx  %s"
 		% [
 			state_text,
 			Engine.get_frames_per_second(),
 			camera.zoom.x,
 			simulation_speed,
+			renderer_name,
 		]
 	)
+	hud_label.text += "\nGPU " + gpu_name
 	hud_label.text += (
 		"\ncells %d  visible %d  gen %d  divide %d  adhere %d  lysis %d"
 		% [
