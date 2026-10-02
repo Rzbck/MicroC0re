@@ -390,6 +390,15 @@ func _update_hud() -> void:
 		% [sim_ms, field_ms, draw_ms, far_cells, sprite_cells]
 	)
 	hud_label.text += (
+		"\npairs %d -> %d -> %d -> %d"
+		% [
+			int(sim.pair_candidates_last),
+			int(sim.pair_narrow_checks_last),
+			int(sim.pair_interactions_last),
+			int(sim.pair_contacts_last),
+		]
+	)
+	hud_label.text += (
 		"\nwheel zoom | RMB/MMB pan | WASD | click inspect | F fit | R reset | N seed"
 	)
 
