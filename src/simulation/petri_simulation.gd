@@ -186,6 +186,13 @@ func step(dt: float) -> void:
 	for cell in bacteria:
 		cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - dt)
 
+		if bool(cell.consumed):
+			continue
+
+		if int(cell.engulfed_by_id) >= 0:
+			next_population.append(cell)
+			continue
+
 		if bool(cell.dying):
 			_advance_lysis(cell, dt)
 			if float(cell.lysis_progress) >= 1.0:
@@ -238,7 +245,157 @@ func step(dt: float) -> void:
 		_mechanics_accumulator -= MECHANICS_DT
 	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 
+	_advance_protozoa(dt)
+
 	simulation_time += dt
+
+
+func _advance_protozoa(dt: float) -> void:
+	for proto in protozoa:
+		proto.age = float(proto.age) + dt
+		proto.cooldown = maxf(0.0, float(proto.cooldown) - dt)
+		proto.deform_phase = wrapf(
+			float(proto.deform_phase) + dt * (2.8 + 0.15 * float(proto.energy)),
+			0.0,
+			TAU
+		)
+
+		if int(proto.feeding_target_id) >= 0:
+			_advance_protozoan_engulf(proto, dt)
+			continue
+
+		var prey: Variant = _find_protozoan_prey(proto)
+		var desired_angle: float = float(proto.angle)
+
+		if prey != null:
+			var to_prey: Vector2 = Vector2(prey.position) - Vector2(proto.position)
+			if to_prey.length_squared() > 0.000001:
+				desired_angle = to_prey.angle()
+
+			if (
+				float(proto.cooldown) <= 0.0
+				and to_prey.length() <= protozoan_engulf_distance
+			):
+				proto.begin_engulf(int(prey.id))
+				prey.engulfed_by_id = int(proto.id)
+				prey.engulf_progress = 0.0
+				continue
+		else:
+			desired_angle += sin(
+				simulation_time * 0.73 + float(proto.deform_phase)
+			) * 0.45
+
+		proto.angle = lerp_angle(
+			float(proto.angle),
+			desired_angle,
+			clampf(dt * 2.4, 0.0, 1.0)
+		)
+
+		var pulse: float = 0.82 + 0.18 * sin(float(proto.deform_phase) * 1.7)
+		var speed: float = protozoan_speed * pulse
+		proto.position = (
+			Vector2(proto.position)
+			+ Vector2.RIGHT.rotated(float(proto.angle)) * speed * dt
+		)
+		proto.energy = maxf(
+			0.5,
+			float(proto.energy) - protozoan_maintenance * dt
+		)
+		proto.deform_amount = lerpf(
+			float(proto.deform_amount),
+			0.20 + 0.12 * absf(sin(float(proto.deform_phase))),
+			clampf(dt * 5.0, 0.0, 1.0)
+		)
+		_constrain_protozoan(proto)
+
+
+func _find_protozoan_prey(proto: Variant) -> Variant:
+	var best: Variant = null
+	var best_distance_sq: float = protozoan_perception * protozoan_perception
+	var origin: Vector2 = Vector2(proto.position)
+
+	for cell in bacteria:
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+
+		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = cell
+
+	return best
+
+
+func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
+	var prey: Variant = find_cell_by_id(int(proto.feeding_target_id))
+	if prey == null or bool(prey.consumed):
+		proto.finish_engulf()
+		return
+
+	if bool(prey.dying):
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
+		proto.finish_engulf()
+		return
+
+	var progress: float = minf(
+		1.0,
+		float(proto.feeding_progress) + dt / maxf(0.001, protozoan_engulf_duration)
+	)
+	proto.feeding_progress = progress
+	proto.deform_amount = 0.35 + sin(progress * PI) * 0.55
+
+	var prey_position: Vector2 = Vector2(prey.position)
+	var proto_position: Vector2 = Vector2(proto.position)
+	var pull_alpha: float = clampf(dt * (2.0 + progress * 5.0), 0.0, 1.0)
+	prey.position = prey_position.lerp(proto_position, pull_alpha)
+	prey.engulf_progress = progress
+	prey.angle = lerp_angle(
+		float(prey.angle),
+		float(proto.angle) + PI * 0.5,
+		clampf(dt * 4.0, 0.0, 1.0)
+	)
+
+	# The predator deforms around the prey instead of collision->delete.
+	var wobble: float = sin(float(proto.deform_phase) * 2.3) * 0.22
+	proto.angle = wrapf(float(proto.angle) + wobble * dt, -PI, PI)
+
+	if progress >= 1.0:
+		prey.consumed = true
+		prey.alive = false
+		prey.engulfed_by_id = -1
+		proto.energy = minf(
+			18.0,
+			float(proto.energy) + 2.5 + float(prey.length) * 0.35
+		)
+		proto.finish_engulf()
+
+
+func _constrain_protozoan(proto: Variant) -> void:
+	var margin: float = float(proto.radius) + 1.0
+	var position: Vector2 = Vector2(proto.position)
+	var angle: float = float(proto.angle)
+
+	if position.x < margin:
+		position.x = margin
+		angle = PI - angle
+	elif position.x > world_size.x - margin:
+		position.x = world_size.x - margin
+		angle = PI - angle
+
+	if position.y < margin:
+		position.y = margin
+		angle = -angle
+	elif position.y > world_size.y - margin:
+		position.y = world_size.y - margin
+		angle = -angle
+
+	proto.position = position
+	proto.angle = wrapf(angle, -PI, PI)
 
 
 func _advance_cell(cell: Variant, dt: float) -> void:
