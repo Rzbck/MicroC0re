@@ -28,7 +28,23 @@ func _init() -> void:
 
 	# #[compute] is an import hint for RDShaderFile. We compile source directly
 	# here so this benchmark works from a fresh git clone without editor import.
-	shader_code = shader_code.replace("#[compute]\n", "")
+	# Git on Windows may hand us CRLF and/or a UTF-8 BOM, so remove the marker
+	# line structurally instead of relying on one exact newline sequence.
+	shader_code = shader_code.replace("\r\n", "\n")
+	shader_code = shader_code.trim_prefix("\ufeff")
+
+	var cleaned_lines := PackedStringArray()
+	for source_line in shader_code.split("\n"):
+		var trimmed: String = source_line.strip_edges()
+		if trimmed == "#[compute]":
+			continue
+		cleaned_lines.append(source_line)
+	shader_code = "\n".join(cleaned_lines)
+
+	if shader_code.begins_with("#[compute]"):
+		push_error("Compute marker stripping failed.")
+		quit(1)
+		return
 
 	var shader_source := RDShaderSource.new()
 	shader_source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
