@@ -478,9 +478,9 @@ Reference:
 
 ---
 
-## 12. GPU compute — later, not automatically better
+## 12. GPU-first desktop path — active priority
 
-Godot supports compute shaders through RenderingDevice, but compute shaders require a RenderingDevice renderer (Forward+ or Mobile), not the GL Compatibility renderer currently used by the project.
+Godot supports compute shaders through RenderingDevice. Desktop MicroC0re now uses **Forward+** specifically so Vulkan/RenderingDevice compute is available. Compatibility becomes a fallback target, not the performance reference.
 
 Reference:
 - https://docs.godotengine.org/en/latest/tutorials/shaders/compute_shaders.html
@@ -493,19 +493,23 @@ GPU -> CPU synchronization/readback can destroy the speedup. Godot's compute doc
 
 Therefore:
 
-### CPU canonical mode
-Best for:
-- deterministic reference;
-- tests;
-- moderate populations;
-- easy debugging.
+### CPU reference mode
+Keep CPU for:
+- deterministic/reference validation;
+- headless CI;
+- model A/B tests;
+- fallbacks.
 
-### GPU accelerated mode
-Makes sense when:
-- field resolution is much larger;
-- many chemical channels exist;
-- agent simulation can also consume field data on GPU;
-- readback is sparse/infrequent.
+### GPU primary desktop mode
+Prefer GPU for massively parallel work when data can stay resident:
+- rendering/instancing;
+- continuum diffusion/reaction;
+- field sampling;
+- metabolism/motility state updates;
+- spatial binning/prefix scans;
+- local mechanics once the SoA GPU layout is ready.
+
+The constraint is not "CPU first"; the constraint is **avoid synchronization/readback that destroys parallelism**.
 
 Potential GPU pipeline:
 1. SoA agent storage buffer;
@@ -516,7 +520,21 @@ Potential GPU pipeline:
 6. MultiMesh/instance buffer written directly for render;
 7. only small statistics/events read back to CPU.
 
-This is a future high-scale path, not v0.2.
+This is now active work under Issue #27.
+
+Current implementation:
+- desktop renderer switched to Forward+;
+- a real GLSL compute diffusion benchmark exists at `tests/gpu_compute_benchmark.gd`;
+- `scripts/run_gpu_benchmark.ps1` validates compute throughput on the actual GPU;
+- far-LOD organisms use MultiMesh GPU instancing with one bulk buffer upload instead of one Canvas draw per organism.
+
+Next GPU steps:
+1. single-atlas MultiMesh for mid/near organisms;
+2. compute-resident chemical fields;
+3. move field sampling + metabolism to GPU so chemistry does not need full per-tick readback;
+4. GPU spatial binning / neighbor list;
+5. local interaction kernels;
+6. direct production of render instance buffers on GPU.
 
 ---
 
@@ -643,7 +661,8 @@ Do not simulate empty space at full resolution.
 - [ ] decimate slower metabolism/regulation where validated.
 
 ### P3 — rendering scale
-- [ ] chunked MultiMeshInstance2D;
+- [x] far-LOD MultiMeshInstance2D bulk buffer;
+- [ ] chunked MultiMeshInstance2D for sprite LOD;
 - [ ] atlas shader via INSTANCE_CUSTOM/custom data;
 - [ ] one bulk instance-buffer update per chunk;
 - [ ] previous/current transform interpolation.
@@ -658,8 +677,9 @@ Do not simulate empty space at full resolution.
 - [ ] SIMD / OpenMP inside native kernel where profiling supports it.
 
 ### P6 — GPU high-scale path
-- [ ] evaluate Forward+ renderer migration;
-- [ ] compute chemistry prototype;
+- [x] Forward+ renderer migration;
+- [x] standalone compute diffusion benchmark/prototype;
+- [ ] integrate compute-resident chemistry;
 - [ ] no synchronous full readback;
 - [ ] only move agent mechanics/chemistry to GPU as a coherent pipeline;
 - [ ] retain CPU reference mode.
