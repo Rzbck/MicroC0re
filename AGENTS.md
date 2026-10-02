@@ -116,6 +116,15 @@ Current visible-performance contract:
 
 The contact broad-phase currently uses a deterministic spatial hash. Do not regress to global O(N²) contact checks without a measured reason.
 
+## UI discipline
+
+- Do not put a permanent profiler/status block over the microscope artwork.
+- Escape owns the pause/settings menu.
+- Organism details belong in the left-side inspector opened by clicking an organism.
+- Empty-world click or Escape closes the inspector.
+- Minimum camera zoom is cover-fit; never reintroduce a tiny-world zoom-out view.
+- Keep profiling in benchmarks/development tooling unless the maintainer explicitly requests an on-screen diagnostic.
+
 ## Visual non-negotiables
 
 - The current procedural capsule/line renderer is temporary debug art, not the final style.
