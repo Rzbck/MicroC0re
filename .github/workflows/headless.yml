@@ -3,6 +3,7 @@ name: Godot Smoke
 on:
   push:
     branches:
+      - main
       - rebuild/pixel-microscope-v0.2
     paths:
       - "project.godot"
