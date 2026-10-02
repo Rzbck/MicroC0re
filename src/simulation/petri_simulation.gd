@@ -1447,7 +1447,7 @@ func _sample_light(position: Vector2) -> float:
 
 func _light_value_for_index(index: int) -> float:
 	var x: int = index % FIELD_WIDTH
-	var y: int = index / FIELD_WIDTH
+	var y: int = floori(float(index) / float(FIELD_WIDTH))
 	var position := Vector2(
 		(float(x) + 0.5) * FIELD_CELL_SIZE,
 		(float(y) + 0.5) * FIELD_CELL_SIZE
@@ -1819,15 +1819,21 @@ func state_signature() -> String:
 	parts.append("n:%d" % bacteria.size())
 	parts.append("nut:%.5f" % nutrient.total())
 	parts.append("waste:%.5f" % waste.total())
+	parts.append("o2:%.5f" % oxygen.total())
+	parts.append("det:%.5f" % detritus.total())
+	parts.append("eps:%.5f" % eps.total())
+	parts.append("cue:%.5f" % damage_cue.total())
+	parts.append("prod:%.5f" % producer_biomass.total())
 	parts.append("p:%d" % protozoa.size())
 	parts.append("c:%d" % ciliates.size())
 
 	for cell in bacteria:
 		parts.append(
-			"%d:%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%d:%.3f:%d:%.3f:pm%d:tr%d:tp%.3f:h%d"
+			"%d:%d:gld%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%d:%.3f:%d:%.3f:pm%d:tr%d:tp%.3f:h%d"
 			% [
 				int(cell.id),
 				int(cell.generation),
+				int(cell.guild),
 				float(cell.position.x),
 				float(cell.position.y),
 				float(cell.angle),
@@ -1849,7 +1855,7 @@ func state_signature() -> String:
 
 	for proto in protozoa:
 		parts.append(
-			"p%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f"
+			"p%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f:d%d:lp%.3f"
 			% [
 				int(proto.id),
 				int(proto.generation),
@@ -1861,12 +1867,14 @@ func state_signature() -> String:
 				float(proto.gene_engulf),
 				int(proto.feeding_target_id),
 				float(proto.feeding_progress),
+				1 if bool(proto.dying) else 0,
+				float(proto.lysis_progress),
 			]
 		)
 
 	for ciliate in ciliates:
 		parts.append(
-			"c%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f"
+			"c%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f:d%d:lp%.3f"
 			% [
 				int(ciliate.id),
 				int(ciliate.generation),
@@ -1878,6 +1886,8 @@ func state_signature() -> String:
 				float(ciliate.gene_capture),
 				int(ciliate.feeding_target_id),
 				float(ciliate.feeding_progress),
+				1 if bool(ciliate.dying) else 0,
+				float(ciliate.lysis_progress),
 			]
 		)
 
