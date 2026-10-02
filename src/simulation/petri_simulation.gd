@@ -1282,6 +1282,9 @@ func count_engulfing() -> int:
 	for proto in protozoa:
 		if int(proto.feeding_target_id) >= 0:
 			count += 1
+	for ciliate in ciliates:
+		if int(ciliate.feeding_target_id) >= 0:
+			count += 1
 	return count
 
 
@@ -1299,6 +1302,7 @@ func state_signature() -> String:
 	parts.append("nut:%.5f" % nutrient.total())
 	parts.append("waste:%.5f" % waste.total())
 	parts.append("p:%d" % protozoa.size())
+	parts.append("c:%d" % ciliates.size())
 
 	for cell in bacteria:
 		parts.append(
@@ -1323,15 +1327,35 @@ func state_signature() -> String:
 
 	for proto in protozoa:
 		parts.append(
-			"p%d:%.5f:%.5f:%.5f:%.5f:%d:%.3f"
+			"p%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f"
 			% [
 				int(proto.id),
+				int(proto.generation),
 				float(proto.position.x),
 				float(proto.position.y),
 				float(proto.angle),
 				float(proto.energy),
+				float(proto.gene_speed),
+				float(proto.gene_engulf),
 				int(proto.feeding_target_id),
 				float(proto.feeding_progress),
+			]
+		)
+
+	for ciliate in ciliates:
+		parts.append(
+			"c%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f"
+			% [
+				int(ciliate.id),
+				int(ciliate.generation),
+				float(ciliate.position.x),
+				float(ciliate.position.y),
+				float(ciliate.angle),
+				float(ciliate.energy),
+				float(ciliate.gene_speed),
+				float(ciliate.gene_capture),
+				int(ciliate.feeding_target_id),
+				float(ciliate.feeding_progress),
 			]
 		)
 
