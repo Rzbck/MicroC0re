@@ -4,7 +4,7 @@ This file is the working contract for coding agents.
 
 ### READ FIRST — current product direction
 
-Before changing code or art, read **`docs/CURRENT_DIRECTION.md`** and **`docs/STATUS.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
+Before changing code or art, read **`docs/HANDOFF.md`**, **`docs/CURRENT_DIRECTION.md`** and **`docs/STATUS.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
 
 Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
 1. #17 performance/profiling/LOD;
@@ -13,6 +13,20 @@ Epic #14 is the current visual/performance gate. Until that gate passes, priorit
 4. #18 readable animation/interactions.
 
 Do not expand deeper ecology simply because the simulation can support it. The visible experience must first become fast, intentional, and genuinely pixel-art.
+
+## Session bootstrap / GitHub handoff
+
+A fresh agent must recover state from GitHub instead of asking the maintainer to reconstruct it.
+
+At session start:
+1. read `docs/HANDOFF.md`;
+2. inspect the GitHub Project `MicroC0re` (#2) when Project access is available;
+3. inspect active PR #19 and relevant Issues;
+4. continue blocking `In Progress` / `Review` work before starting unrelated `Todo` items.
+
+For GitHub bookkeeping, use the GitHub connector/agent tools. Do not ask the maintainer to run PowerShell or `gh` merely to move cards, update Issues, labels or PR metadata.
+
+If Project V2 mutation is not exposed by the current connector, use the `status:*` compatibility labels documented in `docs/HANDOFF.md`. The default-branch Project sync workflow is responsible for translating those labels to real Project Status values.
 
 # Mission
 
