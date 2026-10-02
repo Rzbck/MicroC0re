@@ -6,7 +6,7 @@ const STEPS := 600
 const DT := 1.0 / 60.0
 
 
-func _initialize() -> void:
+func _init() -> void:
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
