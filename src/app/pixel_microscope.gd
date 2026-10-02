@@ -62,9 +62,7 @@ func _ready() -> void:
 	RenderingServer.set_default_clear_color(Color(0.006, 0.010, 0.012, 1.0))
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	gpu_name = RenderingServer.get_video_adapter_name()
-	renderer_name = str(
-		ProjectSettings.get_setting("rendering/renderer/rendering_method")
-	)
+	renderer_name = RenderingServer.get_current_rendering_method()
 
 	atlas = PixelAtlasScript.new()
 	_setup_infinite_background()
