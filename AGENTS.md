@@ -2,7 +2,19 @@
 
 This file is the working contract for coding agents.
 
-## Mission
+### READ FIRST — current product direction
+
+Before changing code or art, read **`docs/CURRENT_DIRECTION.md`**.
+
+Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
+1. #17 performance/profiling/LOD;
+2. #16 camera/background/zoom;
+3. #15 true pixel-art pipeline/art bible;
+4. #18 readable animation/interactions.
+
+Do not expand deeper ecology simply because the simulation can support it. The visible experience must first become fast, intentional, and genuinely pixel-art.
+
+# Mission
 
 Build a deterministic, headless-capable microbial simulation in Godot 4.7.x, then render it as generative pixel art.
 
@@ -72,9 +84,27 @@ If a local Godot binary is unavailable, state that tests were not executed inste
 
 ## Performance policy
 
-The first correct implementation may be simple. Profile before optimizing.
+Profile before optimizing and record measured before/after numbers.
 
-For contact mechanics, O(N²) is acceptable for the initial small-population kernel. Move to a deterministic spatial hash only after the baseline is measured.
+Current visible-performance contract:
+- target 120 FPS during normal microscope inspection;
+- 60 FPS is the development floor;
+- simulation tick rate and render FPS are separate metrics;
+- off-screen organisms must be culled;
+- use explicit far/mid/near/macro LOD;
+- distant organisms must never pay for close-up appendage/detail rendering;
+- prefer cached/batched sprite rendering over rebuilding procedural geometry every frame.
+
+The contact broad-phase currently uses a deterministic spatial hash. Do not regress to global O(N²) contact checks without a measured reason.
+
+## Visual non-negotiables
+
+- The current procedural capsule/line renderer is temporary debug art, not the final style.
+- Nearest-neighbor filtering alone does not make something pixel art.
+- No Godot default grey/clear background may be visible at supported zoom.
+- Final organism art should follow the sprite/palette/cluster rules in `docs/ART_DIRECTION.md`.
+- Important interactions must be readable as staged/persistent states, not instantaneous debug events.
+- A visual PR that drops the agreed baseline below 60 FPS requires an explicit documented exception.
 
 ## Non-negotiables
 
