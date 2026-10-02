@@ -9,7 +9,8 @@ This document exists so a fresh ChatGPT/Codex/agent session can continue the pro
 - Project V2 node: `PVT_kwHOAKdXDM4BldFb`
 - Current development branch: `rebuild/pixel-microscope-v0.2`
 - Current active PR: #19
-- Current product gate: #14
+- Current visual product gate: #14
+- Active living-biome epic: #38
 
 The GitHub Project **Status field is the canonical workflow state**.
 
