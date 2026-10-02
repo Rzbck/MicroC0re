@@ -422,6 +422,7 @@ func _advance_protozoa(dt: float) -> void:
 		if (
 			available_births > 0
 			and float(proto.energy) >= protozoan_reproduction_energy
+			and float(proto.age) >= 12.0
 			and float(proto.cooldown) <= 0.0
 		):
 			next_protozoa.append_array(_divide_protozoan(proto))
@@ -631,6 +632,7 @@ func _advance_ciliates(dt: float) -> void:
 		if (
 			available_births > 0
 			and float(ciliate.energy) >= ciliate_reproduction_energy
+			and float(ciliate.age) >= 10.0
 			and float(ciliate.cooldown) <= 0.0
 		):
 			next_ciliates.append_array(_divide_ciliate(ciliate))
@@ -715,7 +717,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 func _divide_ciliate(parent: Variant) -> Array:
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.70
-	var daughter_energy: float = float(parent.energy) * 0.47
+	var daughter_energy: float = float(parent.energy) * 0.44
 
 	var a: Variant = CiliateScript.new(
 		_allocate_id(),
