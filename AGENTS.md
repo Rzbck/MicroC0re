@@ -4,7 +4,7 @@ This file is the working contract for coding agents.
 
 ### READ FIRST — current product direction
 
-Before changing code or art, read **`docs/CURRENT_DIRECTION.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
+Before changing code or art, read **`docs/CURRENT_DIRECTION.md`** and **`docs/STATUS.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
 
 Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
 1. #17 performance/profiling/LOD;
