@@ -4,7 +4,7 @@ This file is the working contract for coding agents.
 
 ### READ FIRST — current product direction
 
-Before changing code or art, read **`docs/HANDOFF.md`**, **`docs/CURRENT_DIRECTION.md`** and **`docs/STATUS.md`**. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
+Before changing code or art, read **`docs/HANDOFF.md`**, **`docs/CURRENT_DIRECTION.md`**, **`docs/STATUS.md`** and **`docs/BIOME.md`** when touching ecology/environment/species. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
 
 Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
 1. #17 performance/profiling/LOD;
@@ -157,3 +157,21 @@ Never implement:
 - visual interpolation that feeds back into simulation state;
 - undocumented random behavior;
 - machine-specific paths inside `project.godot`.
+
+
+## Biome discipline
+
+Biome/ecology changes must preserve the distinction between:
+- **abiotic fields** (oxygen, light, flow, pH, etc.);
+- **biotic continuum structure** (producer mats, EPS, detritus);
+- **individual organisms**;
+- **qualitative ALife abstractions** vs calibrated biology.
+
+Do not call the generic aquatic damage/lysis cue "blood". Host/blood chemistry is a separate optional biome (#52).
+
+Ecological features must:
+- return dead biomass to the environment;
+- expose costs/trade-offs;
+- remain spatial/local where biologically appropriate;
+- avoid unbounded entity spawning;
+- retain a GPU migration path for continuum fields.
