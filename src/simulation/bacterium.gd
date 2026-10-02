@@ -15,6 +15,14 @@ var energy: float = 3.0
 var age: float = 0.0
 var alive: bool = true
 
+# Life-cycle presentation states. Division remains resource-triggered; these
+# values only make the resulting process observable instead of instantaneous.
+var dividing: bool = false
+var division_progress: float = 0.0
+var dying: bool = false
+var lysis_progress: float = 0.0
+var adhesion_timer: float = 0.0
+
 # Temporal memory used by run-and-tumble chemotaxis.
 var sensed_memory: float = 0.0
 
@@ -25,6 +33,7 @@ var gene_uptake: float = 1.0
 var gene_growth: float = 1.0
 var gene_size: float = 1.0
 var gene_tumble: float = 1.0
+var gene_adhesion: float = 1.0
 var mutation_rate: float = 0.08
 
 # Heritable visual / mechanical appendages.
@@ -60,6 +69,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_growth = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.70, 1.35)
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.72, 1.35)
 	gene_tumble = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.60, 1.45)
+	gene_adhesion = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.45, 1.70)
 	mutation_rate = clampf(0.08 + p_rng.randfn(0.0, 0.012), 0.025, 0.16)
 
 	flagella_count = clampi(2 + p_rng.randi_range(-1, 1), 1, 4)
@@ -100,6 +110,9 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	gene_tumble = _mutate_float(
 		float(parent.gene_tumble), 0.060, 0.40, 1.80, mutation_rate, p_rng
 	)
+	gene_adhesion = _mutate_float(
+		float(parent.gene_adhesion), 0.070, 0.30, 2.00, mutation_rate, p_rng
+	)
 	flagella_length = _mutate_float(
 		float(parent.flagella_length), 0.060, 0.55, 1.80, mutation_rate, p_rng
 	)
@@ -119,6 +132,22 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	visual_phase = p_rng.randf_range(0.0, TAU)
 
 	_apply_size_phenotype()
+
+
+func begin_division() -> void:
+	if dying or dividing:
+		return
+	dividing = true
+	division_progress = 0.0
+
+
+func begin_lysis() -> void:
+	if dying:
+		return
+	dying = true
+	dividing = false
+	division_progress = 0.0
+	lysis_progress = 0.0
 
 
 func _mutate_float(
