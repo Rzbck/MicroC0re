@@ -40,11 +40,29 @@ At close zoom the viewer should additionally read:
 
 Later organism classes may add cilia, pseudopodia, vacuoles, engulfment membranes, spores, extracellular matrix, and other morphology where biologically appropriate.
 
+## Locked prototype settings
+
+Current implementation choices for the rebuild branch:
+- internal render canvas: **640x360**;
+- default window: **1280x720** (2x presentation);
+- organism atlas cell: **32x20 px**;
+- atlas animation: **4 frames**;
+- visual orientation: **32 quantized directions**;
+- lineage colors: fixed **8-color palette**;
+- far LOD: constant-screen-size mark;
+- mid/near LOD: cached atlas texture;
+- background: repeating 32x32 pixel tile in screen space;
+- chemistry: 96x64 nearest-filtered field texture.
+
+These are prototype constraints, not permanent project limits. Change them only with a documented visual/performance reason.
+
 ## Pixel strategy
 
 The chemistry layer may remain a low-resolution texture, but that **does not by itself define the final pixel-art style**.
 
-The organism pipeline must move from procedural vector-like drawing to deliberate low-resolution sprite/sprite-part design:
+The organism pipeline now uses a first code-authored cached pixel atlas. It replaces per-frame procedural capsule/flagella drawing and is the baseline for further hand-authored sprite refinement.
+
+The sprite/sprite-part design rules are:
 - controlled pixel clusters;
 - limited palettes and coherent color ramps;
 - intentional outlines / selective outlines;
@@ -60,6 +78,8 @@ Reference principles:
 - PixelJoint/Cure: pay attention to pixel clusters, controlled AA, jaggies, banding, noise and palette discipline.
 
 Primary tasks: #15 and #18.
+
+The first atlas is intentionally simple. Its purpose is to establish the correct pipeline: deliberate pixels, cached frames, controlled palette, quantized orientation and LOD. Future visual refinement should replace pixel patterns inside that pipeline rather than return to smooth procedural line art.
 
 ## Performance architecture
 
