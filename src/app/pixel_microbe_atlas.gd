@@ -9,6 +9,7 @@ const SPRITE_HEIGHT := 20
 const FRAME_COUNT := 4
 const SIZE_CLASSES := 3
 const APPENDAGE_CLASSES := 3
+const MORPHOLOGY_CLASSES := 4
 
 const STATE_NORMAL := 0
 const STATE_DIVIDING := 1
@@ -23,16 +24,22 @@ func _init() -> void:
 
 
 func get_texture(
+	morphology_class: int,
 	size_class: int,
 	appendage_class: int,
 	frame: int,
 	state: int
 ) -> Texture2D:
 	var safe_state: int = clampi(state, 0, STATE_COUNT - 1)
+	var safe_morphology: int = clampi(
+		morphology_class,
+		0,
+		MORPHOLOGY_CLASSES - 1
+	)
 	var safe_size: int = clampi(size_class, 0, SIZE_CLASSES - 1)
 	var safe_appendages: int = clampi(appendage_class, 0, APPENDAGE_CLASSES - 1)
 	var safe_frame: int = posmod(frame, FRAME_COUNT)
-	return _textures[safe_state][safe_size][safe_appendages][safe_frame]
+	return _textures[safe_state][safe_morphology][safe_size][safe_appendages][safe_frame]
 
 
 func _build_atlas() -> void:
@@ -41,40 +48,47 @@ func _build_atlas() -> void:
 	for state in range(STATE_COUNT):
 		var state_textures: Array = []
 
-		for size_class in range(SIZE_CLASSES):
-			var size_textures: Array = []
+		for morphology_class in range(MORPHOLOGY_CLASSES):
+			var morphology_textures: Array = []
 
-			for appendage_class in range(APPENDAGE_CLASSES):
-				var frames: Array = []
+			for size_class in range(SIZE_CLASSES):
+				var size_textures: Array = []
 
-				for frame in range(FRAME_COUNT):
-					var image := Image.create(
-						SPRITE_WIDTH,
-						SPRITE_HEIGHT,
-						false,
-						Image.FORMAT_RGBA8
-					)
-					image.fill(Color(0.0, 0.0, 0.0, 0.0))
-					_draw_microbe(
-						image,
-						size_class,
-						appendage_class,
-						frame,
-						state
-					)
+				for appendage_class in range(APPENDAGE_CLASSES):
+					var frames: Array = []
 
-					var texture := ImageTexture.create_from_image(image)
-					frames.append(texture)
+					for frame in range(FRAME_COUNT):
+						var image := Image.create(
+							SPRITE_WIDTH,
+							SPRITE_HEIGHT,
+							false,
+							Image.FORMAT_RGBA8
+						)
+						image.fill(Color(0.0, 0.0, 0.0, 0.0))
+						_draw_microbe(
+							image,
+							morphology_class,
+							size_class,
+							appendage_class,
+							frame,
+							state
+						)
 
-				size_textures.append(frames)
+						var texture := ImageTexture.create_from_image(image)
+						frames.append(texture)
 
-			state_textures.append(size_textures)
+					size_textures.append(frames)
+
+				morphology_textures.append(size_textures)
+
+			state_textures.append(morphology_textures)
 
 		_textures.append(state_textures)
 
 
 func _draw_microbe(
 	image: Image,
+	morphology_class: int,
 	size_class: int,
 	appendage_class: int,
 	frame: int,
@@ -112,35 +126,49 @@ func _draw_microbe(
 		appendage
 	)
 
-	if state == STATE_DIVIDING:
-		_draw_dividing_body(
-			image,
-			left,
-			right,
-			center_y,
-			outline,
-			body,
-			light,
-			mid,
-			dark
-		)
-	elif state == STATE_LYSIS:
-		_draw_lysing_body(
-			image,
-			left,
-			right,
-			center_y,
-			frame,
-			outline,
-			body,
-			light,
-			mid
-		)
+	if morphology_class == 0:
+		if state == STATE_DIVIDING:
+			_draw_dividing_body(
+				image,
+				left,
+				right,
+				center_y,
+				outline,
+				body,
+				light,
+				mid,
+				dark
+			)
+		elif state == STATE_LYSIS:
+			_draw_lysing_body(
+				image,
+				left,
+				right,
+				center_y,
+				frame,
+				outline,
+				body,
+				light,
+				mid
+			)
+		else:
+			_draw_body(
+				image,
+				left,
+				right,
+				center_y,
+				outline,
+				body,
+				light,
+				mid,
+				dark
+			)
 	else:
-		_draw_body(
+		_draw_alt_morphology(
 			image,
-			left,
-			right,
+			morphology_class,
+			size_class,
+			center_x,
 			center_y,
 			outline,
 			body,
@@ -148,6 +176,209 @@ func _draw_microbe(
 			mid,
 			dark
 		)
+		if state == STATE_DIVIDING:
+			_overlay_alt_division(
+				image,
+				morphology_class,
+				center_x,
+				center_y,
+				outline,
+				light
+			)
+		elif state == STATE_LYSIS:
+			_overlay_alt_lysis(
+				image,
+				frame,
+				center_x,
+				center_y,
+				outline,
+				mid,
+				light
+			)
+
+
+func _draw_alt_morphology(
+	image: Image,
+	morphology_class: int,
+	size_class: int,
+	center_x: int,
+	center_y: int,
+	outline: Color,
+	body: Color,
+	light: Color,
+	mid: Color,
+	dark: Color
+) -> void:
+	match morphology_class:
+		1:
+			_draw_scavenger_vibrio(
+				image,
+				size_class,
+				center_x,
+				center_y,
+				outline,
+				body,
+				light,
+				mid,
+				dark
+			)
+		2:
+			_draw_biofilm_cocci(
+				image,
+				size_class,
+				center_x,
+				center_y,
+				outline,
+				body,
+				light,
+				mid,
+				dark
+			)
+		3:
+			_draw_phototroph_chain(
+				image,
+				size_class,
+				center_x,
+				center_y,
+				outline,
+				body,
+				light,
+				mid,
+				dark
+			)
+
+
+func _draw_scavenger_vibrio(
+	image: Image,
+	size_class: int,
+	cx: int,
+	cy: int,
+	outline: Color,
+	body: Color,
+	light: Color,
+	mid: Color,
+	dark: Color
+) -> void:
+	var scale: int = size_class
+	var points: Array[Vector2i] = [
+		Vector2i(cx - 5 - scale, cy - 2),
+		Vector2i(cx - 3 - scale, cy - 3),
+		Vector2i(cx, cy - 2),
+		Vector2i(cx + 3 + scale, cy),
+		Vector2i(cx + 5 + scale, cy + 2),
+	]
+	for p in points:
+		for oy in range(-1, 2):
+			for ox in range(-1, 2):
+				var edge: bool = abs(ox) == 1 or abs(oy) == 1
+				_set_px(image, p.x + ox, p.y + oy, outline if edge else body)
+		_set_px(image, p.x, p.y - 1, light)
+	_set_px(image, cx, cy - 2, dark)
+	_set_px(image, cx + 3, cy, mid)
+
+
+func _draw_biofilm_cocci(
+	image: Image,
+	size_class: int,
+	cx: int,
+	cy: int,
+	outline: Color,
+	body: Color,
+	light: Color,
+	mid: Color,
+	dark: Color
+) -> void:
+	var spread: int = 3 + size_class
+	var centers: Array[Vector2i] = [
+		Vector2i(cx - spread, cy),
+		Vector2i(cx, cy - 2),
+		Vector2i(cx + spread, cy + 1),
+		Vector2i(cx - 1, cy + 3),
+	]
+	for index in range(centers.size()):
+		var p: Vector2i = centers[index]
+		for oy in range(-2, 3):
+			for ox in range(-2, 3):
+				var d2: int = ox * ox + oy * oy
+				if d2 > 5:
+					continue
+				_set_px(
+					image,
+					p.x + ox,
+					p.y + oy,
+					outline if d2 >= 4 else body
+				)
+		_set_px(image, p.x - 1, p.y - 1, light)
+		if index % 2 == 0:
+			_set_px(image, p.x + 1, p.y + 1, dark)
+		else:
+			_set_px(image, p.x, p.y + 1, mid)
+
+
+func _draw_phototroph_chain(
+	image: Image,
+	size_class: int,
+	cx: int,
+	cy: int,
+	outline: Color,
+	body: Color,
+	light: Color,
+	mid: Color,
+	dark: Color
+) -> void:
+	var count: int = 3 + size_class
+	var start_x: int = cx - (count * 4) / 2
+	for i in range(count):
+		var x: int = start_x + i * 4
+		var y: int = cy + (1 if i % 2 == 0 else -1)
+		_hline(image, x - 1, x + 2, y - 2, outline)
+		_hline(image, x - 2, x + 2, y - 1, outline)
+		_hline(image, x - 2, x + 2, y, outline)
+		_hline(image, x - 1, x + 2, y + 1, outline)
+		_hline(image, x - 1, x + 1, y - 1, body)
+		_hline(image, x - 1, x + 1, y, mid)
+		_set_px(image, x - 1, y - 1, light)
+		_set_px(image, x + 1, y, dark)
+
+
+func _overlay_alt_division(
+	image: Image,
+	morphology_class: int,
+	cx: int,
+	cy: int,
+	outline: Color,
+	light: Color
+) -> void:
+	if morphology_class == 2:
+		_set_px(image, cx, cy, light)
+		_set_px(image, cx + 1, cy + 1, outline)
+	else:
+		for y in range(cy - 2, cy + 3):
+			_set_px(image, cx, y, outline)
+		_set_px(image, cx - 1, cy, light)
+		_set_px(image, cx + 1, cy, light)
+
+
+func _overlay_alt_lysis(
+	image: Image,
+	frame: int,
+	cx: int,
+	cy: int,
+	outline: Color,
+	mid: Color,
+	light: Color
+) -> void:
+	for y in range(cy - 5, cy + 6):
+		for x in range(cx - 9, cx + 10):
+			var key: int = posmod(
+				x * 5 + y * 7 + frame * 11,
+				17
+			)
+			if key < 1 + frame:
+				_set_px(image, x, y, Color(0.0, 0.0, 0.0, 0.0))
+	_set_px(image, cx + 9 + frame, cy - 3, mid)
+	_set_px(image, cx - 8 - frame, cy + 3, outline)
+	_set_px(image, cx + 4, cy + 5 + frame, light)
 
 
 func _draw_body(
