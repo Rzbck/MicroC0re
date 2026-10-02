@@ -38,6 +38,7 @@ We use real mathematical structures where they help:
 Every approximation should be documented. Parameters are considered **uncalibrated** until validation work explicitly says otherwise.
 
 See:
+- **[AI handoff](docs/HANDOFF.md)** — session bootstrap, GitHub Project workflow and connector rules
 - **[Current direction](docs/CURRENT_DIRECTION.md)** — read this first; it overrides stale visual priorities
 - **[Project status](docs/STATUS.md)** — IN PROGRESS / REVIEW / TODO / BACKLOG map
 - [Research references](docs/RESEARCH.md)
