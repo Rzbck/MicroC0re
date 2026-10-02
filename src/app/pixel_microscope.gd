@@ -13,6 +13,17 @@ const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
 const ANGLE_STEPS := 32.0
 
+const LINEAGE_PALETTE := [
+	Color(0.38, 0.82, 0.42, 1.0),
+	Color(0.66, 0.84, 0.32, 1.0),
+	Color(0.92, 0.72, 0.30, 1.0),
+	Color(0.93, 0.47, 0.30, 1.0),
+	Color(0.86, 0.34, 0.58, 1.0),
+	Color(0.62, 0.38, 0.86, 1.0),
+	Color(0.34, 0.52, 0.88, 1.0),
+	Color(0.28, 0.74, 0.84, 1.0),
+]
+
 var sim: Variant
 var atlas: Variant
 var current_seed: int = 1337
@@ -206,7 +217,7 @@ func _draw_bacteria() -> void:
 			continue
 
 		visible_cells += 1
-		var color: Color = Color(cell.phenotype_color())
+		var color: Color = _lineage_color(float(cell.lineage_hue))
 
 		if bool(cell.dying):
 			color.a = clampf(1.0 - float(cell.lysis_progress) * 0.72, 0.20, 1.0)
@@ -271,6 +282,16 @@ func _draw_bacteria() -> void:
 				maxf(0.12, 0.85 / zoom_value),
 				false
 			)
+
+
+func _lineage_color(hue: float) -> Color:
+	var normalized: float = wrapf(hue, 0.0, 1.0)
+	var index: int = clampi(
+		floori(normalized * float(LINEAGE_PALETTE.size())),
+		0,
+		LINEAGE_PALETTE.size() - 1
+	)
+	return LINEAGE_PALETTE[index]
 
 
 func _size_class(cell: Variant) -> int:
