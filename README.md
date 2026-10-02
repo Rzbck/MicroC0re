@@ -40,6 +40,7 @@ Every approximation should be documented. Parameters are considered **uncalibrat
 See:
 - **[AI handoff](docs/HANDOFF.md)** — session bootstrap, GitHub Project workflow and connector rules
 - **[Current direction](docs/CURRENT_DIRECTION.md)** — read this first; it overrides stale visual priorities
+- **[Living biome](docs/BIOME.md)** — aquatic ecosystem fields, guilds, recycling and ecology roadmap
 - **[Project status](docs/STATUS.md)** — IN PROGRESS / REVIEW / TODO / BACKLOG map
 - [Research references](docs/RESEARCH.md)
 - [Mathematical model](docs/MATH.md)
