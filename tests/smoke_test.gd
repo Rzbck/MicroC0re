@@ -32,6 +32,16 @@ func _init() -> void:
 
 	if first.bacteria.is_empty():
 		errors.append("population: all bacteria died during the smoke window")
+	if first.protozoa.is_empty():
+		errors.append("ecology: amoeboid predator guild disappeared during smoke")
+	if first.ciliates.is_empty():
+		errors.append("ecology: ciliate predator guild disappeared during smoke")
+	if first.bacteria.size() > 420:
+		errors.append("population guard: bacterial hard ceiling exceeded")
+	if first.protozoa.size() > 18:
+		errors.append("population guard: protozoan hard ceiling exceeded")
+	if first.ciliates.size() > 16:
+		errors.append("population guard: ciliate hard ceiling exceeded")
 
 	if first.nutrient.min_value() < -0.000001:
 		errors.append("nutrient: negative concentration detected")
@@ -73,12 +83,21 @@ func _init() -> void:
 	if not saw_genotype_variation:
 		errors.append("genetics: founders did not expose any trait variation")
 
+	for proto in first.protozoa:
+		if not _finite_vector(proto.position) or not is_finite(proto.energy):
+			errors.append("ecology: invalid protozoan state %d" % proto.id)
+	for ciliate in first.ciliates:
+		if not _finite_vector(ciliate.position) or not is_finite(ciliate.energy):
+			errors.append("ecology: invalid ciliate state %d" % ciliate.id)
+
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d cells=%d nutrient=%.3f waste=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d nutrient=%.3f waste=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
+				first.protozoa.size(),
+				first.ciliates.size(),
 				first.nutrient.total(),
 				first.waste.total(),
 			]
