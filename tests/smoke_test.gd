@@ -8,8 +8,11 @@ const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
+const MicroalgaScript = preload("res://src/simulation/microalga.gd")
+const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
@@ -36,12 +39,20 @@ func _init() -> void:
 		errors.append("ecology: amoeboid predator guild disappeared during smoke")
 	if first.ciliates.is_empty():
 		errors.append("ecology: ciliate predator guild disappeared during smoke")
+	if first.microalgae.is_empty():
+		errors.append("ecology: explicit microalgae guild disappeared during smoke")
+	if first.decomposers.is_empty():
+		errors.append("ecology: decomposer guild disappeared during smoke")
 	if first.bacteria.size() > 420:
 		errors.append("population guard: bacterial hard ceiling exceeded")
 	if first.protozoa.size() > 18:
 		errors.append("population guard: protozoan hard ceiling exceeded")
 	if first.ciliates.size() > 16:
 		errors.append("population guard: ciliate hard ceiling exceeded")
+	if first.microalgae.size() > 64:
+		errors.append("population guard: microalgae hard ceiling exceeded")
+	if first.decomposers.size() > 48:
+		errors.append("population guard: decomposer hard ceiling exceeded")
 
 	if first.nutrient.min_value() < -0.000001:
 		errors.append("nutrient: negative concentration detected")
@@ -134,14 +145,42 @@ func _init() -> void:
 		if bool(ciliate.consumed) and int(ciliate.engulfed_by_id) >= 0:
 			errors.append("ecology: consumed ciliate still owned by predator %d" % ciliate.id)
 
+	for alga in first.microalgae:
+		if not _finite_vector(alga.position) or not is_finite(alga.energy):
+			errors.append("ecology: invalid microalga state %d" % alga.id)
+		if (
+			float(alga.lysis_progress) < 0.0
+			or float(alga.lysis_progress) > 1.000001
+			or float(alga.reproduction_progress) < 0.0
+			or float(alga.reproduction_progress) > 1.000001
+			or float(alga.engulf_progress) < 0.0
+			or float(alga.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid microalga transition state %d" % alga.id)
+
+	for yeast in first.decomposers:
+		if not _finite_vector(yeast.position) or not is_finite(yeast.energy):
+			errors.append("ecology: invalid decomposer state %d" % yeast.id)
+		if (
+			float(yeast.lysis_progress) < 0.0
+			or float(yeast.lysis_progress) > 1.000001
+			or float(yeast.budding_progress) < 0.0
+			or float(yeast.budding_progress) > 1.000001
+			or float(yeast.engulf_progress) < 0.0
+			or float(yeast.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid decomposer transition state %d" % yeast.id)
+
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
 				first.protozoa.size(),
 				first.ciliates.size(),
+				first.microalgae.size(),
+				first.decomposers.size(),
 				first.nutrient.total(),
 				first.oxygen.total(),
 				first.detritus.total(),
