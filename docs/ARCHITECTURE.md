@@ -7,7 +7,7 @@ MicroC0re uses a **hybrid agent/continuum** architecture.
 - Organisms are discrete agents with geometry and internal state.
 - Chemistry is stored in continuous-looking scalar fields sampled from grids.
 - The renderer observes snapshots of both.
-- The simulation uses a fixed timestep and seeded randomness.
+- The organism simulation uses a fixed timestep and seeded randomness. Expensive chemistry runs at a deterministic sub-rate, while rendering is free to run faster.
 
 ```text
        sources / reactions
@@ -97,11 +97,12 @@ Ordering is explicit because changing it can change emergent behavior.
 
 ## Scaling strategy
 
-Initial contact checks may be O(N²) for clarity.
+Rod contact broad-phase now uses a uniform spatial hash. Buckets are rebuilt in deterministic organism order and neighbors are visited in fixed offset order.
 
-Once profiling establishes a bottleneck:
-- partition world into uniform spatial buckets;
-- query only nearby rods;
-- sort candidate IDs before resolving contacts so deterministic order is preserved.
+Current multirate loop:
+- organism dynamics: 120 Hz fixed step in the visible app;
+- chemistry diffusion/source update: 60 Hz;
+- chemical ImageTexture upload: 20 Hz;
+- rendering: capped at 144 FPS in the current prototype.
 
-Chemical grids can later move to compute shaders or GPU textures, but only after a CPU reference implementation exists for validation.
+The scalar field is uploaded as one tiny nearest-filtered texture instead of thousands of per-cell draw calls. Chemical grids can later move to compute shaders or GPU textures, but the CPU reference remains useful for validation.
