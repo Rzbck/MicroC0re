@@ -7,8 +7,9 @@ const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
-const CHEMISTRY_DT := 1.0 / 60.0
-const SPATIAL_BUCKET_SIZE := 8.0
+const CHEMISTRY_DT := 1.0 / 30.0
+const MECHANICS_DT := 1.0 / 60.0
+const SPATIAL_BUCKET_SIZE := 3.0
 const SAFETY_POPULATION_LIMIT := 1200
 
 var world_size := Vector2(
@@ -26,8 +27,10 @@ var nutrient_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
 var _chemistry_accumulator: float = 0.0
+var _mechanics_accumulator: float = 0.0
 var _next_id: int = 1
 var _spatial_buckets: Dictionary = {}
+var _max_half_body_length: float = 2.0
 
 # Environmental coefficients. Concentration is normalized in v0.1.
 var nutrient_diffusion: float = 5.0
@@ -86,6 +89,7 @@ func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
+	_mechanics_accumulator = 0.0
 	_next_id = 1
 	rng.seed = fixed_seed
 	nutrient.fill(0.012)
@@ -164,8 +168,11 @@ func step(dt: float) -> void:
 
 	bacteria = next_population
 
-	for _iteration in range(mechanical_iterations):
-		_resolve_all_contacts()
+	_mechanics_accumulator += dt
+	while _mechanics_accumulator >= MECHANICS_DT:
+		for _iteration in range(mechanical_iterations):
+			_resolve_all_contacts()
+		_mechanics_accumulator -= MECHANICS_DT
 
 	simulation_time += dt
 
@@ -213,7 +220,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		/ size_drag
 	)
 
-	var heading: Vector2 = Vector2(cell.axis())
+	var heading: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
 	cell.position = Vector2(cell.position) + heading * speed * dt
 	_constrain_to_world(cell)
 
@@ -301,7 +308,7 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 
 
 func _divide(parent: Variant) -> Array:
-	var parent_axis: Vector2 = Vector2(parent.axis())
+	var parent_axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var parent_length: float = float(parent.length)
 	var daughter_energy: float = float(parent.energy) * 0.475
 	var daughter_length: float = parent_length * 0.555
@@ -376,12 +383,22 @@ func _resolve_all_contacts() -> void:
 		var cell: Variant = bacteria[i]
 		if bool(cell.dying):
 			continue
+
 		var position: Vector2 = Vector2(cell.position)
 		var bucket_x: int = floori(position.x / SPATIAL_BUCKET_SIZE)
 		var bucket_y: int = floori(position.y / SPATIAL_BUCKET_SIZE)
+		var search_world: float = (
+			float(cell.length) * 0.5
+			+ _max_half_body_length
+			+ adhesion_range
+		)
+		var bucket_radius: int = maxi(
+			1,
+			ceili(search_world / SPATIAL_BUCKET_SIZE)
+		)
 
-		for offset_y in range(-1, 2):
-			for offset_x in range(-1, 2):
+		for offset_y in range(-bucket_radius, bucket_radius + 1):
+			for offset_x in range(-bucket_radius, bucket_radius + 1):
 				var key := Vector2i(bucket_x + offset_x, bucket_y + offset_y)
 				if not _spatial_buckets.has(key):
 					continue
@@ -401,9 +418,18 @@ func _resolve_all_contacts() -> void:
 
 func _rebuild_spatial_hash() -> void:
 	_spatial_buckets.clear()
+	_max_half_body_length = 0.0
 
 	for i in range(bacteria.size()):
 		var cell: Variant = bacteria[i]
+		if bool(cell.dying):
+			continue
+
+		_max_half_body_length = maxf(
+			_max_half_body_length,
+			float(cell.length) * 0.5
+		)
+
 		var position: Vector2 = Vector2(cell.position)
 		var key := Vector2i(
 			floori(position.x / SPATIAL_BUCKET_SIZE),
@@ -419,18 +445,39 @@ func _rebuild_spatial_hash() -> void:
 
 
 func _resolve_pair(a: Variant, b: Variant) -> void:
+	var position_a: Vector2 = Vector2(a.position)
+	var position_b: Vector2 = Vector2(b.position)
+	var length_a: float = float(a.length)
+	var length_b: float = float(b.length)
+	var radius_a: float = float(a.radius)
+	var radius_b: float = float(b.radius)
+
+	# Cheap center-distance rejection before any segment math.
+	var max_center_distance: float = (
+		length_a * 0.5
+		+ length_b * 0.5
+		+ adhesion_range
+	)
+	if position_a.distance_squared_to(position_b) > max_center_distance * max_center_distance:
+		return
+
+	var axis_a: Vector2 = Vector2.RIGHT.rotated(float(a.angle))
+	var axis_b: Vector2 = Vector2.RIGHT.rotated(float(b.angle))
+	var half_line_a: float = maxf(0.0, (length_a - 2.0 * radius_a) * 0.5)
+	var half_line_b: float = maxf(0.0, (length_b - 2.0 * radius_b) * 0.5)
+
 	var closest: Array = _closest_points_between_segments(
-		Vector2(a.segment_start()),
-		Vector2(a.segment_end()),
-		Vector2(b.segment_start()),
-		Vector2(b.segment_end())
+		position_a - axis_a * half_line_a,
+		position_a + axis_a * half_line_a,
+		position_b - axis_b * half_line_b,
+		position_b + axis_b * half_line_b
 	)
 
 	var point_a: Vector2 = closest[0]
 	var point_b: Vector2 = closest[1]
 	var delta: Vector2 = point_b - point_a
 	var distance: float = delta.length()
-	var target_distance: float = float(a.radius) + float(b.radius)
+	var target_distance: float = radius_a + radius_b
 	var interaction_distance: float = target_distance + adhesion_range
 
 	if distance >= interaction_distance:
@@ -440,7 +487,7 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 	if distance > 0.000001:
 		normal = delta / distance
 	else:
-		normal = Vector2(a.axis()).orthogonal().normalized()
+		normal = axis_a.orthogonal().normalized()
 		if (int(b.id) - int(a.id)) % 2 == 0:
 			normal = -normal
 
