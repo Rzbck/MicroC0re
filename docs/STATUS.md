@@ -30,6 +30,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #40 explicit phototroph / microalgal producers
 - #44 expanded organism guilds / morphologies
 - #48 water flow / hydrodynamics
+- #49 multi-trophic predation
 - #54 yeast / fungal decomposer guild
 - #56 day/night / diel oxygen cycle
 - #57 fused GPU multi-field biome compute
@@ -67,7 +68,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #36 lineage tree / ancestry history / emergent phenotype clusters
 - #42 metabolic cross-feeding
 - #43 mature biofilm/EPS ecosystem engineering
-- #49 multi-trophic predation
 - #50 pH / temperature / redox / toxicity
 - #51 succession / disturbance / recolonization
 - #52 optional host-tissue / heme / blood chemistry
