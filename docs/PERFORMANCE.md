@@ -7,14 +7,24 @@ This document is the measurement contract for the visible MicroC0re prototype.
 Baseline scene:
 - 1280x720 window;
 - 640x360 internal canvas;
-- simulation tick = 120 Hz;
-- chemistry = 60 Hz;
+- biological simulation tick = 60 Hz;
+- chemistry = 30 Hz;
 - field texture upload = 20 Hz.
 
 Performance targets:
 - normal inspection target: 120 FPS;
 - development floor: 60 FPS;
 - no visual feature is accepted based on appearance alone if it pushes the agreed baseline below the floor.
+
+## Measured baseline before optimization pass 2
+
+Maintainer workstation, Godot 4.7.1, headless benchmark before the 60/30 Hz + tighter broad-phase pass:
+
+- 100 agents: 5.675 ms/tick, 176.2 ticks/s at 120 Hz test cadence;
+- 500 agents: 51.762 ms/tick, 19.3 ticks/s;
+- 1,000 agents: 172.784 ms/tick, 5.8 ticks/s.
+
+This proved the bottleneck was in the simulation kernel, not only the visible renderer. The next benchmark must be compared against these numbers qualitatively, but note that the benchmark cadence is now the intended 60 Hz biological step.
 
 ## Current renderer strategy
 
@@ -50,7 +60,7 @@ Run:
 ./scripts/run_benchmark.ps1
 ```
 
-The benchmark measures 100, 500 and 1,000 starting agents at a 120 Hz simulation timestep.
+The benchmark measures 100, 500 and 1,000 starting agents at the 60 Hz biological timestep and reports a real-time factor against 60 ticks/s.
 
 Record results here before claiming a simulation optimization.
 
