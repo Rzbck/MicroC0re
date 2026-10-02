@@ -6,6 +6,8 @@ const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd"
 const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
+const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
+const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
