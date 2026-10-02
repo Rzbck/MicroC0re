@@ -15,6 +15,7 @@ GitHub issue titles carry the same status prefix so the state is visible even wh
 - #26 GPU compute research
 - #27 GPU-first desktop pipeline
 - #28 amoeboid deformation / hunting / staged engulfment
+- #29 trophic balance / evolving predators / population guard
 
 ## REVIEW
 
@@ -46,6 +47,9 @@ GitHub issue titles carry the same status prefix so the state is visible even wh
 Response implemented on current branch:
 - compact one-line HUD by default; F1 toggles diagnostics;
 - distinct amoeboid/protist class instead of biologically implausible bacterial fusion;
+- amoeboid predators now reproduce, starve and evolve heritable speed/perception/engulfment/size/metabolism traits;
+- second ciliate-like predator guild with animated cilia, fast grazing, reproduction and heritable mutation;
+- CPU-reference live ecology is capped at 420 bacteria + bounded predator populations so runaway growth cannot recreate the 1000-agent slowdown;
 - 6-frame deforming pixel-art protozoan atlas;
 - staged hunting/engulfment where prey remains visible and is pulled inside over time;
 - engulfment counter in diagnostics;
