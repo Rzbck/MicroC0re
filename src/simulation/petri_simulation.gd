@@ -374,6 +374,8 @@ func _resolve_all_contacts() -> void:
 	var count: int = bacteria.size()
 	for i in range(count):
 		var cell: Variant = bacteria[i]
+		if bool(cell.dying):
+			continue
 		var position: Vector2 = Vector2(cell.position)
 		var bucket_x: int = floori(position.x / SPATIAL_BUCKET_SIZE)
 		var bucket_y: int = floori(position.y / SPATIAL_BUCKET_SIZE)
@@ -388,6 +390,8 @@ func _resolve_all_contacts() -> void:
 				for other_index_variant in bucket:
 					var j: int = int(other_index_variant)
 					if j <= i or j >= count:
+						continue
+					if bool(bacteria[j].dying):
 						continue
 					_resolve_pair(cell, bacteria[j])
 
@@ -427,8 +431,9 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 	var delta: Vector2 = point_b - point_a
 	var distance: float = delta.length()
 	var target_distance: float = float(a.radius) + float(b.radius)
+	var interaction_distance: float = target_distance + adhesion_range
 
-	if distance >= target_distance:
+	if distance >= interaction_distance:
 		return
 
 	var normal: Vector2
@@ -438,6 +443,29 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 		normal = Vector2(a.axis()).orthogonal().normalized()
 		if (int(b.id) - int(a.id)) % 2 == 0:
 			normal = -normal
+
+	var adhesion_gene: float = (
+		float(a.gene_adhesion) + float(b.gene_adhesion)
+	) * 0.5
+
+	if adhesion_gene > 0.92:
+		a.adhesion_timer = maxf(float(a.adhesion_timer), adhesion_memory)
+		b.adhesion_timer = maxf(float(b.adhesion_timer), adhesion_memory)
+
+		if distance > target_distance:
+			var gap: float = distance - target_distance
+			var pull_strength: float = (
+				minf(gap, adhesion_range)
+				* adhesion_pull
+				* clampf(adhesion_gene - 0.85, 0.0, 1.1)
+			)
+			var pull: Vector2 = normal * pull_strength * 0.5
+			a.position = Vector2(a.position) + pull
+			b.position = Vector2(b.position) - pull
+			return
+
+	if distance >= target_distance:
+		return
 
 	var overlap: float = target_distance - distance
 	var correction: Vector2 = normal * (overlap * 0.5)
@@ -545,9 +573,40 @@ func mean_energy() -> float:
 		return 0.0
 
 	var total_energy: float = 0.0
+	var living_count: int = 0
 	for cell in bacteria:
+		if bool(cell.dying):
+			continue
 		total_energy += float(cell.energy)
-	return total_energy / float(bacteria.size())
+		living_count += 1
+
+	if living_count <= 0:
+		return 0.0
+	return total_energy / float(living_count)
+
+
+func count_dividing() -> int:
+	var count: int = 0
+	for cell in bacteria:
+		if bool(cell.dividing):
+			count += 1
+	return count
+
+
+func count_lysing() -> int:
+	var count: int = 0
+	for cell in bacteria:
+		if bool(cell.dying):
+			count += 1
+	return count
+
+
+func count_adhering() -> int:
+	var count: int = 0
+	for cell in bacteria:
+		if float(cell.adhesion_timer) > 0.0:
+			count += 1
+	return count
 
 
 func find_cell_by_id(cell_id: int) -> Variant:
@@ -566,7 +625,7 @@ func state_signature() -> String:
 
 	for cell in bacteria:
 		parts.append(
-			"%d:%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f"
+			"%d:%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%d:%.3f:%d:%.3f"
 			% [
 				int(cell.id),
 				int(cell.generation),
@@ -578,6 +637,10 @@ func state_signature() -> String:
 				float(cell.gene_speed),
 				float(cell.gene_uptake),
 				float(cell.gene_chemotaxis),
+				1 if bool(cell.dividing) else 0,
+				float(cell.division_progress),
+				1 if bool(cell.dying) else 0,
+				float(cell.lysis_progress),
 			]
 		)
 
