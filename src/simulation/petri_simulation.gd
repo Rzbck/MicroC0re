@@ -334,17 +334,37 @@ func step(dt: float) -> void:
 
 
 func _advance_protozoa(dt: float) -> void:
+	var next_protozoa: Array = []
+	var available_births: int = maxi(0, PROTOZOAN_SAFETY_LIMIT - protozoa.size())
+
 	for proto in protozoa:
+		if not bool(proto.alive):
+			continue
+
 		proto.age = float(proto.age) + dt
 		proto.cooldown = maxf(0.0, float(proto.cooldown) - dt)
 		proto.deform_phase = wrapf(
-			float(proto.deform_phase) + dt * (2.8 + 0.15 * float(proto.energy)),
+			float(proto.deform_phase)
+			+ dt * (2.8 + 0.15 * float(proto.energy)),
 			0.0,
 			TAU
 		)
 
+		var maintenance: float = (
+			protozoan_maintenance
+			* float(proto.gene_metabolism)
+			* (0.75 + 0.25 * float(proto.gene_size))
+		)
+		proto.energy = float(proto.energy) - maintenance * dt
+
+		if float(proto.energy) <= 0.0:
+			proto.alive = false
+			_release_predator_prey(int(proto.feeding_target_id), int(proto.id))
+			continue
+
 		if int(proto.feeding_target_id) >= 0:
 			_advance_protozoan_engulf(proto, dt)
+			next_protozoa.append(proto)
 			continue
 
 		var prey: Variant = _find_protozoan_prey(proto)
@@ -355,13 +375,18 @@ func _advance_protozoa(dt: float) -> void:
 			if to_prey.length_squared() > 0.000001:
 				desired_angle = to_prey.angle()
 
+			var engulf_distance: float = (
+				protozoan_engulf_distance
+				* (0.85 + 0.15 * float(proto.gene_size))
+			)
 			if (
 				float(proto.cooldown) <= 0.0
-				and to_prey.length() <= protozoan_engulf_distance
+				and to_prey.length() <= engulf_distance
 			):
 				proto.begin_engulf(int(prey.id))
 				prey.engulfed_by_id = int(proto.id)
 				prey.engulf_progress = 0.0
+				next_protozoa.append(proto)
 				continue
 		else:
 			desired_angle += sin(
@@ -375,14 +400,10 @@ func _advance_protozoa(dt: float) -> void:
 		)
 
 		var pulse: float = 0.82 + 0.18 * sin(float(proto.deform_phase) * 1.7)
-		var speed: float = protozoan_speed * pulse
+		var speed: float = protozoan_speed * float(proto.gene_speed) * pulse
 		proto.position = (
 			Vector2(proto.position)
 			+ Vector2.RIGHT.rotated(float(proto.angle)) * speed * dt
-		)
-		proto.energy = maxf(
-			0.5,
-			float(proto.energy) - protozoan_maintenance * dt
 		)
 		proto.deform_amount = lerpf(
 			float(proto.deform_amount),
@@ -391,10 +412,23 @@ func _advance_protozoa(dt: float) -> void:
 		)
 		_constrain_protozoan(proto)
 
+		if (
+			available_births > 0
+			and float(proto.energy) >= protozoan_reproduction_energy
+			and float(proto.cooldown) <= 0.0
+		):
+			next_protozoa.append_array(_divide_protozoan(proto))
+			available_births -= 1
+		else:
+			next_protozoa.append(proto)
+
+	protozoa = next_protozoa
+
 
 func _find_protozoan_prey(proto: Variant) -> Variant:
 	var best: Variant = null
-	var best_distance_sq: float = protozoan_perception * protozoan_perception
+	var perception: float = protozoan_perception * float(proto.gene_perception)
+	var best_distance_sq: float = perception * perception
 	var origin: Vector2 = Vector2(proto.position)
 
 	for cell in bacteria:
@@ -425,9 +459,13 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		proto.finish_engulf()
 		return
 
+	var duration: float = (
+		protozoan_engulf_duration
+		/ maxf(0.45, float(proto.gene_engulf))
+	)
 	var progress: float = minf(
 		1.0,
-		float(proto.feeding_progress) + dt / maxf(0.001, protozoan_engulf_duration)
+		float(proto.feeding_progress) + dt / maxf(0.001, duration)
 	)
 	proto.feeding_progress = progress
 	proto.deform_amount = 0.35 + sin(progress * PI) * 0.55
@@ -443,7 +481,6 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		clampf(dt * 4.0, 0.0, 1.0)
 	)
 
-	# The predator deforms around the prey instead of collision->delete.
 	var wobble: float = sin(float(proto.deform_phase) * 2.3) * 0.22
 	proto.angle = wrapf(float(proto.angle) + wobble * dt, -PI, PI)
 
@@ -452,10 +489,37 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		prey.alive = false
 		prey.engulfed_by_id = -1
 		proto.energy = minf(
-			18.0,
+			20.0,
 			float(proto.energy) + 2.5 + float(prey.length) * 0.35
 		)
 		proto.finish_engulf()
+
+
+func _divide_protozoan(parent: Variant) -> Array:
+	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
+	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.65
+	var daughter_energy: float = float(parent.energy) * 0.47
+
+	var a: Variant = ProtozoanScript.new(
+		_allocate_id(),
+		Vector2(parent.position) - offset,
+		float(parent.angle) + rng.randfn(0.0, 0.18),
+		rng.randf_range(0.0, TAU)
+	)
+	var b: Variant = ProtozoanScript.new(
+		_allocate_id(),
+		Vector2(parent.position) + offset,
+		float(parent.angle) + PI + rng.randfn(0.0, 0.18),
+		rng.randf_range(0.0, TAU)
+	)
+
+	for daughter in [a, b]:
+		daughter.inherit_and_mutate(parent, rng)
+		daughter.energy = daughter_energy
+		daughter.cooldown = 1.1
+		_constrain_protozoan(daughter)
+
+	return [a, b]
 
 
 func _constrain_protozoan(proto: Variant) -> void:
@@ -479,6 +543,227 @@ func _constrain_protozoan(proto: Variant) -> void:
 
 	proto.position = position
 	proto.angle = wrapf(angle, -PI, PI)
+
+
+func _advance_ciliates(dt: float) -> void:
+	var next_ciliates: Array = []
+	var available_births: int = maxi(0, CILIATE_SAFETY_LIMIT - ciliates.size())
+
+	for ciliate in ciliates:
+		if not bool(ciliate.alive):
+			continue
+
+		ciliate.age = float(ciliate.age) + dt
+		ciliate.cooldown = maxf(0.0, float(ciliate.cooldown) - dt)
+		ciliate.swim_phase = wrapf(
+			float(ciliate.swim_phase) + dt * (8.0 + float(ciliate.gene_speed)),
+			0.0,
+			TAU
+		)
+
+		var maintenance: float = (
+			ciliate_maintenance
+			* float(ciliate.gene_metabolism)
+			* (0.80 + 0.20 * float(ciliate.gene_size))
+		)
+		ciliate.energy = float(ciliate.energy) - maintenance * dt
+
+		if float(ciliate.energy) <= 0.0:
+			ciliate.alive = false
+			_release_predator_prey(
+				int(ciliate.feeding_target_id),
+				int(ciliate.id)
+			)
+			continue
+
+		if int(ciliate.feeding_target_id) >= 0:
+			_advance_ciliate_feed(ciliate, dt)
+			next_ciliates.append(ciliate)
+			continue
+
+		var prey: Variant = _find_ciliate_prey(ciliate)
+		var desired_angle: float = float(ciliate.angle)
+
+		if prey != null:
+			var to_prey: Vector2 = Vector2(prey.position) - Vector2(ciliate.position)
+			if to_prey.length_squared() > 0.000001:
+				desired_angle = to_prey.angle()
+
+			var feed_distance: float = (
+				ciliate_feed_distance
+				* (0.85 + 0.15 * float(ciliate.gene_size))
+			)
+			if (
+				float(ciliate.cooldown) <= 0.0
+				and to_prey.length() <= feed_distance
+			):
+				ciliate.begin_feed(int(prey.id))
+				prey.engulfed_by_id = int(ciliate.id)
+				prey.engulf_progress = 0.0
+				next_ciliates.append(ciliate)
+				continue
+		else:
+			desired_angle += sin(
+				simulation_time * 1.9 + float(ciliate.swim_phase)
+			) * 0.28
+
+		ciliate.angle = lerp_angle(
+			float(ciliate.angle),
+			desired_angle,
+			clampf(dt * 4.8, 0.0, 1.0)
+		)
+
+		var stroke: float = 0.88 + 0.12 * sin(float(ciliate.swim_phase))
+		var speed: float = ciliate_speed * float(ciliate.gene_speed) * stroke
+		ciliate.position = (
+			Vector2(ciliate.position)
+			+ Vector2.RIGHT.rotated(float(ciliate.angle)) * speed * dt
+		)
+		_constrain_ciliate(ciliate)
+
+		if (
+			available_births > 0
+			and float(ciliate.energy) >= ciliate_reproduction_energy
+			and float(ciliate.cooldown) <= 0.0
+		):
+			next_ciliates.append_array(_divide_ciliate(ciliate))
+			available_births -= 1
+		else:
+			next_ciliates.append(ciliate)
+
+	ciliates = next_ciliates
+
+
+func _find_ciliate_prey(ciliate: Variant) -> Variant:
+	var best: Variant = null
+	var perception: float = ciliate_perception * float(ciliate.gene_perception)
+	var best_distance_sq: float = perception * perception
+	var origin: Vector2 = Vector2(ciliate.position)
+
+	for cell in bacteria:
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+
+		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = cell
+
+	return best
+
+
+func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
+	var prey: Variant = find_cell_by_id(int(ciliate.feeding_target_id))
+	if prey == null or bool(prey.consumed):
+		ciliate.finish_feed()
+		return
+
+	if bool(prey.dying):
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
+		ciliate.finish_feed()
+		return
+
+	var duration: float = (
+		ciliate_feed_duration
+		/ maxf(0.45, float(ciliate.gene_capture))
+	)
+	var progress: float = minf(
+		1.0,
+		float(ciliate.feeding_progress) + dt / maxf(0.001, duration)
+	)
+	ciliate.feeding_progress = progress
+	prey.engulf_progress = progress
+
+	var mouth: Vector2 = (
+		Vector2(ciliate.position)
+		+ Vector2.RIGHT.rotated(float(ciliate.angle))
+		* float(ciliate.radius) * 0.55
+	)
+	prey.position = Vector2(prey.position).lerp(
+		mouth,
+		clampf(dt * (5.0 + progress * 8.0), 0.0, 1.0)
+	)
+	prey.angle = lerp_angle(
+		float(prey.angle),
+		float(ciliate.angle),
+		clampf(dt * 7.0, 0.0, 1.0)
+	)
+
+	if progress >= 1.0:
+		prey.consumed = true
+		prey.alive = false
+		prey.engulfed_by_id = -1
+		ciliate.energy = minf(
+			16.0,
+			float(ciliate.energy) + 1.8 + float(prey.length) * 0.26
+		)
+		ciliate.finish_feed()
+
+
+func _divide_ciliate(parent: Variant) -> Array:
+	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
+	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.70
+	var daughter_energy: float = float(parent.energy) * 0.47
+
+	var a: Variant = CiliateScript.new(
+		_allocate_id(),
+		Vector2(parent.position) - offset,
+		float(parent.angle) + rng.randfn(0.0, 0.12),
+		rng.randf_range(0.0, TAU)
+	)
+	var b: Variant = CiliateScript.new(
+		_allocate_id(),
+		Vector2(parent.position) + offset,
+		float(parent.angle) + PI + rng.randfn(0.0, 0.12),
+		rng.randf_range(0.0, TAU)
+	)
+
+	for daughter in [a, b]:
+		daughter.inherit_and_mutate(parent, rng)
+		daughter.energy = daughter_energy
+		daughter.cooldown = 0.9
+		_constrain_ciliate(daughter)
+
+	return [a, b]
+
+
+func _constrain_ciliate(ciliate: Variant) -> void:
+	var margin: float = float(ciliate.radius) + 0.8
+	var position: Vector2 = Vector2(ciliate.position)
+	var angle: float = float(ciliate.angle)
+
+	if position.x < margin:
+		position.x = margin
+		angle = PI - angle
+	elif position.x > world_size.x - margin:
+		position.x = world_size.x - margin
+		angle = PI - angle
+
+	if position.y < margin:
+		position.y = margin
+		angle = -angle
+	elif position.y > world_size.y - margin:
+		position.y = world_size.y - margin
+		angle = -angle
+
+	ciliate.position = position
+	ciliate.angle = wrapf(angle, -PI, PI)
+
+
+func _release_predator_prey(prey_id: int, predator_id: int) -> void:
+	if prey_id < 0:
+		return
+	var prey: Variant = find_cell_by_id(prey_id)
+	if prey == null:
+		return
+	if int(prey.engulfed_by_id) == predator_id:
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
 
 
 func _advance_cell(cell: Variant, dt: float) -> void:
