@@ -20,5 +20,5 @@ if ([string]::IsNullOrWhiteSpace($GodotBin)) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 Write-Host "Launching MicroC0re..."
-& $GodotBin --rendering-method forward_plus --path $repoRoot
+& $GodotBin --rendering-method forward_plus --rendering-driver vulkan --path $repoRoot
 exit $LASTEXITCODE
