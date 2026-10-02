@@ -41,10 +41,13 @@ func _init() -> void:
 		cleaned_lines.append(source_line)
 	shader_code = "\n".join(cleaned_lines)
 
-	if shader_code.begins_with("#[compute]"):
-		push_error("Compute marker stripping failed.")
+	var version_pos: int = shader_code.find("#version")
+	if version_pos < 0:
+		push_error("Compute shader source has no #version directive.")
 		quit(1)
 		return
+	if version_pos > 0:
+		shader_code = shader_code.substr(version_pos)
 
 	var shader_source := RDShaderSource.new()
 	shader_source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
