@@ -468,6 +468,12 @@ func _advance_protozoa(dt: float) -> void:
 				float(proto.cooldown) <= 0.0
 				and to_prey.length() <= engulf_distance
 			):
+				if prey.has_method("finish_feed"):
+					_release_predator_prey(
+						int(prey.feeding_target_id),
+						int(prey.id)
+					)
+					prey.finish_feed()
 				proto.begin_engulf(int(prey.id))
 				prey.engulfed_by_id = int(proto.id)
 				prey.engulf_progress = 0.0
@@ -541,11 +547,31 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 			best_distance_sq = distance_sq
 			best = cell
 
+	# A sufficiently large amoeba can also handle a smaller ciliate. This
+	# establishes a real second trophic edge instead of hard-coding every
+	# predator to bacteria only.
+	var max_prey_biomass: float = float(proto.radius) * 2.10
+	for grazer in ciliates:
+		if (
+			bool(grazer.dying)
+			or bool(grazer.consumed)
+			or int(grazer.engulfed_by_id) >= 0
+			or float(grazer.biomass_size()) > max_prey_biomass
+		):
+			continue
+
+		var distance_sq: float = origin.distance_squared_to(
+			Vector2(grazer.position)
+		)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = grazer
+
 	return best
 
 
 func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
-	var prey: Variant = find_cell_by_id(int(proto.feeding_target_id))
+	var prey: Variant = find_edible_by_id(int(proto.feeding_target_id))
 	if prey == null or bool(prey.consumed):
 		proto.finish_engulf()
 		return
@@ -593,7 +619,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		detritus.add_radial_world(
 			Vector2(prey.position),
 			2.6,
-			0.020 + float(prey.length) * 0.006
+			0.020 + float(prey.biomass_size()) * 0.006
 		)
 		damage_cue.add_radial_world(
 			Vector2(prey.position),
@@ -602,7 +628,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		)
 		proto.energy = minf(
 			20.0,
-			float(proto.energy) + 1.35 + float(prey.length) * 0.18
+			float(proto.energy) + 1.35 + float(prey.biomass_size()) * 0.18
 		)
 		proto.finish_engulf()
 
@@ -662,6 +688,13 @@ func _advance_ciliates(dt: float) -> void:
 	var available_births: int = maxi(0, CILIATE_SAFETY_LIMIT - ciliates.size())
 
 	for ciliate in ciliates:
+		if bool(ciliate.consumed):
+			continue
+
+		if int(ciliate.engulfed_by_id) >= 0:
+			next_ciliates.append(ciliate)
+			continue
+
 		if bool(ciliate.dying):
 			_advance_predator_lysis(ciliate, dt)
 			if float(ciliate.lysis_progress) >= 1.0:
@@ -943,7 +976,7 @@ func _recycle_predator_body(
 func _release_predator_prey(prey_id: int, predator_id: int) -> void:
 	if prey_id < 0:
 		return
-	var prey: Variant = find_cell_by_id(prey_id)
+	var prey: Variant = find_edible_by_id(prey_id)
 	if prey == null:
 		return
 	if int(prey.engulfed_by_id) == predator_id:
@@ -1851,6 +1884,16 @@ func find_cell_by_id(cell_id: int) -> Variant:
 	return null
 
 
+func find_edible_by_id(organism_id: int) -> Variant:
+	var cell: Variant = find_cell_by_id(organism_id)
+	if cell != null:
+		return cell
+	for ciliate in ciliates:
+		if int(ciliate.id) == organism_id:
+			return ciliate
+	return null
+
+
 func state_signature() -> String:
 	var parts := PackedStringArray()
 	parts.append("t:%.5f" % simulation_time)
@@ -1912,7 +1955,7 @@ func state_signature() -> String:
 
 	for ciliate in ciliates:
 		parts.append(
-			"c%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f:d%d:lp%.3f"
+			"c%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f:d%d:lp%.3f:e%d:ep%.3f:x%d"
 			% [
 				int(ciliate.id),
 				int(ciliate.generation),
@@ -1926,6 +1969,9 @@ func state_signature() -> String:
 				float(ciliate.feeding_progress),
 				1 if bool(ciliate.dying) else 0,
 				float(ciliate.lysis_progress),
+				int(ciliate.engulfed_by_id),
+				float(ciliate.engulf_progress),
+				1 if bool(ciliate.consumed) else 0,
 			]
 		)
 
