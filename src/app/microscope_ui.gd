@@ -40,10 +40,10 @@ func _panel_style(alpha: float = 0.94) -> StyleBoxFlat:
 	style.corner_radius_top_right = 3
 	style.corner_radius_bottom_left = 3
 	style.corner_radius_bottom_right = 3
-	style.content_margin_left = 10.0
-	style.content_margin_right = 10.0
-	style.content_margin_top = 10.0
-	style.content_margin_bottom = 10.0
+	style.content_margin_left = 6.0
+	style.content_margin_right = 6.0
+	style.content_margin_top = 6.0
+	style.content_margin_bottom = 6.0
 	return style
 
 
@@ -129,17 +129,18 @@ func _build_inspector() -> void:
 	inspector_panel.anchor_top = 0.0
 	inspector_panel.anchor_right = 0.0
 	inspector_panel.anchor_bottom = 1.0
-	inspector_panel.offset_left = 12.0
-	inspector_panel.offset_top = 12.0
-	inspector_panel.offset_right = 300.0
-	inspector_panel.offset_bottom = -12.0
+	inspector_panel.offset_left = 8.0
+	inspector_panel.offset_top = 8.0
+	inspector_panel.offset_right = 226.0
+	inspector_panel.anchor_bottom = 0.0
+	inspector_panel.offset_bottom = 382.0
 	inspector_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.97))
 	inspector_panel.visible = false
 	root_control.add_child(inspector_panel)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 3)
 	inspector_panel.add_child(box)
 
 	var header := HBoxContainer.new()
@@ -148,13 +149,13 @@ func _build_inspector() -> void:
 	inspector_title = Label.new()
 	inspector_title.text = "ORGANISM"
 	inspector_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inspector_title.add_theme_font_size_override("font_size", 14)
+	inspector_title.add_theme_font_size_override("font_size", 10)
 	inspector_title.add_theme_color_override("font_color", Color(0.75, 0.96, 0.88))
 	header.add_child(inspector_title)
 
 	var close := Button.new()
 	close.text = "×"
-	close.custom_minimum_size = Vector2(28.0, 24.0)
+	close.custom_minimum_size = Vector2(22.0, 20.0)
 	close.pressed.connect(hide_inspector)
 	header.add_child(close)
 
@@ -167,7 +168,7 @@ func _build_inspector() -> void:
 	inspector_body.scroll_active = true
 	inspector_body.selection_enabled = true
 	inspector_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_body.add_theme_font_size_override("normal_font_size", 9)
+	inspector_body.add_theme_font_size_override("normal_font_size", 8)
 	inspector_body.add_theme_color_override("default_color", Color(0.76, 0.84, 0.82))
 	box.add_child(inspector_body)
 
