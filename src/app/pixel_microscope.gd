@@ -453,8 +453,26 @@ func _update_hud() -> void:
 		return
 
 	var state_text: String = "PAUSE" if paused else "RUN"
+
+	if not hud_debug_expanded:
+		hud_panel.size = Vector2(330.0, 22.0)
+		hud_label.size = Vector2(320.0, 18.0)
+		hud_label.text = (
+			"MICROC0RE %s | %d FPS | cells %d | proto %d | engulf %d | F1 debug"
+			% [
+				state_text,
+				Engine.get_frames_per_second(),
+				sim.bacteria.size(),
+				sim.protozoa.size(),
+				int(sim.count_engulfing()),
+			]
+		)
+		return
+
+	hud_panel.size = Vector2(500.0, 154.0)
+	hud_label.size = Vector2(490.0, 148.0)
 	hud_label.text = (
-		"MICROC0RE  %s  FPS %d  zoom %.2f  sim %.1fx  %s"
+		"MICROC0RE %s | FPS %d | zoom %.2f | sim %.1fx | %s"
 		% [
 			state_text,
 			Engine.get_frames_per_second(),
@@ -465,10 +483,12 @@ func _update_hud() -> void:
 	)
 	hud_label.text += "\nGPU " + gpu_name
 	hud_label.text += (
-		"\ncells %d  visible %d  gen %d  divide %d  adhere %d  lysis %d"
+		"\ncells %d visible %d | proto %d engulf %d | gen %d divide %d adhere %d lysis %d"
 		% [
 			sim.bacteria.size(),
 			visible_cells,
+			sim.protozoa.size(),
+			int(sim.count_engulfing()),
 			int(sim.max_generation()),
 			int(sim.count_dividing()),
 			int(sim.count_adhering()),
@@ -476,7 +496,7 @@ func _update_hud() -> void:
 		]
 	)
 	hud_label.text += (
-		"\nframe sim %.2f  field %.2f  draw %.2f | tick chem %.2f agent %.2f mech %.2f"
+		"\nframe sim %.2f field %.2f draw %.2f | tick chem %.2f agent %.2f mech %.2f"
 		% [
 			sim_ms,
 			field_ms,
@@ -487,12 +507,10 @@ func _update_hud() -> void:
 		]
 	)
 	hud_label.text += (
-		"\nlod far %d sprites %d"
-		% [far_cells, sprite_cells]
-	)
-	hud_label.text += (
-		"\npairs %d -> %d -> %d -> %d"
+		"\nlod far %d sprites %d | pairs %d -> %d -> %d -> %d"
 		% [
+			far_cells,
+			sprite_cells,
 			int(sim.pair_candidates_last),
 			int(sim.pair_narrow_checks_last),
 			int(sim.pair_interactions_last),
@@ -500,7 +518,7 @@ func _update_hud() -> void:
 		]
 	)
 	hud_label.text += (
-		"\nwheel zoom | RMB/MMB pan | WASD | click inspect | F fit | R reset | N seed"
+		"\nF1 debug | wheel zoom | RMB/MMB pan | WASD | click inspect | F fit | R reset | N seed"
 	)
 
 	if selected_id >= 0:
@@ -509,7 +527,7 @@ func _update_hud() -> void:
 			selected_id = -1
 		else:
 			hud_label.text += (
-				"\n#%d g%d E%.2f speed%.2f chemo%.2f uptake%.2f adh%.2f"
+				"\n#%d g%d E%.2f speed%.2f chemo%.2f uptake%.2f adh%.2f engulf %.2f"
 				% [
 					int(selected.id),
 					int(selected.generation),
@@ -518,6 +536,7 @@ func _update_hud() -> void:
 					float(selected.gene_chemotaxis),
 					float(selected.gene_uptake),
 					float(selected.gene_adhesion),
+					float(selected.engulf_progress),
 				]
 			)
 
@@ -561,6 +580,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 		match key_event.keycode:
+			KEY_F1:
+				hud_debug_expanded = not hud_debug_expanded
 			KEY_SPACE:
 				paused = not paused
 			KEY_F:
