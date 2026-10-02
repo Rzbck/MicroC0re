@@ -253,6 +253,7 @@ func _draw_bacteria() -> void:
 
 		visible_cells += 1
 		var color: Color = _lineage_color(float(cell.lineage_hue))
+		color = color.lerp(_guild_color(int(cell.guild)), 0.28)
 
 		if bool(cell.dying):
 			color.a = clampf(1.0 - float(cell.lysis_progress) * 0.72, 0.20, 1.0)
@@ -485,6 +486,18 @@ func _draw_ciliates() -> void:
 				maxf(0.12, 0.85 / zoom_value),
 				false
 			)
+
+
+func _guild_color(guild: int) -> Color:
+	match guild:
+		BacteriumScript.GUILD_SCAVENGER:
+			return Color(0.92, 0.61, 0.24, 1.0)
+		BacteriumScript.GUILD_BIOFILM:
+			return Color(0.34, 0.92, 0.66, 1.0)
+		BacteriumScript.GUILD_PHOTOTROPH:
+			return Color(0.40, 0.95, 0.32, 1.0)
+		_:
+			return Color(0.70, 0.76, 0.94, 1.0)
 
 
 func _lineage_color(hue: float) -> Color:
@@ -831,7 +844,7 @@ func _inspector_body(organism: Variant) -> String:
 			state = "adhering"
 
 		var text: String = (
-			"%s | E %.2f | L %.2f\n"
+			"%s | %s | E %.2f | L %.2f\n"
 			+ "g%d  parent %d  lineage %d  age %.1fs\n"
 			+ "speed %.2f  chemo %.2f  uptake %.2f\n"
 			+ "growth %.2f  size %.2f  tumble %.2f\n"
@@ -840,6 +853,7 @@ func _inspector_body(organism: Variant) -> String:
 			+ "DNA %s\nHGT %d  transfer %.0f%%"
 		) % [
 			state,
+			String(organism.guild_name()),
 			float(organism.energy),
 			float(organism.length),
 			int(organism.generation),
