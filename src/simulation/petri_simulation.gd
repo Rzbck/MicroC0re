@@ -975,6 +975,36 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 			best_distance_sq = distance_sq
 			best = grazer
 
+	for alga in microalgae:
+		if (
+			bool(alga.dying)
+			or bool(alga.consumed)
+			or int(alga.engulfed_by_id) >= 0
+			or float(alga.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var distance_sq: float = origin.distance_squared_to(
+			Vector2(alga.position)
+		)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = alga
+
+	for yeast in decomposers:
+		if (
+			bool(yeast.dying)
+			or bool(yeast.consumed)
+			or int(yeast.engulfed_by_id) >= 0
+			or float(yeast.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var distance_sq: float = origin.distance_squared_to(
+			Vector2(yeast.position)
+		)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = yeast
+
 	return best
 
 
@@ -1218,6 +1248,7 @@ func _find_ciliate_prey(ciliate: Variant) -> Variant:
 	var perception: float = ciliate_perception * float(ciliate.gene_perception)
 	var best_distance_sq: float = perception * perception
 	var origin: Vector2 = Vector2(ciliate.position)
+	var max_prey_biomass: float = float(ciliate.radius) * 1.95
 
 	for cell in bacteria:
 		if (
@@ -1231,6 +1262,32 @@ func _find_ciliate_prey(ciliate: Variant) -> Variant:
 		if distance_sq < best_distance_sq:
 			best_distance_sq = distance_sq
 			best = cell
+
+	for alga in microalgae:
+		if (
+			bool(alga.dying)
+			or bool(alga.consumed)
+			or int(alga.engulfed_by_id) >= 0
+			or float(alga.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var distance_sq: float = origin.distance_squared_to(Vector2(alga.position))
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = alga
+
+	for yeast in decomposers:
+		if (
+			bool(yeast.dying)
+			or bool(yeast.consumed)
+			or int(yeast.engulfed_by_id) >= 0
+			or float(yeast.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var distance_sq: float = origin.distance_squared_to(Vector2(yeast.position))
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = yeast
 
 	return best
 
@@ -1285,7 +1342,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		detritus.add_radial_world(
 			Vector2(prey.position),
 			2.2,
-			0.016 + float(prey.length) * 0.005
+			0.016 + float(prey.biomass_size()) * 0.005
 		)
 		damage_cue.add_radial_world(
 			Vector2(prey.position),
@@ -1294,7 +1351,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		)
 		ciliate.energy = minf(
 			16.0,
-			float(ciliate.energy) + 0.95 + float(prey.length) * 0.14
+			float(ciliate.energy) + 0.95 + float(prey.biomass_size()) * 0.14
 		)
 		ciliate.finish_feed()
 
@@ -2299,6 +2356,12 @@ func find_edible_by_id(organism_id: int) -> Variant:
 	for ciliate in ciliates:
 		if int(ciliate.id) == organism_id:
 			return ciliate
+	for alga in microalgae:
+		if int(alga.id) == organism_id:
+			return alga
+	for yeast in decomposers:
+		if int(yeast.id) == organism_id:
+			return yeast
 	return null
 
 
@@ -2315,6 +2378,8 @@ func state_signature() -> String:
 	parts.append("prod:%.5f" % producer_biomass.total())
 	parts.append("p:%d" % protozoa.size())
 	parts.append("c:%d" % ciliates.size())
+	parts.append("a:%d" % microalgae.size())
+	parts.append("y:%d" % decomposers.size())
 
 	for cell in bacteria:
 		parts.append(
@@ -2380,6 +2445,46 @@ func state_signature() -> String:
 				int(ciliate.engulfed_by_id),
 				float(ciliate.engulf_progress),
 				1 if bool(ciliate.consumed) else 0,
+			]
+		)
+
+	for alga in microalgae:
+		parts.append(
+			"a%d:g%d:%.5f:%.5f:%.5f:%.5f:r%d:rp%.3f:d%d:lp%.3f:e%d:ep%.3f:x%d"
+			% [
+				int(alga.id),
+				int(alga.generation),
+				float(alga.position.x),
+				float(alga.position.y),
+				float(alga.energy),
+				float(alga.gene_light_use),
+				1 if bool(alga.reproducing) else 0,
+				float(alga.reproduction_progress),
+				1 if bool(alga.dying) else 0,
+				float(alga.lysis_progress),
+				int(alga.engulfed_by_id),
+				float(alga.engulf_progress),
+				1 if bool(alga.consumed) else 0,
+			]
+		)
+
+	for yeast in decomposers:
+		parts.append(
+			"y%d:g%d:%.5f:%.5f:%.5f:%.5f:b%d:bp%.3f:d%d:lp%.3f:e%d:ep%.3f:x%d"
+			% [
+				int(yeast.id),
+				int(yeast.generation),
+				float(yeast.position.x),
+				float(yeast.position.y),
+				float(yeast.energy),
+				float(yeast.gene_detritus),
+				1 if bool(yeast.budding) else 0,
+				float(yeast.budding_progress),
+				1 if bool(yeast.dying) else 0,
+				float(yeast.lysis_progress),
+				int(yeast.engulfed_by_id),
+				float(yeast.engulf_progress),
+				1 if bool(yeast.consumed) else 0,
 			]
 		)
 
