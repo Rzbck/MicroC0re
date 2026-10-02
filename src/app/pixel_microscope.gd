@@ -277,6 +277,7 @@ func _draw_bacteria() -> void:
 			4
 		)
 		var texture: Texture2D = atlas.get_texture(
+			clampi(int(cell.guild), 0, 3),
 			size_class,
 			appendage_class,
 			cell_frame,
