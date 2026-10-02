@@ -1,8 +1,12 @@
 # Project status
 
-This file is the human/agent-readable status board for MicroC0re.
+This file is the human/agent-readable mirror of the MicroC0re workflow.
 
-GitHub issue titles carry the same status prefix so the state remains visible even when an automation agent cannot edit GitHub Project columns directly.
+**Canonical state lives in the GitHub Project `MicroC0re`, in its `Status` field / board columns.**
+
+Issue titles must not contain workflow prefixes such as `[TODO]`, `[IN PROGRESS]`, `[REVIEW]` or `[BACKLOG]`. Bracketed title tags are reserved for technical/domain categories.
+
+When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1` synchronizes the real board through authenticated GitHub CLI / GraphQL.
 
 ## IN PROGRESS
 
@@ -93,6 +97,8 @@ Before starting work:
 5. for performance/GPU work, read `docs/OPTIMIZATION_STRATEGY.md`;
 6. do not start a TODO/BACKLOG item merely because it is interesting while an IN PROGRESS gate is blocking the visible product.
 
-When status changes, update both:
-- the GitHub issue title prefix;
-- this file.
+When status changes:
+1. update the GitHub Project `Status` field;
+2. update this file if the summarized workflow changed.
+
+Do not put workflow state back into issue titles.
