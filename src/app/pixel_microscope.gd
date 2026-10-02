@@ -394,6 +394,19 @@ func _draw_protozoa() -> void:
 		var color := Color(0.38, 0.88, 0.78, 1.0)
 		if state == 1:
 			color = Color(0.55, 0.96, 0.73, 1.0)
+		if bool(proto.dying):
+			var death_progress: float = clampf(
+				float(proto.lysis_progress),
+				0.0,
+				1.0
+			)
+			color = Color(
+				0.92,
+				0.48,
+				0.34,
+				clampf(1.0 - death_progress * 0.82, 0.16, 1.0)
+			)
+			texture_size *= 1.0 + death_progress * 0.30
 
 		var angle_step: float = TAU / 16.0
 		var pixel_angle: float = roundf(float(proto.angle) / angle_step) * angle_step
@@ -406,6 +419,14 @@ func _draw_protozoa() -> void:
 			color
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if bool(proto.dying):
+			_draw_lysis_fragments(
+				position,
+				int(proto.id),
+				float(proto.lysis_progress),
+				color,
+				zoom_value
+			)
 
 		if selected_kind == "amoeba" and int(proto.id) == selected_id:
 			var marker_size: float = maxf(4.0, float(proto.radius) * 2.6)
@@ -461,6 +482,19 @@ func _draw_ciliates() -> void:
 		var color := Color(0.68, 0.72, 1.0, 1.0)
 		if state == 1:
 			color = Color(0.86, 0.72, 1.0, 1.0)
+		if bool(ciliate.dying):
+			var death_progress: float = clampf(
+				float(ciliate.lysis_progress),
+				0.0,
+				1.0
+			)
+			color = Color(
+				0.96,
+				0.52,
+				0.38,
+				clampf(1.0 - death_progress * 0.84, 0.14, 1.0)
+			)
+			texture_size *= 1.0 + death_progress * 0.22
 
 		var angle_step: float = TAU / 24.0
 		var pixel_angle: float = roundf(float(ciliate.angle) / angle_step) * angle_step
@@ -473,6 +507,14 @@ func _draw_ciliates() -> void:
 			color
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if bool(ciliate.dying):
+			_draw_lysis_fragments(
+				position,
+				int(ciliate.id),
+				float(ciliate.lysis_progress),
+				color,
+				zoom_value
+			)
 
 		if selected_kind == "ciliate" and int(ciliate.id) == selected_id:
 			var marker_size: float = maxf(3.4, float(ciliate.radius) * 2.5)
@@ -486,6 +528,35 @@ func _draw_ciliates() -> void:
 				maxf(0.12, 0.85 / zoom_value),
 				false
 			)
+
+
+func _draw_lysis_fragments(
+	position: Vector2,
+	organism_id: int,
+	progress: float,
+	color: Color,
+	zoom_value: float
+) -> void:
+	if progress <= 0.05:
+		return
+	var pixel_size: float = maxf(0.13, 0.75 / zoom_value)
+	var radius: float = 0.7 + progress * 3.2
+	for i in range(6):
+		var phase: float = (
+			float(i) * TAU / 6.0
+			+ float(organism_id % 11) * 0.37
+		)
+		var offset: Vector2 = Vector2.RIGHT.rotated(phase) * radius
+		var fragment_color: Color = color
+		fragment_color.a *= 0.75 * (1.0 - progress * 0.55)
+		draw_rect(
+			Rect2(
+				position + offset - Vector2(pixel_size, pixel_size) * 0.5,
+				Vector2(pixel_size, pixel_size)
+			),
+			fragment_color,
+			true
+		)
 
 
 func _guild_color(guild: int) -> Color:
