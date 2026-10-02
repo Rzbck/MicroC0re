@@ -108,3 +108,116 @@ When adding a paper:
 3. do not transplant parameters between species/environments without justification;
 4. distinguish “inspired by” from “validated against”;
 5. add a validation idea when a paper motivates a new behavior.
+
+
+## Horizontal gene transfer and microbial evolution
+
+### Conjugation
+
+Review: **Plasmid Transfer by Conjugation in Gram-Negative Bacteria: From the Cellular to the Community Level**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC7690428/
+
+Why it matters:
+- direct cell-cell DNA transfer is a major HGT mechanism;
+- conjugative plasmids can spread metabolic, biofilm and resistance-related functions;
+- contact and pili/T4SS-like machinery justify a staged physical interaction.
+
+Use in MicroC0re:
+- #31 direct-contact plasmid transfer;
+- visible pixel mating bridge;
+- mobile trait modules with fitness cost.
+
+### Natural transformation
+
+Review: **Natural Competence and the Evolution of DNA Uptake Specificity**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC3993363/
+
+Why it matters:
+- competent bacteria can actively import extracellular DNA;
+- homologous incoming DNA may alter genotype by recombination;
+- extracellular DNA can also provide nutrients.
+
+Use in MicroC0re:
+- #32 extracellular DNA after lysis;
+- competence state;
+- trait recombination vs nutrient use.
+
+### Phage transduction
+
+Review: **Genetic transduction by phages and chromosomal islands: The new and noncanonical**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC6687093/
+
+Use in MicroC0re:
+- phage-mediated HGT belongs to #30, not to conjugation.
+
+## Phenotypic heterogeneity / differentiation
+
+Review: **Diversity of bet-hedging strategies in microbial communities**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC9286555/
+
+Review: **Bacterial cell differentiation enables population level survival strategies**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC11237816/
+
+Why they matter:
+- one genotype can generate multiple physiological states;
+- switching may support environmental adaptation, division of labor and bet-hedging.
+
+Use in MicroC0re:
+- #33 reversible motile / adhesive / high-growth / dormant states;
+- evolvable switching thresholds/rates.
+
+## Quorum sensing and biofilm evolution
+
+Review/model study: **The Evolution of Quorum Sensing in Bacterial Biofilms**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC2214811/
+
+Why it matters:
+- density-dependent signaling can regulate attachment, EPS and competence;
+- matrix secretion has social benefits and costs;
+- cooperative and cheating strategies are plausible evolutionary outcomes.
+
+Use in MicroC0re:
+- #34 autoinducer field + EPS/matrix;
+- colony structure and social evolution.
+
+## Predator-prey eco-evolution
+
+### Protist diversity and stability
+
+**Diversity of protists and bacteria determines predation performance and stability**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC3965320/
+
+Why it matters:
+- multiple predator/prey types can change community stability and productivity;
+- predator identity matters.
+
+### Rapid prey defence evolution
+
+**Environmental fluctuations restrict eco-evolutionary dynamics in predator-prey system**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC4455795/
+
+Why it matters:
+- bacterial prey can evolve anti-predator defence such as aggregation;
+- ecological population change and evolutionary trait change feed back on one another.
+
+### Kill the winner
+
+**Understanding Bacteriophage Specificity in Natural Microbial Communities**
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC3705297/
+
+Why it matters:
+- host-specific phages can impose negative frequency-dependent selection;
+- common host lineages can experience stronger phage pressure.
+
+Use in MicroC0re:
+- #30 host-lineage-specific phage pressure;
+- diversity maintenance rather than unlimited dominance by one bacterial lineage.
