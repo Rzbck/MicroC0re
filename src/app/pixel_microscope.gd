@@ -145,31 +145,22 @@ func _setup_field_texture() -> void:
 	field_texture = ImageTexture.create_from_image(field_image)
 
 
-func _setup_hud() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 20
-	layer.name = "HUD"
-	add_child(layer)
+func _setup_ui() -> void:
+	ui = MicroscopeUIScript.new()
+	ui.name = "MicroscopeUI"
+	add_child(ui)
 
-	hud_panel = ColorRect.new()
-	hud_panel.position = Vector2(6.0, 6.0)
-	hud_panel.size = Vector2(315.0, 22.0)
-	hud_panel.color = Color(0.005, 0.010, 0.012, 0.78)
-	hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(hud_panel)
-
-	hud_label = Label.new()
-	hud_label.position = Vector2(10.0, 7.0)
-	hud_label.size = Vector2(305.0, 18.0)
-	hud_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_label.add_theme_font_size_override("font_size", 8)
-	hud_label.add_theme_color_override("font_color", Color(0.84, 0.94, 0.88))
-	layer.add_child(hud_label)
+	ui.resume_requested.connect(_resume_from_menu)
+	ui.fit_requested.connect(_menu_fit)
+	ui.reset_requested.connect(_menu_reset)
+	ui.new_seed_requested.connect(_menu_new_seed)
+	ui.quit_requested.connect(_menu_quit)
 
 
 func _process(delta: float) -> void:
 	visual_time += delta
-	_handle_keyboard_pan(delta)
+	if ui == null or not ui.is_menu_open():
+		_handle_keyboard_pan(delta)
 
 	var sim_start: int = Time.get_ticks_usec()
 	if not paused:
@@ -197,10 +188,10 @@ func _process(delta: float) -> void:
 			float(Time.get_ticks_usec() - field_start) / 1000.0
 		)
 
-	hud_refresh_accumulator += delta
-	if hud_refresh_accumulator >= HUD_REFRESH_INTERVAL:
-		hud_refresh_accumulator = 0.0
-		_update_hud()
+	inspector_refresh_accumulator += delta
+	if inspector_refresh_accumulator >= INSPECTOR_REFRESH_INTERVAL:
+		inspector_refresh_accumulator = 0.0
+		_refresh_selected_inspector()
 
 	queue_redraw()
 
@@ -221,6 +212,7 @@ func _draw() -> void:
 		draw_texture_rect(field_texture, world_rect, false)
 
 	_draw_bacteria()
+	_draw_gene_transfers()
 	_draw_protozoa()
 	_draw_ciliates()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
@@ -309,7 +301,7 @@ func _draw_bacteria() -> void:
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-		if int(cell.id) == selected_id:
+		if selected_kind == "bacterium" and int(cell.id) == selected_id:
 			var marker_size: float = maxf(2.2, float(cell.length) * 0.72)
 			draw_rect(
 				Rect2(
@@ -378,6 +370,19 @@ func _draw_protozoa() -> void:
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
+		if selected_kind == "amoeba" and int(proto.id) == selected_id:
+			var marker_size: float = maxf(4.0, float(proto.radius) * 2.6)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.94, 1.0, 0.72, 0.90),
+				false,
+				maxf(0.12, 0.85 / zoom_value),
+				false
+			)
+
 
 func _draw_ciliates() -> void:
 	if sim == null or ciliate_atlas == null:
@@ -431,6 +436,19 @@ func _draw_ciliates() -> void:
 			color
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		if selected_kind == "ciliate" and int(ciliate.id) == selected_id:
+			var marker_size: float = maxf(3.4, float(ciliate.radius) * 2.5)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.94, 1.0, 0.72, 0.90),
+				false,
+				maxf(0.12, 0.85 / zoom_value),
+				false
+			)
 
 
 func _lineage_color(hue: float) -> Color:
