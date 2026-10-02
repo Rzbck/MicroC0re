@@ -42,7 +42,6 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 ## TODO
 
 - #6 Turing / Gray-Scott laboratory
-- #11 GitHub Actions headless CI
 - #20 packed SoA organism storage
 - #21 Verlet half-neighbor lists + skin / stencil
 - #22 counter-based deterministic RNG
@@ -53,6 +52,13 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
 - #35 predator-prey coevolution / bacterial defence traits
 - #36 lineage tree / ancestry history / emergent phenotype clusters
+
+## DONE
+
+- #11 GitHub Actions Godot 4.7.1 smoke CI
+  - GitHub Actions import + deterministic smoke test passing.
+- #37 public repository readiness security audit
+  - post-public full-history Gitleaks scan and sensitive-filename guard passing.
 
 ## BACKLOG / GATED
 
@@ -85,7 +91,9 @@ Implemented on the current branch:
 - bacteria can now exchange mobile plasmid traits by staged direct-contact conjugation;
 - plasmid transfer has a visible pixel bridge and appears in the organism inspector;
 - researched next evolution layers are #32 natural transformation, #33 phenotype switching/division of labor, #34 quorum/EPS, and #30 phage-mediated kill-the-winner dynamics;
-- GPU compute benchmark is confirmed on the RTX 5080 at ~1455.3 M 96x64 field-cell updates/s in the dedicated benchmark.
+- GPU compute benchmark is confirmed on the RTX 5080 at ~1455.3 M 96x64 field-cell updates/s in the dedicated benchmark;
+- GitHub Actions smoke validation is now automatic on PRs and main/current-branch pushes;
+- repository is public and the post-public security audit passed.
 
 ## Rule for agents
 
