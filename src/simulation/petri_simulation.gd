@@ -1029,10 +1029,22 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	)
 
 	var heading: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
-	cell.position = Vector2(cell.position) + heading * speed * dt
+	var flow: Vector2 = _water_flow(Vector2(cell.position))
+	var local_eps: float = float(eps.sample_world(Vector2(cell.position)))
+	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)
+	cell.position = (
+		Vector2(cell.position)
+		+ heading * speed * eps_drag * dt
+		+ flow * dt
+	)
 	_constrain_to_world(cell)
 
 	var local_nutrient: float = float(nutrient.sample_world(Vector2(cell.position)))
+	var local_oxygen: float = float(oxygen.sample_world(Vector2(cell.position)))
+	var oxygen_factor: float = (
+		0.48
+		+ 0.52 * local_oxygen / (oxygen_half_saturation + local_oxygen)
+	)
 	var uptake_rate: float = 0.0
 	if local_nutrient > 0.0:
 		uptake_rate = (
@@ -1045,7 +1057,29 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var consumed: float = float(
 		nutrient.take_nearest_world(Vector2(cell.position), uptake_rate * dt)
 	)
-	cell.energy = float(cell.energy) + consumed * energy_yield
+	cell.energy = (
+		float(cell.energy)
+		+ consumed * energy_yield * oxygen_factor
+	)
+
+	if consumed > 0.0:
+		oxygen.take_nearest_world(
+			Vector2(cell.position),
+			consumed * oxygen_consumption_rate
+		)
+
+	var scavenged: float = 0.0
+	if cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE):
+		scavenged = float(
+			detritus.take_nearest_world(
+				Vector2(cell.position),
+				detritus_scavenge_rate * float(cell.gene_uptake) * dt
+			)
+		)
+		cell.energy = (
+			float(cell.energy)
+			+ scavenged * detritus_energy_yield
+		)
 
 	var locomotion_cost: float = (
 		movement_cost_per_speed
@@ -1069,11 +1103,25 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	morphology_cost *= _plasmid_maintenance_factor(cell)
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
+	if (
+		float(cell.gene_adhesion) > 0.95
+		or cell.has_plasmid(BacteriumScript.PLASMID_ADHESION)
+	):
+		var secretion: float = (
+			eps_secretion_rate
+			* maxf(0.0, float(cell.gene_adhesion) - 0.75)
+			* clampf(float(cell.energy) / 3.0, 0.2, 1.0)
+			* dt
+		)
+		if secretion > 0.0:
+			eps.add_nearest_world(Vector2(cell.position), secretion)
+			cell.energy = maxf(0.0, float(cell.energy) - secretion * 0.7)
+
 	if consumed > 0.0 and not bool(cell.dividing):
 		var growth_delta: float = (
 			growth_per_nutrient
 			* float(cell.gene_growth)
-			* consumed
+			* (consumed + scavenged * 0.45)
 		)
 		var max_length_for_cell: float = maximum_length * float(cell.gene_size)
 		growth_delta = minf(growth_delta, maxf(0.0, max_length_for_cell - float(cell.length)))
@@ -1101,6 +1149,8 @@ func _advance_lysis(cell: Variant, dt: float) -> void:
 
 	var release: float = 0.025 * dt * maxf(1.0, float(cell.length))
 	waste.add_radial_world(Vector2(cell.position), 2.2, release)
+	detritus.add_radial_world(Vector2(cell.position), 2.6, release * 0.55)
+	damage_cue.add_radial_world(Vector2(cell.position), 4.0, release * 1.8)
 
 
 func _ready_to_begin_division(cell: Variant) -> bool:
@@ -1154,7 +1204,10 @@ func _divide(parent: Variant) -> Array:
 
 func _recycle_dead_cell(cell: Variant) -> void:
 	var recycled: float = maxf(0.05, float(cell.length) * 0.04)
-	waste.add_radial_world(Vector2(cell.position), 3.0, recycled * 0.16)
+	var position: Vector2 = Vector2(cell.position)
+	waste.add_radial_world(position, 3.0, recycled * 0.16)
+	detritus.add_radial_world(position, 4.2, recycled * 0.85)
+	damage_cue.add_radial_world(position, 5.0, recycled * 0.75)
 
 
 func _feed_environment(dt: float) -> void:
