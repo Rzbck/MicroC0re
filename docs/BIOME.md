@@ -60,7 +60,7 @@ Current behavior:
 - active biomass releases oxygen;
 - a small dissolved-organic leak feeds the microbial loop.
 
-This field is a bridge to explicit producer organisms in #40. It should not remain the only representation of producers.
+This continuum field now coexists with explicit individual microalgae-like producer organisms from #40.
 
 ### Detritus / carrion
 
@@ -70,10 +70,14 @@ Current consumers:
 - scavenger bacterial ecotype;
 - bacteria carrying the mobile scavenge module.
 
+Current additional consumer:
+- explicit yeast-like decomposer organisms that consume detritus and mineralize part of it back into dissolved resource.
+
 Future:
-- fungal/yeast decomposers;
 - extracellular enzyme breakdown;
-- particulate aggregates.
+- polymer substrate classes;
+- particulate aggregates;
+- filamentous hyphae.
 
 ### EPS / biofilm matrix
 
@@ -163,6 +167,41 @@ Light-assisted producer ecotype.
 
 These are **ecotypes / functional guilds**, not claims that four real taxonomic species are being simulated.
 
+## Explicit producer and decomposer organisms
+
+### Microalgae-like producer
+
+Individual producer cells now exist in addition to the producer-mat continuum.
+
+Current behavior:
+- evolve heritable light-use, growth, size, exudate and drift traits;
+- gain energy from local light;
+- take dissolved nutrient;
+- release oxygen;
+- leak a small organic-resource fraction;
+- drift with water/current;
+- divide through a staged visible reproduction state;
+- lyse/recycle when energy collapses;
+- can be grazed by ciliates and amoebae.
+
+They are an ecological producer abstraction, not a claim to reproduce one particular algal taxon.
+
+### Yeast-like decomposer
+
+A distinct decomposer guild now consumes carrion/detritus.
+
+Current behavior:
+- evolves detritus uptake, mineralization, growth, size and metabolism;
+- consumes the detritus field;
+- returns part of detritus to dissolved nutrient;
+- consumes oxygen and emits waste;
+- biases drift weakly up local detritus gradients;
+- reproduces by staged budding;
+- lyses/recycles;
+- can be grazed by ciliates and amoebae.
+
+True hyphal branching and extracellular-enzyme chemistry remain future work in #54.
+
 ## Existing predator guilds
 
 ### Amoeboid predator
@@ -177,9 +216,16 @@ Both:
 - can reproduce from prey-derived energy;
 - evolve heritable traits;
 - can starve;
-- now enter a visible death/lysis sequence;
+- visibly weaken and slow before terminal lysis;
+- enter a visible death/lysis sequence;
 - recycle into detritus;
 - can orient toward damage plumes when no direct prey is detected.
+
+Current trophic edges:
+- ciliates graze bacteria, microalgae and yeast-like decomposers;
+- amoebae graze bacteria, microalgae, decomposers and suitably small ciliates;
+- prey remains visible during staged capture/engulfment;
+- feeding leaks detritus and damage cues back into the biome.
 
 ## Death and recycling contract
 
@@ -310,6 +356,7 @@ References:
 - #54 fungi/yeast/hyphae decomposers
 - #55 rotifer/nematode microfauna
 - #56 day/night/diel cycle
+- #57 fused GPU multi-field biome compute
 
 Evolution continues through #13, #30–#36.
 
