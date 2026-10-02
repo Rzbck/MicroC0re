@@ -63,7 +63,7 @@ The parent state is replaced by two daughters:
 - sharing the parent's energy;
 - carrying generation/lineage metadata.
 
-Future genetics work can add inherited traits and mutation.
+Each daughter now inherits a compact genotype from the parent and receives small seeded mutations. These traits affect propulsion, chemotaxis, nutrient uptake, growth, body size, tumble tendency, and visible appendages. See `docs/EVOLUTION.md`.
 
 ### Death and recycling
 
@@ -83,9 +83,9 @@ Dead biomass should eventually return material to environmental fields rather th
 - species-specific calibration;
 - cell-wall mechanics;
 - hydrodynamics;
-- explicit flagellar bundles;
+- explicit hydrodynamic flagellar bundles (the current flagella are a coarse phenotype/propulsion model);
 - quorum sensing;
-- pili/conjugation;
+- explicit pilus attachment/conjugation mechanics (the current pili are visible morphology only);
 - biofilm ECM;
 - predator ingestion;
 - eukaryotic membranes/pseudopods.
