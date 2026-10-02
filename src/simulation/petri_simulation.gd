@@ -16,9 +16,9 @@ var world_size := Vector2(
 var fixed_seed: int
 var rng := RandomNumberGenerator.new()
 
-var nutrient
-var waste
-var bacteria: Array = []
+var nutrient: ScalarField
+var waste: ScalarField
+var bacteria: Array[Bacterium] = []
 var nutrient_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
@@ -78,7 +78,7 @@ func seed_demo(count: int = 24) -> void:
 			rng.randf_range(margin, world_size.x - margin),
 			rng.randf_range(margin, world_size.y - margin)
 		)
-		var cell = BacteriumScript.new(
+		var cell: Bacterium = BacteriumScript.new(
 			_allocate_id(),
 			position,
 			rng.randf_range(-PI, PI)
@@ -97,7 +97,7 @@ func step(dt: float) -> void:
 	nutrient.diffuse(nutrient_diffusion, dt, nutrient_decay)
 	waste.diffuse(waste_diffusion, dt, waste_decay)
 
-	var next_population: Array = []
+	var next_population: Array[Bacterium] = []
 
 	for cell in bacteria:
 		if not cell.alive:
@@ -110,7 +110,7 @@ func step(dt: float) -> void:
 			continue
 
 		if _ready_to_divide(cell):
-			var daughters := _divide(cell)
+			var daughters: Array[Bacterium] = _divide(cell)
 			next_population.append_array(daughters)
 		else:
 			next_population.append(cell)
@@ -123,7 +123,7 @@ func step(dt: float) -> void:
 	simulation_time += dt
 
 
-func _advance_cell(cell, dt: float) -> void:
+func _advance_cell(cell: Bacterium, dt: float) -> void:
 	cell.age += dt
 
 	var sensed := nutrient.sample_world(cell.position)
@@ -174,7 +174,7 @@ func _advance_cell(cell, dt: float) -> void:
 		cell.alive = false
 
 
-func _ready_to_divide(cell) -> bool:
+func _ready_to_divide(cell: Bacterium) -> bool:
 	return (
 		cell.length >= division_length
 		and cell.energy >= division_energy
@@ -182,20 +182,20 @@ func _ready_to_divide(cell) -> bool:
 	)
 
 
-func _divide(parent) -> Array:
+func _divide(parent: Bacterium) -> Array[Bacterium]:
 	var daughter_length := maxf(minimum_length, parent.length * 0.56)
 	var daughter_energy := parent.energy * 0.475
 	var axis := parent.axis()
 	var offset := axis * (daughter_length * 0.28)
 
-	var a = BacteriumScript.new(
+	var a: Bacterium = BacteriumScript.new(
 		_allocate_id(),
 		parent.position - offset,
 		parent.angle + rng.randfn(0.0, 0.025),
 		parent.generation + 1,
 		parent.id
 	)
-	var b = BacteriumScript.new(
+	var b: Bacterium = BacteriumScript.new(
 		_allocate_id(),
 		parent.position + offset,
 		parent.angle + PI + rng.randfn(0.0, 0.025),
@@ -210,10 +210,11 @@ func _divide(parent) -> Array:
 		daughter.sensed_memory = nutrient.sample_world(daughter.position)
 		_constrain_to_world(daughter)
 
-	return [a, b]
+	var daughters: Array[Bacterium] = [a, b]
+	return daughters
 
 
-func _recycle_dead_cell(cell) -> void:
+func _recycle_dead_cell(cell: Bacterium) -> void:
 	# v0.1 coarse recycling: part of remaining body material enters the waste field.
 	var recycled := maxf(0.05, cell.length * 0.03)
 	waste.add_nearest_world(cell.position, recycled)
@@ -251,7 +252,7 @@ func _resolve_all_contacts() -> void:
 		_constrain_to_world(cell)
 
 
-func _resolve_pair(a, b) -> void:
+func _resolve_pair(a: Bacterium, b: Bacterium) -> void:
 	var closest := _closest_points_between_segments(
 		a.segment_start(),
 		a.segment_end(),
@@ -350,7 +351,7 @@ func _closest_points_between_segments(
 	return [closest_a, closest_b]
 
 
-func _constrain_to_world(cell) -> void:
+func _constrain_to_world(cell: Bacterium) -> void:
 	var margin := cell.length * 0.5 + cell.radius
 
 	if cell.position.x < margin:
