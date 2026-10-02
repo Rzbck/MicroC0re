@@ -4,6 +4,7 @@ extends RefCounted
 const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
+const CiliateScript = preload("res://src/simulation/ciliate.gd")
 
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
@@ -15,7 +16,11 @@ const SPATIAL_BUCKET_SIZE := 3.0
 const GRID_WIDTH := 64
 const GRID_HEIGHT := 43
 const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
-const SAFETY_POPULATION_LIMIT := 1200
+# CPU-reference safety ceilings. These are performance guards, not biology.
+# Raise them only after GPU-resident agent mechanics is validated.
+const SAFETY_POPULATION_LIMIT := 480
+const PROTOZOAN_SAFETY_LIMIT := 18
+const CILIATE_SAFETY_LIMIT := 16
 
 var world_size := Vector2(
 	FIELD_WIDTH * FIELD_CELL_SIZE,
@@ -29,6 +34,7 @@ var nutrient: Variant
 var waste: Variant
 var bacteria: Array = []
 var protozoa: Array = []
+var ciliates: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 
@@ -103,7 +109,18 @@ var protozoan_speed: float = 5.4
 var protozoan_perception: float = 28.0
 var protozoan_engulf_distance: float = 4.2
 var protozoan_engulf_duration: float = 1.35
-var protozoan_maintenance: float = 0.018
+var protozoan_maintenance: float = 0.030
+var protozoan_reproduction_energy: float = 13.5
+
+# Fast ciliate-like grazer: a second predator guild that sweeps dense prey
+# patches. Fewer, faster predators help regulate bacterial blooms without
+# requiring hundreds of expensive predator agents.
+var ciliate_speed: float = 10.5
+var ciliate_perception: float = 34.0
+var ciliate_feed_distance: float = 3.4
+var ciliate_feed_duration: float = 0.62
+var ciliate_maintenance: float = 0.040
+var ciliate_reproduction_energy: float = 11.5
 
 
 func _init(seed_value: int = 1) -> void:
@@ -119,6 +136,7 @@ func _init(seed_value: int = 1) -> void:
 func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
 	protozoa.clear()
+	ciliates.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
@@ -187,8 +205,40 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(-PI, PI),
 			rng.randf_range(0.0, TAU)
 		)
+		proto.configure_founder(rng)
 		proto.lineage_hue = wrapf(0.48 + float(proto_index) * 0.055, 0.0, 1.0)
 		protozoa.append(proto)
+
+	# Faster ciliate-like grazers patrol dense bacterial patches and create a
+	# second top-down pressure with a different movement/feeding strategy.
+	for ciliate_index in range(2):
+		var ciliate_margin: float = 12.0
+		var ciliate_source: Vector2 = nutrient_sources[
+			(ciliate_index * 3 + 2) % nutrient_sources.size()
+		]
+		var ciliate_position: Vector2 = (
+			ciliate_source
+			+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+			* rng.randf_range(8.0, 16.0)
+		)
+		ciliate_position.x = clampf(
+			ciliate_position.x,
+			ciliate_margin,
+			world_size.x - ciliate_margin
+		)
+		ciliate_position.y = clampf(
+			ciliate_position.y,
+			ciliate_margin,
+			world_size.y - ciliate_margin
+		)
+		var ciliate: Variant = CiliateScript.new(
+			_allocate_id(),
+			ciliate_position,
+			rng.randf_range(-PI, PI),
+			rng.randf_range(0.0, TAU)
+		)
+		ciliate.configure_founder(rng)
+		ciliates.append(ciliate)
 
 	_resolve_all_contacts()
 
