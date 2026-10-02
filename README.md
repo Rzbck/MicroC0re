@@ -68,13 +68,19 @@ On the current Windows workstation:
 $env:GODOT_BIN = "C:\Godot\Godot_v4.7.1-stable_win64_console.exe"
 ```
 
-Then:
+Then launch the visible simulation:
+
+```powershell
+./scripts/run_simulation.ps1
+```
+
+The separate headless command is only for automated validation:
 
 ```powershell
 ./scripts/run_headless.ps1
 ```
 
-Or directly:
+or directly:
 
 ```powershell
 & $env:GODOT_BIN --headless --path . --script res://tests/smoke_test.gd
