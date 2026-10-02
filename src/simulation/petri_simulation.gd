@@ -1293,7 +1293,7 @@ func _find_ciliate_prey(ciliate: Variant) -> Variant:
 
 
 func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
-	var prey: Variant = find_cell_by_id(int(ciliate.feeding_target_id))
+	var prey: Variant = find_edible_by_id(int(ciliate.feeding_target_id))
 	if prey == null or bool(prey.consumed):
 		ciliate.finish_feed()
 		return
