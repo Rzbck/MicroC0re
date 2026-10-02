@@ -10,6 +10,9 @@ const FIELD_CELL_SIZE := 2.0
 const CHEMISTRY_DT := 1.0 / 30.0
 const MECHANICS_DT := 1.0 / 60.0
 const SPATIAL_BUCKET_SIZE := 3.0
+const GRID_WIDTH := int(ceil((FIELD_WIDTH * FIELD_CELL_SIZE) / SPATIAL_BUCKET_SIZE))
+const GRID_HEIGHT := int(ceil((FIELD_HEIGHT * FIELD_CELL_SIZE) / SPATIAL_BUCKET_SIZE))
+const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 const SAFETY_POPULATION_LIMIT := 1200
 
 var world_size := Vector2(
@@ -29,7 +32,8 @@ var simulation_time: float = 0.0
 var _chemistry_accumulator: float = 0.0
 var _mechanics_accumulator: float = 0.0
 var _next_id: int = 1
-var _spatial_buckets: Dictionary = {}
+var _grid_head: PackedInt32Array = PackedInt32Array()
+var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
 
 # Environmental coefficients. Concentration is normalized in v0.1.
@@ -82,6 +86,8 @@ func _init(seed_value: int = 1) -> void:
 	rng.seed = seed_value
 	nutrient = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	waste = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	_grid_head.resize(GRID_CELL_COUNT)
+	_grid_head.fill(-1)
 	_build_sources()
 
 
@@ -376,7 +382,7 @@ func _allocate_id() -> int:
 
 
 func _resolve_all_contacts() -> void:
-	_rebuild_spatial_hash()
+	_rebuild_spatial_grid()
 
 	var count: int = bacteria.size()
 	for i in range(count):
@@ -385,8 +391,16 @@ func _resolve_all_contacts() -> void:
 			continue
 
 		var position: Vector2 = Vector2(cell.position)
-		var bucket_x: int = floori(position.x / SPATIAL_BUCKET_SIZE)
-		var bucket_y: int = floori(position.y / SPATIAL_BUCKET_SIZE)
+		var bucket_x: int = clampi(
+			floori(position.x / SPATIAL_BUCKET_SIZE),
+			0,
+			GRID_WIDTH - 1
+		)
+		var bucket_y: int = clampi(
+			floori(position.y / SPATIAL_BUCKET_SIZE),
+			0,
+			GRID_HEIGHT - 1
+		)
 		var search_world: float = (
 			float(cell.length) * 0.5
 			+ _max_half_body_length
@@ -397,27 +411,28 @@ func _resolve_all_contacts() -> void:
 			ceili(search_world / SPATIAL_BUCKET_SIZE)
 		)
 
-		for offset_y in range(-bucket_radius, bucket_radius + 1):
-			for offset_x in range(-bucket_radius, bucket_radius + 1):
-				var key := Vector2i(bucket_x + offset_x, bucket_y + offset_y)
-				if not _spatial_buckets.has(key):
-					continue
+		var min_y: int = maxi(0, bucket_y - bucket_radius)
+		var max_y: int = mini(GRID_HEIGHT - 1, bucket_y + bucket_radius)
+		var min_x: int = maxi(0, bucket_x - bucket_radius)
+		var max_x: int = mini(GRID_WIDTH - 1, bucket_x + bucket_radius)
 
-				var bucket: Array = _spatial_buckets[key]
-				for other_index_variant in bucket:
-					var j: int = int(other_index_variant)
-					if j <= i or j >= count:
-						continue
-					if bool(bacteria[j].dying):
-						continue
-					_resolve_pair(cell, bacteria[j])
+		for y in range(min_y, max_y + 1):
+			var row_offset: int = y * GRID_WIDTH
+			for x in range(min_x, max_x + 1):
+				var j: int = _grid_head[row_offset + x]
+				while j >= 0:
+					if j > i and not bool(bacteria[j].dying):
+						_resolve_pair(cell, bacteria[j])
+					j = _grid_next[j]
 
 	for cell in bacteria:
 		_constrain_to_world(cell)
 
 
-func _rebuild_spatial_hash() -> void:
-	_spatial_buckets.clear()
+func _rebuild_spatial_grid() -> void:
+	_grid_head.fill(-1)
+	_grid_next.resize(bacteria.size())
+	_grid_next.fill(-1)
 	_max_half_body_length = 0.0
 
 	for i in range(bacteria.size()):
@@ -431,17 +446,20 @@ func _rebuild_spatial_hash() -> void:
 		)
 
 		var position: Vector2 = Vector2(cell.position)
-		var key := Vector2i(
+		var x: int = clampi(
 			floori(position.x / SPATIAL_BUCKET_SIZE),
-			floori(position.y / SPATIAL_BUCKET_SIZE)
+			0,
+			GRID_WIDTH - 1
 		)
+		var y: int = clampi(
+			floori(position.y / SPATIAL_BUCKET_SIZE),
+			0,
+			GRID_HEIGHT - 1
+		)
+		var cell_index: int = y * GRID_WIDTH + x
 
-		if not _spatial_buckets.has(key):
-			_spatial_buckets[key] = []
-
-		var bucket: Array = _spatial_buckets[key]
-		bucket.append(i)
-		_spatial_buckets[key] = bucket
+		_grid_next[i] = _grid_head[cell_index]
+		_grid_head[cell_index] = i
 
 
 func _resolve_pair(a: Variant, b: Variant) -> void:
