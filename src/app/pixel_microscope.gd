@@ -400,6 +400,18 @@ func _draw_protozoa() -> void:
 		var color := Color(0.38, 0.88, 0.78, 1.0)
 		if state == 1:
 			color = Color(0.55, 0.96, 0.73, 1.0)
+		if not bool(proto.dying):
+			var starvation: float = clampf(
+				1.0 - float(proto.energy) / 2.2,
+				0.0,
+				1.0
+			)
+			if starvation > 0.0:
+				color = color.lerp(
+					Color(0.45, 0.46, 0.43, color.a),
+					starvation * 0.58
+				)
+				texture_size *= 1.0 - starvation * 0.10
 		if bool(proto.dying):
 			var death_progress: float = clampf(
 				float(proto.lysis_progress),
@@ -486,6 +498,18 @@ func _draw_ciliates() -> void:
 		texture_size.y *= 2.0 - pulse
 
 		var color := Color(0.68, 0.72, 1.0, 1.0)
+		if not bool(ciliate.dying):
+			var starvation: float = clampf(
+				1.0 - float(ciliate.energy) / 1.8,
+				0.0,
+				1.0
+			)
+			if starvation > 0.0:
+				color = color.lerp(
+					Color(0.48, 0.47, 0.50, color.a),
+					starvation * 0.55
+				)
+				texture_size *= 1.0 - starvation * 0.08
 		if float(ciliate.engulf_progress) > 0.0:
 			var engulf_progress: float = clampf(
 				float(ciliate.engulf_progress),
@@ -1178,6 +1202,8 @@ func _inspector_body(organism: Variant) -> String:
 		)
 		if bool(organism.dying):
 			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
+		elif int(organism.feeding_target_id) < 0 and float(organism.energy) < 2.2:
+			state = "starving"
 
 		var text: String = (
 			"%s | E %.2f | R %.2f\n"
@@ -1215,6 +1241,8 @@ func _inspector_body(organism: Variant) -> String:
 			)
 		elif bool(organism.dying):
 			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
+		elif int(organism.feeding_target_id) < 0 and float(organism.energy) < 1.8:
+			state = "starving"
 
 		var text: String = (
 			"%s | E %.2f | R %.2f\n"
