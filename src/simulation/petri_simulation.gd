@@ -1031,7 +1031,11 @@ func _rebuild_spatial_grid() -> void:
 
 	for i in range(bacteria.size()):
 		var cell: Variant = bacteria[i]
-		if bool(cell.dying):
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
 			continue
 
 		_max_half_body_length = maxf(
