@@ -513,10 +513,10 @@ func _update_hud() -> void:
 	var state_text: String = "PAUSE" if paused else "RUN"
 
 	if not hud_debug_expanded:
-		hud_panel.size = Vector2(330.0, 22.0)
-		hud_label.size = Vector2(320.0, 18.0)
+		hud_panel.size = Vector2(235.0, 22.0)
+		hud_label.size = Vector2(225.0, 18.0)
 		hud_label.text = (
-			"MICROC0RE %s | %d FPS | bac %d | amoeba %d | ciliates %d | feeding %d | F1 debug"
+			"%s %dFPS | B%d A%d C%d F%d | F1"
 			% [
 				state_text,
 				Engine.get_frames_per_second(),
