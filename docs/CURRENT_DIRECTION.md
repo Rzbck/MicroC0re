@@ -47,6 +47,18 @@ Until Epic #14 is complete, work in this order:
 
 This priority order is intentional: do not add expensive visual detail before we know the render budget.
 
+## GPU-first desktop rule
+
+The desktop performance target is now **GPU-first where the work is massively parallel**.
+
+- Forward+ / RenderingDevice is the primary desktop renderer.
+- Use GPU instancing for large visible populations.
+- Move continuum chemistry and later agent hot loops to compute shaders when the state can remain GPU-resident.
+- Keep CPU reference/headless modes for correctness and CI.
+- Do not force CPU use merely for architectural simplicity.
+- Equally, do not introduce a per-tick full GPU readback: synchronization can erase the GPU advantage.
+- Issue #27 owns the GPU migration.
+
 ## Non-negotiable performance contract
 
 For the agreed baseline scene on the maintainer workstation:
@@ -57,7 +69,7 @@ For the agreed baseline scene on the maintainer workstation:
 - off-screen organisms must be culled;
 - far/mid/near/macro zoom levels must use explicit LOD;
 - distant organisms must not pay the cost of close-up appendage/detail rendering;
-- large populations should use batched/cached sprite approaches where appropriate;
+- large populations should use GPU instancing/bulk buffers where appropriate;
 - do not claim an optimization worked without measured before/after numbers.
 
 Simulation tick rate and render FPS are separate concerns. Current contract: biology at deterministic 60 Hz, chemistry at 30 Hz, presentation targeting 120+ FPS. A high simulation tick rate is not evidence of fluid rendering.
