@@ -110,3 +110,19 @@ Only pursue after profiling:
 - worker-threaded CPU chemistry if deterministic behavior can be preserved.
 
 Do not optimize blindly.
+
+
+## Optimization architecture
+
+The full scaling plan (packed SoA state, Verlet lists, counter-based RNG, MultiMesh, CPU threading, native GDExtension and coherent GPU compute) lives in:
+
+- [docs/OPTIMIZATION_STRATEGY.md](OPTIMIZATION_STRATEGY.md)
+
+Tracked work:
+- #20 packed SoA;
+- #21 Verlet neighbor lists;
+- #22 parallel-deterministic RNG;
+- #23 MultiMesh;
+- #24 CPU threading;
+- #25 native GDExtension gate;
+- #26 GPU compute research.
