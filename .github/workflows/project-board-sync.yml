@@ -1,0 +1,179 @@
+name: Sync MicroC0re Project
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/project-board-sync.yml"
+  workflow_dispatch:
+  issues:
+    types: [opened, reopened, labeled, unlabeled, closed]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: microcore-project-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_OWNER: Rzbck
+  PROJECT_NUMBER: "2"
+  PROJECT_TOKEN: ${{ secrets.MICROCORE_PROJECT_TOKEN }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure connector-writable workflow labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure_label () {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            gh api "repos/$REPO/labels/$name" >/dev/null 2>&1 ||               gh api --method POST "repos/$REPO/labels"                 -f name="$name" -f color="$color" -f description="$description" >/dev/null
+          }
+          ensure_label "status:backlog" "6e7781" "Project Status = Backlog"
+          ensure_label "status:todo" "2da44e" "Project Status = Todo"
+          ensure_label "status:in-progress" "bf8700" "Project Status = In Progress"
+          ensure_label "status:review" "8250df" "Project Status = Review"
+          ensure_label "status:done" "0969da" "Project Status = Done"
+
+      - name: Stop after label bootstrap when no issue or PR triggered the run
+        if: ${{ github.event.issue == null && github.event.pull_request == null }}
+        run: echo "Status labels are ready."
+
+      - name: Resolve desired status
+        if: ${{ github.event.issue != null || github.event.pull_request != null }}
+        id: desired
+        env:
+          LABELS_JSON: ${{ toJson(github.event.issue.labels || github.event.pull_request.labels) }}
+          EVENT_ACTION: ${{ github.event.action }}
+          IS_PR: ${{ github.event.pull_request != null }}
+          PR_DRAFT: ${{ github.event.pull_request.draft || false }}
+          ITEM_STATE: ${{ github.event.issue.state || github.event.pull_request.state }}
+          PR_MERGED: ${{ github.event.pull_request.merged || false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$ITEM_STATE" == "closed" || "$PR_MERGED" == "true" ]]; then
+            desired="Done"
+            label="status:done"
+          elif echo "$LABELS_JSON" | jq -e '.[] | select(.name == "status:backlog")' >/dev/null; then
+            desired="Backlog"
+            label="status:backlog"
+          elif echo "$LABELS_JSON" | jq -e '.[] | select(.name == "status:review")' >/dev/null; then
+            desired="Review"
+            label="status:review"
+          elif echo "$LABELS_JSON" | jq -e '.[] | select(.name == "status:in-progress")' >/dev/null; then
+            desired="In Progress"
+            label="status:in-progress"
+          elif echo "$LABELS_JSON" | jq -e '.[] | select(.name == "status:todo")' >/dev/null; then
+            desired="Todo"
+            label="status:todo"
+          elif [[ "$IS_PR" == "true" && "$PR_DRAFT" != "true" ]]; then
+            desired="Review"
+            label="status:review"
+          elif [[ "$IS_PR" == "true" ]]; then
+            desired="In Progress"
+            label="status:in-progress"
+          else
+            desired="Todo"
+            label="status:todo"
+          fi
+
+          echo "status=$desired" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize status label
+        if: ${{ github.event.issue != null || github.event.pull_request != null }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          DESIRED_LABEL: ${{ steps.desired.outputs.label }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for label in status:backlog status:todo status:in-progress status:review status:done; do
+            if [[ "$label" != "$DESIRED_LABEL" ]]; then
+              gh api --method DELETE "repos/$REPO/issues/$NUMBER/labels/$label" >/dev/null 2>&1 || true
+            fi
+          done
+          gh api --method POST "repos/$REPO/issues/$NUMBER/labels"             --input - >/dev/null <<JSON
+          {"labels":["$DESIRED_LABEL"]}
+          JSON
+
+      - name: Explain missing Project token
+        if: ${{ (github.event.issue != null || github.event.pull_request != null) && env.PROJECT_TOKEN == '' }}
+        run: |
+          echo "::warning::MICROCORE_PROJECT_TOKEN is not configured. Labels are synchronized, but the GitHub Project Status field cannot be updated."
+          echo "Create a repository secret named MICROCORE_PROJECT_TOKEN with a GitHub token that has repo + project access."
+
+      - name: Synchronize GitHub Project V2 card
+        if: ${{ (github.event.issue != null || github.event.pull_request != null) && env.PROJECT_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ env.PROJECT_TOKEN }}
+          CONTENT_ID: ${{ github.event.issue.node_id || github.event.pull_request.node_id }}
+          DESIRED_STATUS: ${{ steps.desired.outputs.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          project_json="$(gh api graphql             -f login="$PROJECT_OWNER"             -F number="$PROJECT_NUMBER"             -f query='
+              query($login:String!, $number:Int!) {
+                user(login:$login) {
+                  projectV2(number:$number) {
+                    id
+                    fields(first:50) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options { id name }
+                        }
+                      }
+                    }
+                  }
+                }
+              }')"
+
+          project_id="$(jq -r '.data.user.projectV2.id' <<<"$project_json")"
+          status_field_id="$(jq -r '.data.user.projectV2.fields.nodes[] | select(.name=="Status") | .id' <<<"$project_json")"
+          status_option_id="$(jq -r --arg s "$DESIRED_STATUS" '.data.user.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name==$s) | .id' <<<"$project_json")"
+
+          if [[ -z "$project_id" || "$project_id" == "null" || -z "$status_field_id" || "$status_field_id" == "null" || -z "$status_option_id" || "$status_option_id" == "null" ]]; then
+            echo "::error::Could not resolve MicroC0re Project/Status IDs."
+            exit 1
+          fi
+
+          item_id="$(gh api graphql             -f project="$project_id"             -f content="$CONTENT_ID"             -f query='
+              mutation($project:ID!, $content:ID!) {
+                addProjectV2ItemById(input:{projectId:$project, contentId:$content}) {
+                  item { id }
+                }
+              }'             --jq '.data.addProjectV2ItemById.item.id')"
+
+          gh api graphql             -f project="$project_id"             -f item="$item_id"             -f field="$status_field_id"             -f option="$status_option_id"             -f query='
+              mutation($project:ID!, $item:ID!, $field:ID!, $option:String!) {
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$project,
+                  itemId:$item,
+                  fieldId:$field,
+                  value:{singleSelectOptionId:$option}
+                }) {
+                  projectV2Item { id }
+                }
+              }' >/dev/null
+
+          echo "Project Status -> $DESIRED_STATUS"
