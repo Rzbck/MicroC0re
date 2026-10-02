@@ -1,5 +1,20 @@
 # Art direction — Living Microscope
 
+## Reset decision — 2026-10-02
+
+The first visible renderer is **rejected as the final visual direction**. It is useful only as a debug/prototyping layer.
+
+Specific failures observed:
+- vector-like capsules and procedural lines instead of deliberate pixel sprites;
+- grey/undefined area visible when zooming out;
+- severe close-zoom performance collapse (roughly 5–8 FPS observed around 130 organisms);
+- insufficient LOD;
+- animations too procedural/basic;
+- fission, adhesion, predation/engulfment and other interactions are not readable enough.
+
+Current execution gate: Epic #14 and `docs/CURRENT_DIRECTION.md`.
+
+
 The target is **not** a field of tiny colored dashes.
 
 MicroC0re should feel like observing an alien-but-biologically-grounded ecosystem through a deliberately pixelated scientific instrument.
@@ -27,32 +42,42 @@ Later organism classes may add cilia, pseudopodia, vacuoles, engulfment membrane
 
 ## Pixel strategy
 
-The chemistry layer is a true low-resolution texture:
-- 96 x 64 scalar samples in the current prototype;
-- nearest-neighbor filtering;
-- rendered as a single texture over the Petri world;
-- refreshed independently from the render framerate.
+The chemistry layer may remain a low-resolution texture, but that **does not by itself define the final pixel-art style**.
 
-This produces large readable chemical pixels when zoomed and avoids thousands of Canvas draw calls per frame.
+The organism pipeline must move from procedural vector-like drawing to deliberate low-resolution sprite/sprite-part design:
+- controlled pixel clusters;
+- limited palettes and coherent color ramps;
+- intentional outlines / selective outlines;
+- no accidental smoothing;
+- key-pose/frame animation rather than arbitrary continuous line deformation;
+- silhouette readability first;
+- integer-friendly presentation at normal zoom.
 
-Organisms remain continuous simulation objects but are rendered with:
-- non-antialiased geometry;
-- coarse silhouettes;
-- discrete internal marks;
-- nearest-filtered surroundings.
+The simulation remains continuous. Rendering may quantize/pixelate presentation, but must never feed that quantization back into biology.
 
-The renderer must never quantize the actual simulation state.
+Reference principles:
+- Lospec: pixel art depends on deliberate pixel-level construction, not merely low resolution.
+- PixelJoint/Cure: pay attention to pixel clusters, controlled AA, jaggies, banding, noise and palette discipline.
+
+Primary tasks: #15 and #18.
 
 ## Performance architecture
 
-Current visible target:
-- organism / movement simulation: 120 Hz fixed step;
-- chemistry: 60 Hz deterministic sub-rate;
-- field texture upload: 20 Hz;
-- presentation cap: 144 FPS;
-- rod contacts: uniform spatial hash, not global O(N^2).
+Performance is now a product requirement, not a later polish step.
 
-The field texture update may become a compute shader later, but the CPU reference remains useful for validation.
+Baseline contract:
+- target 120 FPS during normal microscope inspection;
+- 60 FPS development floor;
+- organism simulation tick and render FPS are separate;
+- explicit far/mid/near/macro LOD;
+- off-screen culling;
+- no close-up appendage cost for distant organisms;
+- profile simulation, chemistry, texture upload, organism rendering, appendages and HUD separately;
+- use cached/batched sprites or MultiMesh2D where profiling shows it helps.
+
+Observed close-zoom 5–8 FPS is a blocker. See #17.
+
+The CPU reference simulation remains useful for validation even if later rendering/chemistry paths use GPU acceleration.
 
 ## Camera / inspection
 
@@ -102,3 +127,14 @@ Useful ideas:
 - self-organization can be visually beautiful without authored animation.
 
 Reaction-diffusion / continuous-automata experiments remain a separate layer from the explicit bacterial agents so we do not conflate mathematical creatures with literal bacteria.
+
+
+## Pixel-art research notes
+
+Useful specialist references:
+- Lospec “Pixel Art: Where to Start”: https://lospec.com/articles/pixel-art-where-to-start/
+- PixelJoint / Cure “The Pixel Art Tutorial”: https://pixeljoint.com/forum/forum_posts.asp?TID=11299
+- itch.io bacteria + Pixel Art browsing: https://itch.io/games/tag-bacteria/tag-pixel-art
+- Microscope (Schkuey): https://schkuey.itch.io/microscope
+
+These are references for process/readability and examples of low-resolution microbe presentation, not assets to copy.
