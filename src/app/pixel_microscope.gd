@@ -128,14 +128,14 @@ func _setup_hud() -> void:
 
 	var panel := ColorRect.new()
 	panel.position = Vector2(6.0, 6.0)
-	panel.size = Vector2(316.0, 74.0)
+	panel.size = Vector2(332.0, 108.0)
 	panel.color = Color(0.005, 0.010, 0.012, 0.88)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(panel)
 
 	hud_label = Label.new()
 	hud_label.position = Vector2(10.0, 9.0)
-	hud_label.size = Vector2(306.0, 68.0)
+	hud_label.size = Vector2(322.0, 102.0)
 	hud_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_label.add_theme_font_size_override("font_size", 8)
 	hud_label.add_theme_color_override("font_color", Color(0.84, 0.94, 0.88))
