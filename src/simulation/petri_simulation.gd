@@ -187,10 +187,10 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	tumble_rate = clampf(tumble_rate, 0.025, 8.0)
 	var tumble_probability: float = 1.0 - exp(-tumble_rate * dt)
 
-	if rng.randf() < tumble_probability:
+	if not bool(cell.dividing) and rng.randf() < tumble_probability:
 		cell.angle = float(cell.angle) + rng.randfn(0.0, tumble_sigma)
 
-	if rotational_diffusion > 0.0:
+	if rotational_diffusion > 0.0 and not bool(cell.dividing):
 		var sigma: float = sqrt(2.0 * rotational_diffusion * dt)
 		cell.angle = float(cell.angle) + rng.randfn(0.0, sigma)
 
@@ -203,11 +203,13 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	)
 	var size_drag: float = 0.84 + 0.20 * float(cell.gene_size)
 	var energy_speed_factor: float = clampf(float(cell.energy) / 1.6, 0.18, 1.0)
+	var division_mobility: float = 0.16 if bool(cell.dividing) else 1.0
 	var speed: float = (
 		run_speed
 		* float(cell.gene_speed)
 		* flagella_propulsion
 		* energy_speed_factor
+		* division_mobility
 		/ size_drag
 	)
 
@@ -246,10 +248,11 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			+ 0.22 * float(cell.pili_count)
 		)
 		+ uptake_capacity_cost * maxf(0.0, float(cell.gene_uptake) - 0.75)
+		+ 0.006 * maxf(0.0, float(cell.gene_adhesion) - 0.7)
 	)
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
-	if consumed > 0.0:
+	if consumed > 0.0 and not bool(cell.dividing):
 		var growth_delta: float = (
 			growth_per_nutrient
 			* float(cell.gene_growth)
@@ -269,16 +272,29 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 	if float(cell.energy) <= 0.0:
 		cell.energy = 0.0
-		cell.alive = false
+		cell.begin_lysis()
 
 
-func _ready_to_divide(cell: Variant) -> bool:
+func _advance_lysis(cell: Variant, dt: float) -> void:
+	cell.lysis_progress = minf(
+		1.0,
+		float(cell.lysis_progress) + dt / maxf(0.001, lysis_duration)
+	)
+	cell.angle = float(cell.angle) + 0.20 * dt
+
+	var release: float = 0.025 * dt * maxf(1.0, float(cell.length))
+	waste.add_radial_world(Vector2(cell.position), 2.2, release)
+
+
+func _ready_to_begin_division(cell: Variant) -> bool:
 	var required_length: float = base_division_length * float(cell.gene_size)
 	var required_energy: float = base_division_energy * (
 		0.82 + 0.18 * float(cell.gene_size)
 	)
 	return (
-		float(cell.length) >= required_length
+		not bool(cell.dividing)
+		and not bool(cell.dying)
+		and float(cell.length) >= required_length
 		and float(cell.energy) >= required_energy
 		and bool(cell.alive)
 	)
@@ -320,7 +336,7 @@ func _divide(parent: Variant) -> Array:
 
 func _recycle_dead_cell(cell: Variant) -> void:
 	var recycled: float = maxf(0.05, float(cell.length) * 0.04)
-	waste.add_radial_world(Vector2(cell.position), 2.5, recycled * 0.12)
+	waste.add_radial_world(Vector2(cell.position), 3.0, recycled * 0.16)
 
 
 func _feed_environment(dt: float) -> void:
