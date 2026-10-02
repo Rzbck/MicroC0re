@@ -432,7 +432,7 @@ func _draw_ciliates() -> void:
 		if not visible_rect.has_point(position):
 			continue
 
-		if zoom_value < 0.55:
+		if zoom_value < _minimum_camera_zoom() * 1.16:
 			var marker_size: float = maxf(0.48, 1.35 / zoom_value)
 			draw_rect(
 				Rect2(
