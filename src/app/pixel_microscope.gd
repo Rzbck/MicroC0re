@@ -3,6 +3,7 @@ extends Node2D
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
+const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 12
@@ -26,6 +27,7 @@ const LINEAGE_PALETTE := [
 
 var sim: Variant
 var atlas: Variant
+var far_renderer: Node2D
 var current_seed: int = 1337
 
 var accumulator: float = 0.0
@@ -60,6 +62,7 @@ func _ready() -> void:
 
 	atlas = PixelAtlasScript.new()
 	_setup_infinite_background()
+	_setup_gpu_renderers()
 	_start_simulation(current_seed)
 	_setup_camera()
 	_setup_field_texture()
@@ -90,6 +93,13 @@ func _setup_infinite_background() -> void:
 	tiles.modulate = Color(1.0, 1.0, 1.0, 0.78)
 	tiles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(tiles)
+
+
+func _setup_gpu_renderers() -> void:
+	far_renderer = FarMultiMeshRendererScript.new()
+	far_renderer.name = "GPUInstancing"
+	add_child(far_renderer)
+	far_renderer.initialize(1200)
 
 
 func _start_simulation(seed_value: int) -> void:
@@ -211,6 +221,20 @@ func _draw_bacteria() -> void:
 	var mid_lod: bool = zoom_value < 2.40
 	var frame: int = posmod(int(floor(visual_time * 8.0)), 4)
 
+	if far_lod:
+		var count: int = int(far_renderer.update_from_cells(
+			sim.bacteria,
+			visible_rect,
+			zoom_value,
+			LINEAGE_PALETTE
+		))
+		visible_cells = count
+		far_cells = count
+		sprite_cells = 0
+		return
+
+	far_renderer.clear()
+
 	for cell in sim.bacteria:
 		var position: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(position):
@@ -225,16 +249,6 @@ func _draw_bacteria() -> void:
 			color = color.lightened(0.12)
 
 		if far_lod:
-			far_cells += 1
-			var world_pixel: float = maxf(0.30, 1.15 / zoom_value)
-			draw_rect(
-				Rect2(
-					position - Vector2(world_pixel, world_pixel) * 0.5,
-					Vector2(world_pixel, world_pixel)
-				),
-				color,
-				true
-			)
 			continue
 
 		sprite_cells += 1
