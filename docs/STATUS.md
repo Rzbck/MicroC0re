@@ -26,7 +26,6 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #27 GPU-first desktop pipeline
 - #28 amoeboid deformation / staged engulfment
 - #29 trophic balance / evolving predators / population guard
-- #31 plasmid conjugation / horizontal gene transfer
 
 ## REVIEW
 
@@ -34,6 +33,7 @@ When an agent cannot mutate Project V2 directly, `scripts/sync_project_board.ps1
 - #4 temporal run-and-tumble chemotaxis
 - #5 uptake / metabolism / growth / death / binary fission
 - #16 camera / microscope framing / zoom / pan
+- #31 plasmid conjugation / horizontal gene transfer
   - latest implementation is **overview-or-zoom-in only**;
   - minimum zoom is cover-fit;
   - pan is clamped so the viewport cannot leave the simulated world;
