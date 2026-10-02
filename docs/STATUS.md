@@ -27,9 +27,10 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #28 amoeboid deformation / staged engulfment
 - #29 trophic balance / evolving predators / population guard
 - #38 living aquatic biome epic
+- #40 explicit phototroph / microalgal producers
 - #44 expanded organism guilds / morphologies
-- #45 visible killing / feeding / lysis / recycling
 - #48 water flow / hydrodynamics
+- #54 yeast / fungal decomposer guild
 - #56 day/night / diel oxygen cycle
 - #57 fused GPU multi-field biome compute
 
@@ -46,6 +47,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #39 oxygen/light/detritus/EPS/damage biome fields
 - #41 scavengers / carrion / damage-cue chemotaxis
 - #46 compact organism inspector
+- #45 visible killing / feeding / lysis / recycling
 - #47 overview LOD consistency fix
 
 These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
@@ -63,7 +65,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
 - #35 predator-prey coevolution / bacterial defence traits
 - #36 lineage tree / ancestry history / emergent phenotype clusters
-- #40 explicit phototroph/cyanobacterial producer organisms
 - #42 metabolic cross-feeding
 - #43 mature biofilm/EPS ecosystem engineering
 - #49 multi-trophic predation
@@ -71,7 +72,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #51 succession / disturbance / recolonization
 - #52 optional host-tissue / heme / blood chemistry
 - #53 phycosphere symbiosis
-- #54 fungi / yeast / hyphal decomposers
 - #55 rotifer / nematode microfauna
 
 ## DONE
@@ -132,18 +132,27 @@ Current niche effects:
 - scavengers consume detritus and chemotax toward carrion/damage signals;
 - biofilm builders secrete more EPS and swim more slowly;
 - phototrophs gain light-assisted energy and release oxygen;
-- heterotrophs remain general dissolved-resource competitors.
+- heterotrophs remain general dissolved-resource competitors;
+- bacterial ecotypes now use distinct cached pixel silhouettes instead of color-only reskins.
+
+Explicit non-bacterial guilds now also exist:
+- evolving microalgae-like producers with light-driven oxygenation, exudates, division and lysis;
+- evolving yeast-like decomposers with detritus consumption, mineralization, budding and lysis.
 
 ### Predation / death
 - amoebae and ciliates can bias search toward damage plumes when direct prey is absent;
+- ciliates graze bacteria, microalgae and yeast-like decomposers;
+- amoebae graze bacteria, microalgae, decomposers and suitably small ciliates;
 - active predation leaks detritus/damage cues into the local biome;
-- starved amoebae/ciliates now enter a staged lysis/death state instead of disappearing instantly;
-- predator death renders fragments/fade and recycles biomass.
+- low-energy amoebae/ciliates visibly weaken and slow before terminal lysis;
+- starved amoebae/ciliates enter a staged lysis/death state instead of disappearing instantly;
+- predator death renders fragments/fade and recycles biomass;
+- a regression test now verifies ciliate feeding remains attached to non-bacterial prey across frames.
 
 ### Validation
 - deterministic smoke signature includes new biome totals, bacterial guild and predator death state;
 - smoke tests validate non-negative biome fields and guild/lysis invariants;
-- latest Godot Actions smoke passed after the biome implementation;
+- latest Godot Actions smoke passed after the producer/decomposer, multi-trophic and starvation passes;
 - slow biome fields run at 10 Hz while fast chemistry remains 30 Hz to control CPU-reference cost;
 - #57 owns migration of the expanded biome fields into fused GPU compute.
 
