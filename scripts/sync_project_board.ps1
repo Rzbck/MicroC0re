@@ -257,6 +257,11 @@ foreach ($required in @("Backlog", "Todo", "In Progress", "Review", "Done")) {
     }
 }
 
+$statusOptionIdByName = @{}
+foreach ($option in @($statusField.options)) {
+    $statusOptionIdByName[[string]$option.name] = [string]$option.id
+}
+
 $statusMap = [ordered]@{
     "Backlog" = @(25)
     "Todo" = @(6, 11, 20, 21, 22, 24, 30, 32, 33, 34, 35, 36)
@@ -270,34 +275,99 @@ Write-Host ""
 Write-Host "Synchronizing cards..." -ForegroundColor Cyan
 
 foreach ($status in $statusMap.Keys) {
+    $optionId = [string]$statusOptionIdByName[$status]
+
+    if ([string]::IsNullOrWhiteSpace($optionId)) {
+        throw "No option ID found for Status '$status'."
+    }
+
     foreach ($number in $statusMap[$status]) {
         $kind = if ($pullRequests -contains $number) { "pull" } else { "issues" }
         $url = "https://github.com/Rzbck/MicroC0re/$kind/$number"
 
-        & gh project item-add $projectNumber --owner $Owner --url $url --format json *> $null
+        # item-add is used as the reliable way to resolve the ProjectV2 item ID.
+        # On existing items GitHub CLI returns the project item rather than
+        # requiring us to scrape the board separately.
+        $addRaw = Invoke-GhText -Args @(
+            "project", "item-add", "$projectNumber",
+            "--owner", $Owner,
+            "--url", $url,
+            "--format", "json"
+        )
+        $projectItem = ConvertFrom-GhJsonText -Text $addRaw
+        $itemId = [string]$projectItem.id
+
+        if ([string]::IsNullOrWhiteSpace($itemId)) {
+            throw "Unable to resolve Project item ID for #$number ($url)."
+        }
 
         Write-Host ("#{0,-2} -> {1}" -f $number, $status)
 
-        $editOutput = @(
-            & gh project item-edit $projectNumber --owner $Owner --url $url --field "Status" --value $status --format json 2>&1
+        $editRaw = Invoke-GhText -Args @(
+            "project", "item-edit",
+            "--id", $itemId,
+            "--project-id", $projectId,
+            "--field-id", ([string]$statusField.id),
+            "--single-select-option-id", $optionId,
+            "--format", "json"
         )
 
-        if ($LASTEXITCODE -ne 0) {
-            $editText = ($editOutput | ForEach-Object { "$_" }) -join [Environment]::NewLine
-            throw ("Failed to set #{0} to '{1}'.{2}{3}" -f $number, $status, [Environment]::NewLine, $editText)
-        }
+        $null = ConvertFrom-GhJsonText -Text $editRaw
     }
 }
 
 Write-Host ""
 Write-Host "Board after sync:" -ForegroundColor Cyan
-& gh project item-list $projectNumber --owner $Owner --limit 200 --field "Status"
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Project cards were updated, but verification listing failed."
+$listRaw = Invoke-GhText -Args @(
+    "project", "item-list", "$projectNumber",
+    "--owner", $Owner,
+    "--limit", "200",
+    "--format", "json"
+)
+$list = ConvertFrom-GhJsonText -Text $listRaw
+
+$rows = @(
+    foreach ($item in @($list.items)) {
+        $number = $null
+        $type = $null
+        $url = $null
+
+        if ($null -ne $item.content) {
+            $number = $item.content.number
+            $type = $item.content.type
+            $url = $item.content.url
+        }
+
+        [PSCustomObject]@{
+            Number = $number
+            Type = $type
+            Status = $item.status
+            Title = $item.title
+            URL = $url
+        }
+    }
+)
+
+$rows |
+    Sort-Object Status, Number |
+    Format-Table Number, Type, Status, Title -AutoSize |
+    Out-Host
+
+$expectedCount = 0
+foreach ($status in $statusMap.Keys) {
+    $expectedCount += @($statusMap[$status]).Count
+}
+
+if (@($rows).Count -lt $expectedCount) {
+    Write-Host (
+        "Warning: board lists {0} items; expected at least {1} mapped items." -f
+        @($rows).Count,
+        $expectedCount
+    ) -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "PROJECT SYNC PASS" -ForegroundColor Green
-Write-Host "Backlog / Todo / In Progress / Review / Done are real Project Status columns."
+Write-Host "Backlog / Todo / In Progress / Review / Done are real Project Status columns."`nWrite-Host "Project items were updated through ProjectV2 item/field/option IDs."
 exit 0
