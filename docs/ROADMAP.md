@@ -11,6 +11,7 @@ GitHub Issues are the source of truth for active work. This file describes seque
 - [x] Create Petri Kernel v0.1 epic and child issues.
 - [ ] Merge the bootstrap PR.
 - [ ] Run the first headless smoke test on Godot 4.7.1.
+- [ ] Issue #11 — enable the same smoke test in GitHub Actions.
 
 ## Phase 1 — Petri Kernel v0.1
 
