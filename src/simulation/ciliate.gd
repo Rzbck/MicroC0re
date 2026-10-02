@@ -21,6 +21,12 @@ var feeding_progress: float = 0.0
 var cooldown: float = 0.0
 var swim_phase: float = 0.0
 
+# Larger amoeboid predators may capture ciliates. The ciliate remains visible
+# during the staged engulfment rather than disappearing on contact.
+var engulfed_by_id: int = -1
+var engulf_progress: float = 0.0
+var consumed: bool = false
+
 # Heritable phenotype.
 var gene_speed: float = 1.0
 var gene_perception: float = 1.0
@@ -121,3 +127,7 @@ func begin_lysis() -> void:
 	dying = true
 	alive = false
 	lysis_progress = 0.0
+
+
+func biomass_size() -> float:
+	return maxf(0.1, radius * 2.2)
