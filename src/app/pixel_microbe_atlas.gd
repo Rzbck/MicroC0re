@@ -178,14 +178,14 @@ func _draw_body(
 
 	# Intentional highlight cluster.
 	_hline(image, left + 2, right - 3, center_y - 1, light)
-	_set(image, left + 1, center_y, mid)
+	_set_px(image, left + 1, center_y, mid)
 
 	# Nucleoid-like broken cluster: not a membrane-bound organelle.
 	var span: int = maxi(2, right - left - 5)
 	for offset in range(0, span, 3):
-		_set(image, left + 3 + offset, center_y, dark)
+		_set_px(image, left + 3 + offset, center_y, dark)
 		if offset % 2 == 0:
-			_set(image, left + 4 + offset, center_y + 1, dark)
+			_set_px(image, left + 4 + offset, center_y + 1, dark)
 
 
 func _draw_dividing_body(
@@ -215,12 +215,12 @@ func _draw_dividing_body(
 
 	# Visible septum / constriction.
 	for y in range(center_y - 2, center_y + 3):
-		_set(image, center_x, y, outline)
+		_set_px(image, center_x, y, outline)
 
-	_set(image, center_x - 1, center_y - 2, dark)
-	_set(image, center_x + 1, center_y + 2, dark)
-	_set(image, center_x - 1, center_y, light)
-	_set(image, center_x + 1, center_y, light)
+	_set_px(image, center_x - 1, center_y - 2, dark)
+	_set_px(image, center_x + 1, center_y + 2, dark)
+	_set_px(image, center_x - 1, center_y, light)
+	_set_px(image, center_x + 1, center_y, light)
 
 
 func _draw_lysing_body(
@@ -252,12 +252,12 @@ func _draw_lysing_body(
 			var key: int = posmod(x * 3 + y * 5 + frame * 7, 11)
 			var threshold: int = 1 + frame
 			if key < threshold:
-				_set(image, x, y, Color(0.0, 0.0, 0.0, 0.0))
+				_set_px(image, x, y, Color(0.0, 0.0, 0.0, 0.0))
 
 	# A few detached fragments.
-	_set(image, right + 3 + frame, center_y - 2, mid)
-	_set(image, right + 1 + frame, center_y + 3, light)
-	_set(image, left - 2 - frame, center_y + 2, outline)
+	_set_px(image, right + 3 + frame, center_y - 2, mid)
+	_set_px(image, right + 1 + frame, center_y + 3, light)
+	_set_px(image, left - 2 - frame, center_y + 2, outline)
 
 
 func _draw_flagella(
@@ -282,11 +282,11 @@ func _draw_flagella(
 		for step in range(9):
 			var x: int = start_x - step
 			var y: int = center_y + int(wave[step]) + y_bias * 2
-			_set(image, x, y, color)
+			_set_px(image, x, y, color)
 
 			# Small connected clusters avoid single-pixel visual noise.
 			if step in [2, 5, 8]:
-				_set(image, x, y + (1 if tail % 2 == 0 else -1), color)
+				_set_px(image, x, y + (1 if tail % 2 == 0 else -1), color)
 
 
 func _draw_pili(
@@ -308,10 +308,10 @@ func _draw_pili(
 	for i in range(count):
 		var x: int = int(anchors[i])
 		var shift: int = 1 if posmod(frame + i, 2) == 0 else 0
-		_set(image, x, center_y - 4 - shift, color)
-		_set(image, x + 1, center_y - 5 - shift, color)
-		_set(image, x, center_y + 4 + shift, color)
-		_set(image, x - 1, center_y + 5 + shift, color)
+		_set_px(image, x, center_y - 4 - shift, color)
+		_set_px(image, x + 1, center_y - 5 - shift, color)
+		_set_px(image, x, center_y + 4 + shift, color)
+		_set_px(image, x - 1, center_y + 5 + shift, color)
 
 
 func _hline(
@@ -322,10 +322,10 @@ func _hline(
 	color: Color
 ) -> void:
 	for x in range(x0, x1 + 1):
-		_set(image, x, y, color)
+		_set_px(image, x, y, color)
 
 
-func _set(image: Image, x: int, y: int, color: Color) -> void:
+func _set_px(image: Image, x: int, y: int, color: Color) -> void:
 	if x < 0 or x >= SPRITE_WIDTH or y < 0 or y >= SPRITE_HEIGHT:
 		return
 	image.set_pixel(x, y, color)
