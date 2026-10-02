@@ -413,6 +413,11 @@ func _advance_protozoa(dt: float) -> void:
 		if float(proto.energy) <= 0.0:
 			proto.alive = false
 			_release_predator_prey(int(proto.feeding_target_id), int(proto.id))
+			_recycle_predator_body(
+				Vector2(proto.position),
+				float(proto.radius),
+				1.0
+			)
 			continue
 
 		if int(proto.feeding_target_id) >= 0:
@@ -442,9 +447,19 @@ func _advance_protozoa(dt: float) -> void:
 				next_protozoa.append(proto)
 				continue
 		else:
-			desired_angle += sin(
-				simulation_time * 0.73 + float(proto.deform_phase)
-			) * 0.45
+			var cue_direction: Vector2 = _damage_cue_direction(
+				Vector2(proto.position)
+			)
+			if cue_direction.length_squared() > 0.0:
+				desired_angle = lerp_angle(
+					desired_angle,
+					cue_direction.angle(),
+					0.58
+				)
+			else:
+				desired_angle += sin(
+					simulation_time * 0.73 + float(proto.deform_phase)
+				) * 0.45
 
 		proto.angle = lerp_angle(
 			float(proto.angle),
@@ -457,6 +472,7 @@ func _advance_protozoa(dt: float) -> void:
 		proto.position = (
 			Vector2(proto.position)
 			+ Vector2.RIGHT.rotated(float(proto.angle)) * speed * dt
+			+ _water_flow(Vector2(proto.position)) * dt
 		)
 		proto.deform_amount = lerpf(
 			float(proto.deform_amount),
@@ -529,6 +545,11 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 	var pull_alpha: float = clampf(dt * (2.0 + progress * 5.0), 0.0, 1.0)
 	prey.position = prey_position.lerp(proto_position, pull_alpha)
 	prey.engulf_progress = progress
+	damage_cue.add_radial_world(
+		Vector2(prey.position),
+		3.4,
+		0.010 * dt * (1.0 + progress * 2.0)
+	)
 	prey.angle = lerp_angle(
 		float(prey.angle),
 		float(proto.angle) + PI * 0.5,
@@ -542,6 +563,16 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
+		detritus.add_radial_world(
+			Vector2(prey.position),
+			2.6,
+			0.020 + float(prey.length) * 0.006
+		)
+		damage_cue.add_radial_world(
+			Vector2(prey.position),
+			4.6,
+			0.045
+		)
 		proto.energy = minf(
 			20.0,
 			float(proto.energy) + 1.35 + float(prey.length) * 0.18
@@ -628,6 +659,11 @@ func _advance_ciliates(dt: float) -> void:
 				int(ciliate.feeding_target_id),
 				int(ciliate.id)
 			)
+			_recycle_predator_body(
+				Vector2(ciliate.position),
+				float(ciliate.radius),
+				0.75
+			)
 			continue
 
 		if int(ciliate.feeding_target_id) >= 0:
@@ -657,9 +693,19 @@ func _advance_ciliates(dt: float) -> void:
 				next_ciliates.append(ciliate)
 				continue
 		else:
-			desired_angle += sin(
-				simulation_time * 1.9 + float(ciliate.swim_phase)
-			) * 0.28
+			var cue_direction: Vector2 = _damage_cue_direction(
+				Vector2(ciliate.position)
+			)
+			if cue_direction.length_squared() > 0.0:
+				desired_angle = lerp_angle(
+					desired_angle,
+					cue_direction.angle(),
+					0.42
+				)
+			else:
+				desired_angle += sin(
+					simulation_time * 1.9 + float(ciliate.swim_phase)
+				) * 0.28
 
 		ciliate.angle = lerp_angle(
 			float(ciliate.angle),
@@ -672,6 +718,7 @@ func _advance_ciliates(dt: float) -> void:
 		ciliate.position = (
 			Vector2(ciliate.position)
 			+ Vector2.RIGHT.rotated(float(ciliate.angle)) * speed * dt
+			+ _water_flow(Vector2(ciliate.position)) * dt
 		)
 		_constrain_ciliate(ciliate)
 
@@ -733,6 +780,11 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 	)
 	ciliate.feeding_progress = progress
 	prey.engulf_progress = progress
+	damage_cue.add_radial_world(
+		Vector2(prey.position),
+		3.0,
+		0.008 * dt * (1.0 + progress * 2.5)
+	)
 
 	var mouth: Vector2 = (
 		Vector2(ciliate.position)
@@ -753,6 +805,16 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
+		detritus.add_radial_world(
+			Vector2(prey.position),
+			2.2,
+			0.016 + float(prey.length) * 0.005
+		)
+		damage_cue.add_radial_world(
+			Vector2(prey.position),
+			4.0,
+			0.036
+		)
 		ciliate.energy = minf(
 			16.0,
 			float(ciliate.energy) + 0.95 + float(prey.length) * 0.14
@@ -808,6 +870,17 @@ func _constrain_ciliate(ciliate: Variant) -> void:
 
 	ciliate.position = position
 	ciliate.angle = wrapf(angle, -PI, PI)
+
+
+func _recycle_predator_body(
+	position: Vector2,
+	radius: float,
+	scale: float
+) -> void:
+	var biomass: float = maxf(0.08, radius * 0.055 * scale)
+	detritus.add_radial_world(position, 4.8 + radius, biomass)
+	waste.add_radial_world(position, 3.6 + radius, biomass * 0.20)
+	damage_cue.add_radial_world(position, 6.0 + radius, biomass * 0.85)
 
 
 func _release_predator_prey(prey_id: int, predator_id: int) -> void:
