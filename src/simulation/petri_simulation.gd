@@ -909,7 +909,17 @@ func _advance_protozoa(dt: float) -> void:
 		)
 
 		var pulse: float = 0.82 + 0.18 * sin(float(proto.deform_phase) * 1.7)
-		var speed: float = protozoan_speed * float(proto.gene_speed) * pulse
+		var starvation_factor: float = clampf(
+			float(proto.energy) / 2.2,
+			0.24,
+			1.0
+		)
+		var speed: float = (
+			protozoan_speed
+			* float(proto.gene_speed)
+			* pulse
+			* starvation_factor
+		)
 		proto.position = (
 			Vector2(proto.position)
 			+ Vector2.RIGHT.rotated(float(proto.angle)) * speed * dt
@@ -1221,7 +1231,17 @@ func _advance_ciliates(dt: float) -> void:
 		)
 
 		var stroke: float = 0.88 + 0.12 * sin(float(ciliate.swim_phase))
-		var speed: float = ciliate_speed * float(ciliate.gene_speed) * stroke
+		var starvation_factor: float = clampf(
+			float(ciliate.energy) / 1.8,
+			0.26,
+			1.0
+		)
+		var speed: float = (
+			ciliate_speed
+			* float(ciliate.gene_speed)
+			* stroke
+			* starvation_factor
+		)
 		ciliate.position = (
 			Vector2(ciliate.position)
 			+ Vector2.RIGHT.rotated(float(ciliate.angle)) * speed * dt
