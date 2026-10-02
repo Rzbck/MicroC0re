@@ -4,6 +4,7 @@ const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd"
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
+const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 12
@@ -27,6 +28,7 @@ const LINEAGE_PALETTE := [
 
 var sim: Variant
 var atlas: Variant
+var protozoa_atlas: Variant
 var far_renderer: Node2D
 var current_seed: int = 1337
 
@@ -42,7 +44,9 @@ var field_image: Image
 var field_texture: ImageTexture
 var field_refresh_accumulator: float = 0.0
 
+var hud_panel: ColorRect
 var hud_label: Label
+var hud_debug_expanded: bool = false
 var hud_refresh_accumulator: float = 0.0
 var selected_id: int = -1
 
@@ -65,6 +69,7 @@ func _ready() -> void:
 	renderer_name = RenderingServer.get_current_rendering_method()
 
 	atlas = PixelAtlasScript.new()
+	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -140,16 +145,16 @@ func _setup_hud() -> void:
 	layer.name = "HUD"
 	add_child(layer)
 
-	var panel := ColorRect.new()
-	panel.position = Vector2(6.0, 6.0)
-	panel.size = Vector2(500.0, 138.0)
-	panel.color = Color(0.005, 0.010, 0.012, 0.88)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(panel)
+	hud_panel = ColorRect.new()
+	hud_panel.position = Vector2(6.0, 6.0)
+	hud_panel.size = Vector2(315.0, 22.0)
+	hud_panel.color = Color(0.005, 0.010, 0.012, 0.78)
+	hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(hud_panel)
 
 	hud_label = Label.new()
-	hud_label.position = Vector2(10.0, 9.0)
-	hud_label.size = Vector2(490.0, 132.0)
+	hud_label.position = Vector2(10.0, 7.0)
+	hud_label.size = Vector2(305.0, 18.0)
 	hud_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_label.add_theme_font_size_override("font_size", 8)
 	hud_label.add_theme_color_override("font_color", Color(0.84, 0.94, 0.88))
@@ -210,6 +215,7 @@ func _draw() -> void:
 		draw_texture_rect(field_texture, world_rect, false)
 
 	_draw_bacteria()
+	_draw_protozoa()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
 
 	draw_ms = _smooth_metric(
@@ -278,6 +284,14 @@ func _draw_bacteria() -> void:
 		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(cell.angle) / angle_step) * angle_step
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
+		if float(cell.engulf_progress) > 0.0:
+			var engulf_scale: float = 1.0 - 0.68 * clampf(
+				float(cell.engulf_progress),
+				0.0,
+				1.0
+			)
+			texture_size *= engulf_scale
+			color.a *= 1.0 - 0.72 * float(cell.engulf_progress)
 
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
 		draw_texture_rect(
@@ -300,6 +314,62 @@ func _draw_bacteria() -> void:
 				maxf(0.12, 0.85 / zoom_value),
 				false
 			)
+
+
+func _draw_protozoa() -> void:
+	if sim == null or protozoa_atlas == null:
+		return
+
+	var visible_rect: Rect2 = _visible_world_rect().grow(12.0)
+	var zoom_value: float = camera.zoom.x
+
+	for proto in sim.protozoa:
+		var position: Vector2 = Vector2(proto.position)
+		if not visible_rect.has_point(position):
+			continue
+
+		if zoom_value < 0.55:
+			var marker_size: float = maxf(0.55, 1.65 / zoom_value)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.34, 0.82, 0.78, 0.95),
+				true
+			)
+			continue
+
+		var state: int = 1 if int(proto.feeding_target_id) >= 0 else 0
+		var frame: int = posmod(
+			int(floor(visual_time * (6.0 + float(proto.deform_amount) * 4.0)))
+				+ int(proto.id),
+			6
+		)
+		var texture: Texture2D = protozoa_atlas.get_texture(frame, state)
+		var base_scale: float = 0.36 + float(proto.radius) * 0.012
+		var pulse_x: float = 1.0 + sin(float(proto.deform_phase)) * 0.10
+		var pulse_y: float = 1.0 - sin(float(proto.deform_phase)) * 0.08
+		var feeding_bulge: float = 1.0 + float(proto.deform_amount) * 0.18
+		var texture_size: Vector2 = texture.get_size() * base_scale
+		texture_size.x *= pulse_x * feeding_bulge
+		texture_size.y *= pulse_y * feeding_bulge
+
+		var color := Color(0.38, 0.88, 0.78, 1.0)
+		if state == 1:
+			color = Color(0.55, 0.96, 0.73, 1.0)
+
+		var angle_step: float = TAU / 16.0
+		var pixel_angle: float = roundf(float(proto.angle) / angle_step) * angle_step
+
+		draw_set_transform(position, pixel_angle, Vector2.ONE)
+		draw_texture_rect(
+			texture,
+			Rect2(-texture_size * 0.5, texture_size),
+			false,
+			color
+		)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _lineage_color(hue: float) -> Color:
