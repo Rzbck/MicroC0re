@@ -16,9 +16,9 @@ var world_size := Vector2(
 var fixed_seed: int
 var rng := RandomNumberGenerator.new()
 
-var nutrient: ScalarField
-var waste: ScalarField
-var bacteria: Array[Bacterium] = []
+var nutrient: Variant
+var waste: Variant
+var bacteria: Array = []
 var nutrient_sources: Array[Vector2] = []
 
 var simulation_time: float = 0.0
@@ -78,7 +78,7 @@ func seed_demo(count: int = 24) -> void:
 			rng.randf_range(margin, world_size.x - margin),
 			rng.randf_range(margin, world_size.y - margin)
 		)
-		var cell: Bacterium = BacteriumScript.new(
+		var cell: Variant = BacteriumScript.new(
 			_allocate_id(),
 			position,
 			rng.randf_range(-PI, PI)
@@ -97,7 +97,7 @@ func step(dt: float) -> void:
 	nutrient.diffuse(nutrient_diffusion, dt, nutrient_decay)
 	waste.diffuse(waste_diffusion, dt, waste_decay)
 
-	var next_population: Array[Bacterium] = []
+	var next_population: Array = []
 
 	for cell in bacteria:
 		if not cell.alive:
@@ -110,7 +110,7 @@ func step(dt: float) -> void:
 			continue
 
 		if _ready_to_divide(cell):
-			var daughters: Array[Bacterium] = _divide(cell)
+			var daughters: Array = _divide(cell)
 			next_population.append_array(daughters)
 		else:
 			next_population.append(cell)
@@ -123,46 +123,46 @@ func step(dt: float) -> void:
 	simulation_time += dt
 
 
-func _advance_cell(cell: Bacterium, dt: float) -> void:
+func _advance_cell(cell: Variant, dt: float) -> void:
 	cell.age += dt
 
-	var sensed := nutrient.sample_world(cell.position)
-	var improvement := sensed - cell.sensed_memory
-	var memory_alpha := 1.0 - exp(-dt / maxf(0.001, chemotaxis_memory_tau))
+	var sensed: float = float(nutrient.sample_world(cell.position))
+	var improvement: float = sensed - float(cell.sensed_memory)
+	var memory_alpha: float = 1.0 - exp(-dt / maxf(0.001, chemotaxis_memory_tau))
 	cell.sensed_memory = lerpf(cell.sensed_memory, sensed, memory_alpha)
 
-	var bounded_improvement := clampf(improvement, -0.25, 0.25)
-	var tumble_rate := base_tumble_rate * exp(-chemotaxis_gain * bounded_improvement)
+	var bounded_improvement: float = clampf(improvement, -0.25, 0.25)
+	var tumble_rate: float = base_tumble_rate * exp(-chemotaxis_gain * bounded_improvement)
 	tumble_rate = clampf(tumble_rate, 0.05, 8.0)
-	var tumble_probability := 1.0 - exp(-tumble_rate * dt)
+	var tumble_probability: float = 1.0 - exp(-tumble_rate * dt)
 
 	if rng.randf() < tumble_probability:
 		cell.angle += rng.randfn(0.0, tumble_sigma)
 
 	if rotational_diffusion > 0.0:
-		var sigma := sqrt(2.0 * rotational_diffusion * dt)
+		var sigma: float = sqrt(2.0 * rotational_diffusion * dt)
 		cell.angle += rng.randfn(0.0, sigma)
 
 	cell.angle = wrapf(cell.angle, -PI, PI)
 
-	var energy_speed_factor := clampf(cell.energy / 2.0, 0.20, 1.0)
-	var speed := run_speed * energy_speed_factor
+	var energy_speed_factor: float = clampf(float(cell.energy) / 2.0, 0.20, 1.0)
+	var speed: float = run_speed * energy_speed_factor
 	cell.position += cell.axis() * speed * dt
 	_constrain_to_world(cell)
 
-	var local_nutrient := nutrient.sample_world(cell.position)
-	var uptake_rate := 0.0
+	var local_nutrient: float = float(nutrient.sample_world(cell.position))
+	var uptake_rate: float = 0.0
 	if local_nutrient > 0.0:
 		uptake_rate = max_uptake_rate * local_nutrient / (
 			monod_half_saturation + local_nutrient
 		)
 
-	var consumed := nutrient.take_nearest_world(cell.position, uptake_rate * dt)
+	var consumed: float = float(nutrient.take_nearest_world(cell.position, uptake_rate * dt))
 	cell.energy += consumed * energy_yield
 	cell.energy -= (maintenance_cost + movement_cost_per_speed * speed) * dt
 
 	if consumed > 0.0:
-		var growth_delta := growth_per_nutrient * consumed
+		var growth_delta: float = growth_per_nutrient * consumed
 		growth_delta = minf(growth_delta, maximum_length - cell.length)
 		if growth_delta > 0.0:
 			cell.length += growth_delta
@@ -174,7 +174,7 @@ func _advance_cell(cell: Bacterium, dt: float) -> void:
 		cell.alive = false
 
 
-func _ready_to_divide(cell: Bacterium) -> bool:
+func _ready_to_divide(cell: Variant) -> bool:
 	return (
 		cell.length >= division_length
 		and cell.energy >= division_energy
@@ -182,20 +182,20 @@ func _ready_to_divide(cell: Bacterium) -> bool:
 	)
 
 
-func _divide(parent: Bacterium) -> Array[Bacterium]:
-	var daughter_length := maxf(minimum_length, parent.length * 0.56)
-	var daughter_energy := parent.energy * 0.475
-	var axis := parent.axis()
-	var offset := axis * (daughter_length * 0.28)
+func _divide(parent: Variant) -> Array:
+	var daughter_length: float = maxf(minimum_length, float(parent.length) * 0.56)
+	var daughter_energy: float = float(parent.energy) * 0.475
+	var axis: Vector2 = parent.axis()
+	var offset: Vector2 = axis * (daughter_length * 0.28)
 
-	var a: Bacterium = BacteriumScript.new(
+	var a: Variant = BacteriumScript.new(
 		_allocate_id(),
 		parent.position - offset,
 		parent.angle + rng.randfn(0.0, 0.025),
 		parent.generation + 1,
 		parent.id
 	)
-	var b: Bacterium = BacteriumScript.new(
+	var b: Variant = BacteriumScript.new(
 		_allocate_id(),
 		parent.position + offset,
 		parent.angle + PI + rng.randfn(0.0, 0.025),
@@ -210,18 +210,18 @@ func _divide(parent: Bacterium) -> Array[Bacterium]:
 		daughter.sensed_memory = nutrient.sample_world(daughter.position)
 		_constrain_to_world(daughter)
 
-	var daughters: Array[Bacterium] = [a, b]
+	var daughters: Array = [a, b]
 	return daughters
 
 
-func _recycle_dead_cell(cell: Bacterium) -> void:
+func _recycle_dead_cell(cell: Variant) -> void:
 	# v0.1 coarse recycling: part of remaining body material enters the waste field.
-	var recycled := maxf(0.05, cell.length * 0.03)
+	var recycled: float = maxf(0.05, float(cell.length) * 0.03)
 	waste.add_nearest_world(cell.position, recycled)
 
 
 func _feed_environment(dt: float) -> void:
-	var amount_per_source := source_rate * dt
+	var amount_per_source: float = source_rate * dt
 	for source in nutrient_sources:
 		nutrient.add_nearest_world(source, amount_per_source)
 
@@ -237,13 +237,13 @@ func _build_sources() -> void:
 
 
 func _allocate_id() -> int:
-	var result := _next_id
+	var result: int = _next_id
 	_next_id += 1
 	return result
 
 
 func _resolve_all_contacts() -> void:
-	var count := bacteria.size()
+	var count: int = bacteria.size()
 	for i in range(count):
 		for j in range(i + 1, count):
 			_resolve_pair(bacteria[i], bacteria[j])
@@ -252,8 +252,8 @@ func _resolve_all_contacts() -> void:
 		_constrain_to_world(cell)
 
 
-func _resolve_pair(a: Bacterium, b: Bacterium) -> void:
-	var closest := _closest_points_between_segments(
+func _resolve_pair(a: Variant, b: Variant) -> void:
+	var closest: Array = _closest_points_between_segments(
 		a.segment_start(),
 		a.segment_end(),
 		b.segment_start(),
@@ -262,9 +262,9 @@ func _resolve_pair(a: Bacterium, b: Bacterium) -> void:
 
 	var point_a: Vector2 = closest[0]
 	var point_b: Vector2 = closest[1]
-	var delta := point_b - point_a
-	var distance := delta.length()
-	var target_distance := a.radius + b.radius
+	var delta: Vector2 = point_b - point_a
+	var distance: float = delta.length()
+	var target_distance: float = float(a.radius) + float(b.radius)
 
 	if distance >= target_distance:
 		return
@@ -277,15 +277,15 @@ func _resolve_pair(a: Bacterium, b: Bacterium) -> void:
 		if (b.id - a.id) % 2 == 0:
 			normal = -normal
 
-	var overlap := target_distance - distance
-	var correction := normal * (overlap * 0.5)
+	var overlap: float = target_distance - distance
+	var correction: Vector2 = normal * (overlap * 0.5)
 	a.position -= correction
 	b.position += correction
 
-	var lever_a := point_a - a.position
-	var lever_b := point_b - b.position
-	var force_on_a := -normal * overlap
-	var force_on_b := normal * overlap
+	var lever_a: Vector2 = point_a - Vector2(a.position)
+	var lever_b: Vector2 = point_b - Vector2(b.position)
+	var force_on_a: Vector2 = -normal * overlap
+	var force_on_b: Vector2 = normal * overlap
 
 	a.angle += clampf(
 		lever_a.cross(force_on_a) * angular_contact_response,
@@ -308,15 +308,15 @@ func _closest_points_between_segments(
 	p2: Vector2,
 	q2: Vector2
 ) -> Array:
-	var d1 := q1 - p1
-	var d2 := q2 - p2
-	var r := p1 - p2
-	var a := d1.dot(d1)
-	var e := d2.dot(d2)
-	var f := d2.dot(r)
-	var s := 0.0
-	var t := 0.0
-	var epsilon := 0.0000001
+	var d1: Vector2 = q1 - p1
+	var d2: Vector2 = q2 - p2
+	var r: Vector2 = p1 - p2
+	var a: float = d1.dot(d1)
+	var e: float = d2.dot(d2)
+	var f: float = d2.dot(r)
+	var s: float = 0.0
+	var t: float = 0.0
+	var epsilon: float = 0.0000001
 
 	if a <= epsilon and e <= epsilon:
 		return [p1, p2]
@@ -325,13 +325,13 @@ func _closest_points_between_segments(
 		s = 0.0
 		t = clampf(f / e, 0.0, 1.0)
 	else:
-		var c := d1.dot(r)
+		var c: float = d1.dot(r)
 		if e <= epsilon:
 			t = 0.0
 			s = clampf(-c / a, 0.0, 1.0)
 		else:
-			var b := d1.dot(d2)
-			var denominator := a * e - b * b
+			var b: float = d1.dot(d2)
+			var denominator: float = a * e - b * b
 			if absf(denominator) > epsilon:
 				s = clampf((b * f - c * e) / denominator, 0.0, 1.0)
 			else:
@@ -346,13 +346,13 @@ func _closest_points_between_segments(
 				t = 1.0
 				s = clampf((b - c) / a, 0.0, 1.0)
 
-	var closest_a := p1 + d1 * s
-	var closest_b := p2 + d2 * t
+	var closest_a: Vector2 = p1 + d1 * s
+	var closest_b: Vector2 = p2 + d2 * t
 	return [closest_a, closest_b]
 
 
-func _constrain_to_world(cell: Bacterium) -> void:
-	var margin := cell.length * 0.5 + cell.radius
+func _constrain_to_world(cell: Variant) -> void:
+	var margin: float = float(cell.length) * 0.5 + float(cell.radius)
 
 	if cell.position.x < margin:
 		cell.position.x = margin
