@@ -289,12 +289,17 @@ func step(dt: float) -> void:
 				1.0,
 				float(cell.division_progress) + dt / maxf(0.001, division_duration)
 			)
-			if (
-				float(cell.division_progress) >= 1.0
-				and next_population.size() < SAFETY_POPULATION_LIMIT - 1
-			):
-				var daughters: Array = _divide(cell)
-				next_population.append_array(daughters)
+			if float(cell.division_progress) >= 1.0:
+				if next_population.size() < SAFETY_POPULATION_LIMIT - 1:
+					var daughters: Array = _divide(cell)
+					next_population.append_array(daughters)
+				else:
+					# Explicit performance guard: suppress further fission at
+					# the CPU-reference ceiling without deleting live cells.
+					cell.dividing = false
+					cell.division_progress = 0.0
+					cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
+					next_population.append(cell)
 			else:
 				next_population.append(cell)
 			continue
@@ -323,6 +328,7 @@ func step(dt: float) -> void:
 	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 
 	_advance_protozoa(dt)
+	_advance_ciliates(dt)
 
 	simulation_time += dt
 
@@ -597,7 +603,8 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		0.82 + 0.18 * float(cell.gene_size)
 	)
 	return (
-		not bool(cell.dividing)
+		bacteria.size() < SAFETY_POPULATION_LIMIT - 1
+		and not bool(cell.dividing)
 		and not bool(cell.dying)
 		and float(cell.length) >= required_length
 		and float(cell.energy) >= required_energy
