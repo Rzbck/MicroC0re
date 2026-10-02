@@ -9,7 +9,8 @@ This file is deliberately kept on the default branch so a fresh ChatGPT/Codex/ag
 - Project V2 node: `PVT_kwHOAKdXDM4BldFb`
 - Active development branch: `rebuild/pixel-microscope-v0.2`
 - Active development PR: #19
-- Current product gate: #14
+- Current visual product gate: #14
+- Active living-biome epic: #38
 
 The GitHub Project **Status field is canonical**.
 
@@ -24,6 +25,7 @@ Project automation details: `docs/PROJECT_AUTOMATION.md`.
    - `AGENTS.md`
    - `docs/CURRENT_DIRECTION.md`
    - `docs/STATUS.md`
+   - `docs/BIOME.md` for ecology/environment/species work
    - the relevant domain docs.
 5. Continue blocking `In Progress` / `Review` work before starting unrelated `Todo` work.
 
