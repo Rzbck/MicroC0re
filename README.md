@@ -17,7 +17,8 @@ The first milestone is intentionally small but physically meaningful:
 - Resource uptake, maintenance cost, growth, death, and binary fission.
 - Mechanical contact resolution between rods.
 - Headless smoke/validation tests.
-- A minimal debug renderer before the real pixel-art microscope renderer.
+- An interactive living-microscope renderer with zoom, pan, organism inspection, animated appendages, and a low-resolution chemical texture.
+- Heritable genotype, visible phenotype, seeded mutation, and lineage drift.
 - A separate Turing / Gray-Scott reaction-diffusion laboratory for emergent chemistry.
 
 Track the milestone in GitHub Issue #1 and its child issues.
@@ -42,6 +43,8 @@ See:
 - [Biology model](docs/BIOLOGY.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Validation strategy](docs/VALIDATION.md)
+- [Evolution model](docs/EVOLUTION.md)
+- [Art direction](docs/ART_DIRECTION.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Repository layout
@@ -97,7 +100,7 @@ The local executable path is **not** stored in project settings.
 5. No spawn timers standing in for growth/division.
 6. No negative chemical concentrations.
 7. New biological behavior needs a documented model and validation idea.
-8. Optimize only after profiling; v0.1 may use O(N²) contact checks.
+8. Keep contact broad-phase deterministic; the current kernel uses a uniform spatial hash.
 9. Artistic exaggeration is allowed only when documented as artistic.
 
 ## Status
