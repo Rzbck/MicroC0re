@@ -2,11 +2,16 @@ class_name Protozoan
 extends RefCounted
 
 var id: int
+var parent_id: int = -1
+var lineage_id: int
+var generation: int = 0
+
 var position: Vector2
 var angle: float
 var radius: float = 3.2
 var energy: float = 8.0
 var age: float = 0.0
+var alive: bool = true
 
 # Hunting / engulfment state.
 var target_id: int = -1
@@ -19,6 +24,14 @@ var deform_phase: float = 0.0
 var deform_amount: float = 0.0
 var lineage_hue: float = 0.50
 
+# Heritable predator phenotype.
+var gene_speed: float = 1.0
+var gene_perception: float = 1.0
+var gene_engulf: float = 1.0
+var gene_size: float = 1.0
+var gene_metabolism: float = 1.0
+var mutation_rate: float = 0.06
+
 
 func _init(
 	p_id: int,
@@ -27,6 +40,7 @@ func _init(
 	p_phase: float = 0.0
 ) -> void:
 	id = p_id
+	lineage_id = p_id
 	position = p_position
 	angle = p_angle
 	deform_phase = p_phase
@@ -47,3 +61,60 @@ func finish_engulf() -> void:
 	target_id = -1
 	feeding_progress = 0.0
 	cooldown = 0.65
+
+
+func configure_founder(p_rng: RandomNumberGenerator) -> void:
+	gene_speed = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.65, 1.45)
+	gene_perception = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.65, 1.55)
+	gene_engulf = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.70, 1.45)
+	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.78, 1.35)
+	gene_metabolism = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.72, 1.35)
+	mutation_rate = clampf(0.06 + p_rng.randfn(0.0, 0.01), 0.02, 0.14)
+	radius = 3.2 * gene_size
+
+
+func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
+	parent_id = int(parent.id)
+	lineage_id = int(parent.lineage_id)
+	generation = int(parent.generation) + 1
+
+	mutation_rate = _mutate_float(
+		float(parent.mutation_rate), 0.008, 0.02, 0.14,
+		float(parent.mutation_rate), p_rng
+	)
+	gene_speed = _mutate_float(
+		float(parent.gene_speed), 0.055, 0.55, 1.65, mutation_rate, p_rng
+	)
+	gene_perception = _mutate_float(
+		float(parent.gene_perception), 0.065, 0.50, 1.80, mutation_rate, p_rng
+	)
+	gene_engulf = _mutate_float(
+		float(parent.gene_engulf), 0.055, 0.55, 1.70, mutation_rate, p_rng
+	)
+	gene_size = _mutate_float(
+		float(parent.gene_size), 0.045, 0.72, 1.45, mutation_rate, p_rng
+	)
+	gene_metabolism = _mutate_float(
+		float(parent.gene_metabolism), 0.050, 0.60, 1.55, mutation_rate, p_rng
+	)
+	lineage_hue = wrapf(
+		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.012 + mutation_rate * 0.03),
+		0.0,
+		1.0
+	)
+	deform_phase = p_rng.randf_range(0.0, TAU)
+	radius = 3.2 * gene_size
+
+
+func _mutate_float(
+	value: float,
+	sigma: float,
+	minimum: float,
+	maximum: float,
+	probability: float,
+	p_rng: RandomNumberGenerator
+) -> float:
+	var result: float = value
+	if p_rng.randf() < probability:
+		result += p_rng.randfn(0.0, sigma)
+	return clampf(result, minimum, maximum)
