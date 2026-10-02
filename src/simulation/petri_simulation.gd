@@ -5,6 +5,8 @@ const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
+const MicroalgaScript = preload("res://src/simulation/microalga.gd")
+const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
 
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
@@ -22,6 +24,8 @@ const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 const SAFETY_POPULATION_LIMIT := 420
 const PROTOZOAN_SAFETY_LIMIT := 18
 const CILIATE_SAFETY_LIMIT := 16
+const MICROALGA_SAFETY_LIMIT := 64
+const DECOMPOSER_SAFETY_LIMIT := 48
 
 var world_size := Vector2(
 	FIELD_WIDTH * FIELD_CELL_SIZE,
@@ -41,6 +45,8 @@ var producer_biomass: Variant
 var bacteria: Array = []
 var protozoa: Array = []
 var ciliates: Array = []
+var microalgae: Array = []
+var decomposers: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 var producer_sources: Array[Vector2] = []
@@ -158,6 +164,18 @@ var ciliate_feed_duration: float = 0.62
 var ciliate_maintenance: float = 0.090
 var ciliate_reproduction_energy: float = 16.5
 
+# Explicit producer and decomposer guilds.
+var microalga_photo_rate: float = 0.115
+var microalga_nutrient_rate: float = 0.018
+var microalga_maintenance: float = 0.020
+var microalga_reproduction_energy: float = 5.6
+var microalga_reproduction_duration: float = 0.95
+var decomposer_detritus_rate: float = 0.105
+var decomposer_energy_yield: float = 4.2
+var decomposer_maintenance: float = 0.032
+var decomposer_budding_energy: float = 5.2
+var decomposer_budding_duration: float = 0.85
+
 
 func _init(seed_value: int = 1) -> void:
 	fixed_seed = seed_value
@@ -178,6 +196,8 @@ func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
 	protozoa.clear()
 	ciliates.clear()
+	microalgae.clear()
+	decomposers.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
@@ -286,6 +306,50 @@ func seed_demo(count: int = 36) -> void:
 		)
 		ciliate.configure_founder(rng)
 		ciliates.append(ciliate)
+
+	# Explicit producer cells complement the continuum producer mat. They are
+	# slow drifting microalgae-like cells that oxygenate the local water and
+	# can be grazed by protists.
+	for algae_index in range(12):
+		var source: Vector2 = producer_sources[algae_index % producer_sources.size()]
+		var position: Vector2 = (
+			source
+			+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+			* rng.randf_range(2.0, 11.0)
+		)
+		position.x = clampf(position.x, 5.0, world_size.x - 5.0)
+		position.y = clampf(position.y, 5.0, world_size.y - 5.0)
+		var alga: Variant = MicroalgaScript.new(
+			_allocate_id(),
+			position,
+			rng.randf_range(-PI, PI),
+			rng.randf_range(0.0, TAU)
+		)
+		alga.configure_founder(rng)
+		alga.energy = rng.randf_range(2.8, 3.8)
+		microalgae.append(alga)
+
+	# Yeast-like decomposers start near nutrient/detrital hotspots. They are a
+	# distinct trophic guild that consumes carrion and mineralizes part of it
+	# back into dissolved resource.
+	for yeast_index in range(8):
+		var source: Vector2 = nutrient_sources[yeast_index % nutrient_sources.size()]
+		var position: Vector2 = (
+			source
+			+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+			* rng.randf_range(3.0, 12.0)
+		)
+		position.x = clampf(position.x, 5.0, world_size.x - 5.0)
+		position.y = clampf(position.y, 5.0, world_size.y - 5.0)
+		var yeast: Variant = DecomposerYeastScript.new(
+			_allocate_id(),
+			position,
+			rng.randf_range(-PI, PI),
+			rng.randf_range(0.0, TAU)
+		)
+		yeast.configure_founder(rng)
+		yeast.energy = rng.randf_range(2.4, 3.2)
+		decomposers.append(yeast)
 
 	_resolve_all_contacts()
 
