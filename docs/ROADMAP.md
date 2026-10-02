@@ -44,6 +44,27 @@ Do not expand ecology until:
 - mechanics does not explode numerically;
 - rendering remains independent.
 
+## Phase 1.5 — Visual Rebuild v0.2 (CURRENT GATE)
+
+Tracked by Epic #14.
+
+Priority order:
+1. #17 — performance profiling / 120 FPS target / LOD;
+2. #16 — infinite-feel background and robust zoom/pan;
+3. #15 — true pixel-art pipeline and art bible;
+4. #18 — readable organic animation and interactions.
+
+The current visible renderer is not a final art baseline. Do not add deep ecology until this gate is sufficiently complete.
+
+Gate conditions:
+- no grey/undefined area at supported zoom;
+- baseline scene meets the agreed FPS target or has quantified remaining bottlenecks;
+- organisms use the new pixel-art pipeline;
+- far/mid/near/macro LOD exists;
+- fission is visually readable;
+- at least one persistent adhesion/contact interaction is visually readable;
+- art bible defines resolution, palette, sprite families and frame budgets.
+
 ## Phase 2 — ecology
 
 Issue #10 starts this research.
