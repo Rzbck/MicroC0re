@@ -37,6 +37,13 @@ var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
 
+# Latest mechanics metrics (aggregated across solver iterations for one
+# mechanics update). Used by benchmark/HUD, never by simulation decisions.
+var pair_candidates_last: int = 0
+var pair_narrow_checks_last: int = 0
+var pair_interactions_last: int = 0
+var pair_contacts_last: int = 0
+
 # Environmental coefficients. Concentration is normalized in v0.1.
 var nutrient_diffusion: float = 5.0
 var nutrient_decay: float = 0.0015
@@ -177,6 +184,10 @@ func step(dt: float) -> void:
 
 	_mechanics_accumulator += dt
 	while _mechanics_accumulator >= MECHANICS_DT:
+		pair_candidates_last = 0
+		pair_narrow_checks_last = 0
+		pair_interactions_last = 0
+		pair_contacts_last = 0
 		for _iteration in range(mechanical_iterations):
 			_resolve_all_contacts()
 		_mechanics_accumulator -= MECHANICS_DT
@@ -423,6 +434,7 @@ func _resolve_all_contacts() -> void:
 				var j: int = _grid_head[row_offset + x]
 				while j >= 0:
 					if j > i and not bool(bacteria[j].dying):
+						pair_candidates_last += 1
 						_resolve_pair(cell, bacteria[j])
 					j = _grid_next[j]
 
@@ -480,6 +492,8 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 	if position_a.distance_squared_to(position_b) > max_center_distance * max_center_distance:
 		return
 
+	pair_narrow_checks_last += 1
+
 	var axis_a: Vector2 = Vector2.RIGHT.rotated(float(a.angle))
 	var axis_b: Vector2 = Vector2.RIGHT.rotated(float(b.angle))
 	var half_line_a: float = maxf(0.0, (length_a - 2.0 * radius_a) * 0.5)
@@ -501,6 +515,8 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 
 	if distance >= interaction_distance:
 		return
+
+	pair_interactions_last += 1
 
 	var normal: Vector2
 	if distance > 0.000001:
@@ -533,6 +549,7 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 	if distance >= target_distance:
 		return
 
+	pair_contacts_last += 1
 	var overlap: float = target_distance - distance
 	var correction: Vector2 = normal * (overlap * 0.5)
 	a.position = Vector2(a.position) - correction
