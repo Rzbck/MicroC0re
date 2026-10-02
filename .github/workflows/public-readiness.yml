@@ -1,0 +1,50 @@
+name: Public Readiness Security Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-readiness.yml"
+      - ".gitignore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-history:
+    name: Full Git history secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan complete Git history with Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tracked-sensitive-files:
+    name: Tracked sensitive filename guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Reject accidentally tracked local secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pattern='(^|/)(\.env($|\.)|\.envrc$|credentials?($|\.)|secrets?($|\.)|id_(rsa|ed25519)$)|\.(pem|key|p12|pfx|kdbx)$'
+          matches="$(git ls-files | grep -Ei "$pattern" || true)"
+
+          if [[ -n "$matches" ]]; then
+            echo "::error::Potentially sensitive tracked filenames detected:"
+            echo "$matches"
+            exit 1
+          fi
+
+          echo "No sensitive local credential filenames are tracked."
