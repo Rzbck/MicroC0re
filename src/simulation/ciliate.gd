@@ -12,6 +12,8 @@ var radius: float = 2.4
 var energy: float = 7.0
 var age: float = 0.0
 var alive: bool = true
+var dying: bool = false
+var lysis_progress: float = 0.0
 
 var target_id: int = -1
 var feeding_target_id: int = -1
@@ -111,3 +113,11 @@ func _mutate_float(
 	if p_rng.randf() < probability:
 		result += p_rng.randfn(0.0, sigma)
 	return clampf(result, minimum, maximum)
+
+
+func begin_lysis() -> void:
+	if dying:
+		return
+	dying = true
+	alive = false
+	lysis_progress = 0.0
