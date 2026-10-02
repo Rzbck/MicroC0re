@@ -1,0 +1,22 @@
+; Engine configuration file.
+; MicroC0re — generated bootstrap configuration.
+
+config_version=5
+
+[application]
+
+config/name="MicroC0re"
+run/main_scene="res://src/app/main.tscn"
+
+[display]
+
+window/size/viewport_width=768
+window/size/viewport_height=512
+window/size/window_width_override=768
+window/size/window_height_override=512
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
