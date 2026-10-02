@@ -1,6 +1,15 @@
 class_name Bacterium
 extends RefCounted
 
+const PLASMID_CONJUGATION := 1
+const PLASMID_SCAVENGE := 2
+const PLASMID_ADHESION := 4
+const PLASMID_STRESS := 8
+
+const TRANSFER_NONE := 0
+const TRANSFER_DONOR := 1
+const TRANSFER_RECIPIENT := 2
+
 var id: int
 var parent_id: int
 var lineage_id: int
@@ -49,6 +58,14 @@ var flagella_length: float = 1.0
 var pili_count: int = 4
 var lineage_hue: float = 0.12
 
+# Mobile genetic elements. These are qualitative plasmid modules used to
+# model horizontal gene transfer by direct-contact conjugation.
+var plasmid_mask: int = 0
+var transfer_role: int = TRANSFER_NONE
+var transfer_partner_id: int = -1
+var transfer_progress: float = 0.0
+var hgt_events: int = 0
+
 # Deterministic visual animation phase. Rendering may read this value but
 # simulation behavior never depends on it.
 var visual_phase: float = 0.0
@@ -82,6 +99,20 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	flagella_count = clampi(2 + p_rng.randi_range(-1, 1), 1, 4)
 	flagella_length = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.65, 1.55)
 	pili_count = clampi(4 + p_rng.randi_range(-2, 2), 1, 8)
+
+	# A minority of founders carry conjugative plasmids. Payload modules are
+	# sparse so useful traits can spread horizontally during the run.
+	if p_rng.randf() < 0.18:
+		plasmid_mask |= PLASMID_CONJUGATION
+		var cargo_roll: int = p_rng.randi_range(0, 2)
+		if cargo_roll == 0:
+			plasmid_mask |= PLASMID_SCAVENGE
+		elif cargo_roll == 1:
+			plasmid_mask |= PLASMID_ADHESION
+		else:
+			plasmid_mask |= PLASMID_STRESS
+		pili_count = maxi(pili_count, 4)
+
 	lineage_hue = p_rng.randf()
 	visual_phase = p_rng.randf_range(0.0, TAU)
 
@@ -91,6 +122,11 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	lineage_id = int(parent.lineage_id)
 	generation = int(parent.generation) + 1
+	plasmid_mask = int(parent.plasmid_mask)
+	transfer_role = TRANSFER_NONE
+	transfer_partner_id = -1
+	transfer_progress = 0.0
+	hgt_events = 0
 
 	var inherited_rate: float = float(parent.mutation_rate)
 	mutation_rate = clampf(
@@ -141,8 +177,33 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	_apply_size_phenotype()
 
 
+func has_plasmid(module_bit: int) -> bool:
+	return (plasmid_mask & module_bit) != 0
+
+
+func plasmid_names() -> String:
+	var names := PackedStringArray()
+	if has_plasmid(PLASMID_CONJUGATION):
+		names.append("conjugation")
+	if has_plasmid(PLASMID_SCAVENGE):
+		names.append("scavenge")
+	if has_plasmid(PLASMID_ADHESION):
+		names.append("adhesion")
+	if has_plasmid(PLASMID_STRESS):
+		names.append("stress")
+	if names.is_empty():
+		return "none"
+	return ", ".join(names)
+
+
+func clear_transfer_state() -> void:
+	transfer_role = TRANSFER_NONE
+	transfer_partner_id = -1
+	transfer_progress = 0.0
+
+
 func begin_division() -> void:
-	if dying or dividing:
+	if dying or dividing or transfer_role != TRANSFER_NONE:
 		return
 	dividing = true
 	division_progress = 0.0
@@ -153,6 +214,7 @@ func begin_lysis() -> void:
 		return
 	dying = true
 	alive = false
+	clear_transfer_state()
 	dividing = false
 	division_progress = 0.0
 	lysis_progress = 0.0
