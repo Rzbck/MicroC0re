@@ -5,6 +5,7 @@ const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
+const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 12
@@ -29,6 +30,7 @@ const LINEAGE_PALETTE := [
 var sim: Variant
 var atlas: Variant
 var protozoa_atlas: Variant
+var ciliate_atlas: Variant
 var far_renderer: Node2D
 var current_seed: int = 1337
 
@@ -70,6 +72,7 @@ func _ready() -> void:
 
 	atlas = PixelAtlasScript.new()
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
+	ciliate_atlas = PixelCiliateAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -216,6 +219,7 @@ func _draw() -> void:
 
 	_draw_bacteria()
 	_draw_protozoa()
+	_draw_ciliates()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
 
 	draw_ms = _smooth_metric(
@@ -372,6 +376,60 @@ func _draw_protozoa() -> void:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+func _draw_ciliates() -> void:
+	if sim == null or ciliate_atlas == null:
+		return
+
+	var visible_rect: Rect2 = _visible_world_rect().grow(10.0)
+	var zoom_value: float = camera.zoom.x
+
+	for ciliate in sim.ciliates:
+		var position: Vector2 = Vector2(ciliate.position)
+		if not visible_rect.has_point(position):
+			continue
+
+		if zoom_value < 0.55:
+			var marker_size: float = maxf(0.48, 1.35 / zoom_value)
+			draw_rect(
+				Rect2(
+					position - Vector2(marker_size, marker_size) * 0.5,
+					Vector2(marker_size, marker_size)
+				),
+				Color(0.60, 0.66, 0.98, 0.96),
+				true
+			)
+			continue
+
+		var state: int = 1 if int(ciliate.feeding_target_id) >= 0 else 0
+		var frame: int = posmod(
+			int(floor(visual_time * (10.0 + float(ciliate.gene_speed) * 2.0)))
+				+ int(ciliate.id),
+			6
+		)
+		var texture: Texture2D = ciliate_atlas.get_texture(frame, state)
+		var base_scale: float = 0.33 + float(ciliate.radius) * 0.014
+		var texture_size: Vector2 = texture.get_size() * base_scale
+		var pulse: float = 1.0 + sin(float(ciliate.swim_phase)) * 0.055
+		texture_size.x *= pulse
+		texture_size.y *= 2.0 - pulse
+
+		var color := Color(0.68, 0.72, 1.0, 1.0)
+		if state == 1:
+			color = Color(0.86, 0.72, 1.0, 1.0)
+
+		var angle_step: float = TAU / 24.0
+		var pixel_angle: float = roundf(float(ciliate.angle) / angle_step) * angle_step
+
+		draw_set_transform(position, pixel_angle, Vector2.ONE)
+		draw_texture_rect(
+			texture,
+			Rect2(-texture_size * 0.5, texture_size),
+			false,
+			color
+		)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func _lineage_color(hue: float) -> Color:
 	var normalized: float = wrapf(hue, 0.0, 1.0)
 	var index: int = clampi(
@@ -458,12 +516,13 @@ func _update_hud() -> void:
 		hud_panel.size = Vector2(330.0, 22.0)
 		hud_label.size = Vector2(320.0, 18.0)
 		hud_label.text = (
-			"MICROC0RE %s | %d FPS | cells %d | proto %d | engulf %d | F1 debug"
+			"MICROC0RE %s | %d FPS | bac %d | amoeba %d | ciliates %d | feeding %d | F1 debug"
 			% [
 				state_text,
 				Engine.get_frames_per_second(),
 				sim.bacteria.size(),
 				sim.protozoa.size(),
+				sim.ciliates.size(),
 				int(sim.count_engulfing()),
 			]
 		)
@@ -483,11 +542,12 @@ func _update_hud() -> void:
 	)
 	hud_label.text += "\nGPU " + gpu_name
 	hud_label.text += (
-		"\ncells %d visible %d | proto %d engulf %d | gen %d divide %d adhere %d lysis %d"
+		"\nbac %d visible %d | amoeba %d ciliates %d feeding %d | gen %d divide %d adhere %d lysis %d"
 		% [
 			sim.bacteria.size(),
 			visible_cells,
 			sim.protozoa.size(),
+			sim.ciliates.size(),
 			int(sim.count_engulfing()),
 			int(sim.max_generation()),
 			int(sim.count_dividing()),
