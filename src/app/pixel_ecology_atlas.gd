@@ -134,7 +134,7 @@ func _draw_yeast(image: Image, state: int, frame: int) -> void:
 	)
 
 	if state == STATE_REPRODUCING:
-		var bud_size: int = 2 + (frame / 2)
+		var bud_size: int = 2 + floori(float(frame) / 2.0)
 		_draw_yeast_cell(
 			image,
 			cx + 6,
