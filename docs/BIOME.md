@@ -119,8 +119,11 @@ Future #48:
 
 A deterministic spatial light gradient currently drives producer activity and phototroph energy gain.
 
+Current:
+- deterministic 180 s day/night light cycle;
+- producer activity and phototroph energy gain follow the cycle.
+
 Future #56:
-- day/night cycle;
 - self-shading;
 - oxygen/redox oscillation;
 - diel migration/dormancy.
@@ -313,6 +316,13 @@ Evolution continues through #13, #30–#36.
 ## Performance architecture
 
 The CPU implementation is the deterministic reference, not the final scaling path.
+
+Current multi-rate mitigation:
+- nutrient/waste/oxygen/damage chemistry: 30 Hz;
+- detritus/EPS/producer growth: 10 Hz;
+- organism biology/mechanics: 60 Hz.
+
+Issue #57 owns the fused GPU biome path.
 
 Biome fields are explicitly intended for GPU compute:
 - one or more packed field textures/buffers;
