@@ -315,6 +315,40 @@ func _draw_bacteria() -> void:
 			)
 
 
+func _draw_gene_transfers() -> void:
+	if sim == null or camera == null or camera.zoom.x < 1.8:
+		return
+
+	var pixel_size: float = maxf(0.16, 0.85 / camera.zoom.x)
+	for donor in sim.bacteria:
+		if int(donor.transfer_role) != 1:
+			continue
+
+		var recipient: Variant = sim.find_cell_by_id(int(donor.transfer_partner_id))
+		if recipient == null:
+			continue
+
+		var a: Vector2 = Vector2(donor.position)
+		var b: Vector2 = Vector2(recipient.position)
+		var progress: float = clampf(float(donor.transfer_progress), 0.0, 1.0)
+		var active_steps: int = maxi(2, floori(7.0 * progress))
+
+		for i in range(8):
+			var t: float = float(i + 1) / 9.0
+			var p: Vector2 = a.lerp(b, t)
+			var color := Color(0.34, 0.96, 0.86, 0.34)
+			if i < active_steps:
+				color = Color(0.68, 1.0, 0.82, 0.95)
+			draw_rect(
+				Rect2(
+					p - Vector2(pixel_size, pixel_size) * 0.5,
+					Vector2(pixel_size, pixel_size)
+				),
+				color,
+				true
+			)
+
+
 func _draw_protozoa() -> void:
 	if sim == null or protozoa_atlas == null:
 		return
@@ -527,102 +561,42 @@ func _refresh_field_texture() -> void:
 	field_texture.update(field_image)
 
 
-func _update_hud() -> void:
-	if hud_label == null or sim == null:
+func _refresh_selected_inspector() -> void:
+	if ui == null or not ui.is_inspector_open() or selected_id < 0:
 		return
 
-	var state_text: String = "PAUSE" if paused else "RUN"
-
-	if not hud_debug_expanded:
-		hud_panel.size = Vector2(235.0, 22.0)
-		hud_label.size = Vector2(225.0, 18.0)
-		hud_label.text = (
-			"%s %dFPS | B%d A%d C%d F%d | F1"
-			% [
-				state_text,
-				Engine.get_frames_per_second(),
-				sim.bacteria.size(),
-				sim.protozoa.size(),
-				sim.ciliates.size(),
-				int(sim.count_engulfing()),
-			]
-		)
+	var organism: Variant = _selected_organism()
+	if organism == null:
+		_clear_selection()
 		return
 
-	hud_panel.size = Vector2(500.0, 154.0)
-	hud_label.size = Vector2(490.0, 148.0)
-	hud_label.text = (
-		"MICROC0RE %s | FPS %d | zoom %.2f | sim %.1fx | %s"
-		% [
-			state_text,
-			Engine.get_frames_per_second(),
-			camera.zoom.x,
-			simulation_speed,
-			renderer_name,
-		]
-	)
-	hud_label.text += "\nGPU " + gpu_name
-	hud_label.text += (
-		"\nbac %d visible %d | amoeba %d ciliates %d feeding %d | gen %d divide %d adhere %d lysis %d"
-		% [
-			sim.bacteria.size(),
-			visible_cells,
-			sim.protozoa.size(),
-			sim.ciliates.size(),
-			int(sim.count_engulfing()),
-			int(sim.max_generation()),
-			int(sim.count_dividing()),
-			int(sim.count_adhering()),
-			int(sim.count_lysing()),
-		]
-	)
-	hud_label.text += (
-		"\nframe sim %.2f field %.2f draw %.2f | tick chem %.2f agent %.2f mech %.2f"
-		% [
-			sim_ms,
-			field_ms,
-			draw_ms,
-			float(sim.chemistry_ms_last),
-			float(sim.agents_ms_last),
-			float(sim.mechanics_ms_last),
-		]
-	)
-	hud_label.text += (
-		"\nlod far %d sprites %d | pairs %d -> %d -> %d -> %d"
-		% [
-			far_cells,
-			sprite_cells,
-			int(sim.pair_candidates_last),
-			int(sim.pair_narrow_checks_last),
-			int(sim.pair_interactions_last),
-			int(sim.pair_contacts_last),
-		]
-	)
-	hud_label.text += (
-		"\nF1 debug | wheel zoom | RMB/MMB pan | WASD | click inspect | F fit | R reset | N seed"
+	ui.update_inspector(
+		_inspector_title(organism),
+		_inspector_body(organism)
 	)
 
-	if selected_id >= 0:
-		var selected: Variant = sim.find_cell_by_id(selected_id)
-		if selected == null:
-			selected_id = -1
-		else:
-			hud_label.text += (
-				"\n#%d g%d E%.2f speed%.2f chemo%.2f uptake%.2f adh%.2f engulf %.2f"
-				% [
-					int(selected.id),
-					int(selected.generation),
-					float(selected.energy),
-					float(selected.gene_speed),
-					float(selected.gene_chemotaxis),
-					float(selected.gene_uptake),
-					float(selected.gene_adhesion),
-					float(selected.engulf_progress),
-				]
-			)
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if (
+			key_event.pressed
+			and not key_event.echo
+			and key_event.keycode == KEY_ESCAPE
+		):
+			if ui != null and ui.is_inspector_open():
+				_clear_selection()
+			elif ui != null and ui.is_menu_open():
+				_resume_from_menu()
+			else:
+				_open_menu()
+			get_viewport().set_input_as_handled()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if ui != null and ui.is_menu_open():
+		return
+
 	if event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
 
@@ -645,13 +619,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 		if mouse_button.button_index == MOUSE_BUTTON_LEFT and mouse_button.pressed:
-			_select_nearest_cell(get_global_mouse_position())
+			_select_nearest_organism(get_global_mouse_position())
 			get_viewport().set_input_as_handled()
 			return
 
 	if event is InputEventMouseMotion and dragging_camera:
 		var motion := event as InputEventMouseMotion
 		camera.position -= motion.relative / camera.zoom.x
+		_clamp_camera_to_world()
 		get_viewport().set_input_as_handled()
 		return
 
@@ -661,22 +636,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 		match key_event.keycode:
-			KEY_F1:
-				hud_debug_expanded = not hud_debug_expanded
 			KEY_SPACE:
 				paused = not paused
 			KEY_F:
 				_fit_camera()
 			KEY_R:
-				_start_simulation(current_seed)
-				_setup_field_texture()
-				_refresh_field_texture()
-				_fit_camera()
+				_reset_same_seed()
 			KEY_N:
-				_start_simulation(current_seed + 1)
-				_setup_field_texture()
-				_refresh_field_texture()
-				_fit_camera()
+				_new_seed()
 			KEY_1:
 				simulation_speed = 1.0
 			KEY_2:
@@ -688,7 +655,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			_:
 				return
 
-		_update_hud()
 		get_viewport().set_input_as_handled()
 
 
@@ -696,7 +662,8 @@ func _zoom_at_screen_position(screen_position: Vector2, factor: float) -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var viewport_center: Vector2 = viewport_size * 0.5
 	var old_zoom: float = camera.zoom.x
-	var new_zoom: float = clampf(old_zoom * factor, MIN_ZOOM, MAX_ZOOM)
+	var minimum_zoom: float = _minimum_camera_zoom()
+	var new_zoom: float = clampf(old_zoom * factor, minimum_zoom, MAX_ZOOM)
 	if is_equal_approx(old_zoom, new_zoom):
 		return
 
@@ -709,21 +676,252 @@ func _zoom_at_screen_position(screen_position: Vector2, factor: float) -> void:
 		world_under_cursor
 		- (screen_position - viewport_center) / new_zoom
 	)
+	_clamp_camera_to_world()
 
 
-func _select_nearest_cell(world_position: Vector2) -> void:
+func _select_nearest_organism(world_position: Vector2) -> void:
 	var best_id: int = -1
+	var best_kind: String = ""
 	var best_distance: float = INF
-	var selection_radius: float = maxf(0.8, 8.0 / camera.zoom.x)
+	var base_radius: float = maxf(1.0, 7.0 / camera.zoom.x)
 
 	for cell in sim.bacteria:
+		if bool(cell.consumed):
+			continue
 		var distance: float = Vector2(cell.position).distance_to(world_position)
-		if distance <= selection_radius and distance < best_distance:
+		var radius: float = maxf(base_radius, float(cell.length) * 0.75)
+		if distance <= radius and distance < best_distance:
 			best_distance = distance
 			best_id = int(cell.id)
+			best_kind = "bacterium"
+
+	for proto in sim.protozoa:
+		var distance: float = Vector2(proto.position).distance_to(world_position)
+		var radius: float = maxf(base_radius * 1.2, float(proto.radius) * 1.5)
+		if distance <= radius and distance < best_distance:
+			best_distance = distance
+			best_id = int(proto.id)
+			best_kind = "amoeba"
+
+	for ciliate in sim.ciliates:
+		var distance: float = Vector2(ciliate.position).distance_to(world_position)
+		var radius: float = maxf(base_radius * 1.1, float(ciliate.radius) * 1.6)
+		if distance <= radius and distance < best_distance:
+			best_distance = distance
+			best_id = int(ciliate.id)
+			best_kind = "ciliate"
+
+	if best_id < 0:
+		_clear_selection()
+		return
 
 	selected_id = best_id
-	_update_hud()
+	selected_kind = best_kind
+	var organism: Variant = _selected_organism()
+	if organism != null and ui != null:
+		ui.show_inspector(
+			_inspector_title(organism),
+			_inspector_body(organism)
+		)
+
+
+func _selected_organism() -> Variant:
+	if selected_id < 0:
+		return null
+
+	if selected_kind == "bacterium":
+		return sim.find_cell_by_id(selected_id)
+
+	if selected_kind == "amoeba":
+		for proto in sim.protozoa:
+			if int(proto.id) == selected_id:
+				return proto
+
+	if selected_kind == "ciliate":
+		for ciliate in sim.ciliates:
+			if int(ciliate.id) == selected_id:
+				return ciliate
+
+	return null
+
+
+func _clear_selection() -> void:
+	selected_id = -1
+	selected_kind = ""
+	if ui != null:
+		ui.hide_inspector()
+
+
+func _inspector_title(organism: Variant) -> String:
+	match selected_kind:
+		"bacterium":
+			return "BACTERIUM  #%d" % int(organism.id)
+		"amoeba":
+			return "AMOEBOID PREDATOR  #%d" % int(organism.id)
+		"ciliate":
+			return "CILIATE GRAZER  #%d" % int(organism.id)
+		_:
+			return "ORGANISM"
+
+
+func _inspector_body(organism: Variant) -> String:
+	if selected_kind == "bacterium":
+		var state: String = "motile"
+		if bool(organism.dying):
+			state = "lysis"
+		elif bool(organism.dividing):
+			state = "fission"
+		elif int(organism.engulfed_by_id) >= 0:
+			state = "being engulfed"
+		elif int(organism.transfer_role) == 1:
+			state = "conjugation donor"
+		elif int(organism.transfer_role) == 2:
+			state = "conjugation recipient"
+		elif float(organism.adhesion_timer) > 0.0:
+			state = "adhering"
+
+		return (
+			"STATE\n%s\n\n"
+			+ "LINEAGE\n"
+			+ "generation  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
+			+ "ENERGY / BODY\n"
+			+ "energy      %.2f\nlength      %.2f\n\n"
+			+ "HERITABLE TRAITS\n"
+			+ "speed       %.2f\nchemotaxis  %.2f\nuptake      %.2f\ngrowth      %.2f\n"
+			+ "size        %.2f\ntumble      %.2f\nadhesion    %.2f\nmutation    %.3f\n\n"
+			+ "APPENDAGES\nflagella    %d\npili        %d\n\n"
+			+ "MOBILE DNA\nplasmids    %s\nHGT events  %d\ntransfer    %.0f%%"
+		) % [
+			state,
+			int(organism.generation),
+			int(organism.parent_id),
+			int(organism.lineage_id),
+			float(organism.age),
+			float(organism.energy),
+			float(organism.length),
+			float(organism.gene_speed),
+			float(organism.gene_chemotaxis),
+			float(organism.gene_uptake),
+			float(organism.gene_growth),
+			float(organism.gene_size),
+			float(organism.gene_tumble),
+			float(organism.gene_adhesion),
+			float(organism.mutation_rate),
+			int(organism.flagella_count),
+			int(organism.pili_count),
+			String(organism.plasmid_names()),
+			int(organism.hgt_events),
+			float(organism.transfer_progress) * 100.0,
+		]
+
+	if selected_kind == "amoeba":
+		var state: String = (
+			"engulfing prey #%d" % int(organism.feeding_target_id)
+			if int(organism.feeding_target_id) >= 0
+			else "hunting"
+		)
+		return (
+			"STATE\n%s\n\n"
+			+ "LINEAGE\ngeneration  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
+			+ "ENERGY / BODY\nenergy      %.2f\nradius      %.2f\nfeeding     %.0f%%\n\n"
+			+ "HERITABLE TRAITS\nspeed       %.2f\nperception  %.2f\nengulf      %.2f\n"
+			+ "size        %.2f\nmetabolism  %.2f\nmutation    %.3f"
+		) % [
+			state,
+			int(organism.generation),
+			int(organism.parent_id),
+			int(organism.lineage_id),
+			float(organism.age),
+			float(organism.energy),
+			float(organism.radius),
+			float(organism.feeding_progress) * 100.0,
+			float(organism.gene_speed),
+			float(organism.gene_perception),
+			float(organism.gene_engulf),
+			float(organism.gene_size),
+			float(organism.gene_metabolism),
+			float(organism.mutation_rate),
+		]
+
+	if selected_kind == "ciliate":
+		var state: String = (
+			"feeding on #%d" % int(organism.feeding_target_id)
+			if int(organism.feeding_target_id) >= 0
+			else "grazing"
+		)
+		return (
+			"STATE\n%s\n\n"
+			+ "LINEAGE\ngeneration  %d\nparent      %d\nlineage     %d\nage         %.1fs\n\n"
+			+ "ENERGY / BODY\nenergy      %.2f\nradius      %.2f\nfeeding     %.0f%%\n\n"
+			+ "HERITABLE TRAITS\nspeed       %.2f\nperception  %.2f\ncapture     %.2f\n"
+			+ "size        %.2f\nmetabolism  %.2f\nmutation    %.3f"
+		) % [
+			state,
+			int(organism.generation),
+			int(organism.parent_id),
+			int(organism.lineage_id),
+			float(organism.age),
+			float(organism.energy),
+			float(organism.radius),
+			float(organism.feeding_progress) * 100.0,
+			float(organism.gene_speed),
+			float(organism.gene_perception),
+			float(organism.gene_capture),
+			float(organism.gene_size),
+			float(organism.gene_metabolism),
+			float(organism.mutation_rate),
+		]
+
+	return ""
+
+
+func _open_menu() -> void:
+	if ui == null:
+		return
+	menu_pause_previous = paused
+	paused = true
+	dragging_camera = false
+	ui.show_menu()
+
+
+func _resume_from_menu() -> void:
+	if ui == null:
+		return
+	ui.hide_menu()
+	paused = menu_pause_previous
+
+
+func _menu_fit() -> void:
+	_fit_camera()
+	_resume_from_menu()
+
+
+func _menu_reset() -> void:
+	_reset_same_seed()
+	_resume_from_menu()
+
+
+func _menu_new_seed() -> void:
+	_new_seed()
+	_resume_from_menu()
+
+
+func _menu_quit() -> void:
+	get_tree().quit()
+
+
+func _reset_same_seed() -> void:
+	_start_simulation(current_seed)
+	_setup_field_texture()
+	_refresh_field_texture()
+	_fit_camera()
+
+
+func _new_seed() -> void:
+	_start_simulation(current_seed + 1)
+	_setup_field_texture()
+	_refresh_field_texture()
+	_fit_camera()
 
 
 func _handle_keyboard_pan(delta: float) -> void:
@@ -744,25 +942,63 @@ func _handle_keyboard_pan(delta: float) -> void:
 	direction = direction.normalized()
 	var pan_speed: float = 170.0 / maxf(camera.zoom.x, 0.08)
 	camera.position += direction * pan_speed * delta
+	_clamp_camera_to_world()
+
+
+func _minimum_camera_zoom() -> float:
+	if camera == null or sim == null:
+		return 1.0
+
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var world: Vector2 = Vector2(sim.world_size)
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return 1.0
+
+	# "Cover", not "contain": the simulated world always fills the screen.
+	# The user can only stay at this overview or zoom further in.
+	return clampf(
+		maxf(
+			viewport_size.x / world.x,
+			viewport_size.y / world.y
+		),
+		0.01,
+		MAX_ZOOM
+	)
+
+
+func _clamp_camera_to_world() -> void:
+	if camera == null or sim == null:
+		return
+
+	var minimum_zoom: float = _minimum_camera_zoom()
+	if camera.zoom.x < minimum_zoom:
+		camera.zoom = Vector2(minimum_zoom, minimum_zoom)
+
+	var half_extents: Vector2 = get_viewport_rect().size * 0.5 / camera.zoom.x
+	var world: Vector2 = Vector2(sim.world_size)
+	var min_position: Vector2 = half_extents
+	var max_position: Vector2 = world - half_extents
+
+	camera.position.x = (
+		world.x * 0.5
+		if min_position.x > max_position.x
+		else clampf(camera.position.x, min_position.x, max_position.x)
+	)
+	camera.position.y = (
+		world.y * 0.5
+		if min_position.y > max_position.y
+		else clampf(camera.position.y, min_position.y, max_position.y)
+	)
 
 
 func _fit_camera() -> void:
 	if camera == null or sim == null:
 		return
 
-	var viewport_size: Vector2 = get_viewport_rect().size
-	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
-		return
-
-	var world: Vector2 = Vector2(sim.world_size)
-	var fit_zoom: float = minf(
-		viewport_size.x / world.x,
-		viewport_size.y / world.y
-	) * 0.88
-	fit_zoom = clampf(fit_zoom, MIN_ZOOM, MAX_ZOOM)
-
-	camera.position = world * 0.5
+	var fit_zoom: float = _minimum_camera_zoom()
+	camera.position = Vector2(sim.world_size) * 0.5
 	camera.zoom = Vector2(fit_zoom, fit_zoom)
+	_clamp_camera_to_world()
 
 
 func _smooth_metric(current: float, sample: float) -> float:
