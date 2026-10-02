@@ -91,6 +91,8 @@ func take_nearest_world(position: Vector2, requested: float) -> float:
 
 
 func sample_world(position: Vector2) -> float:
+	# Hot path: position is clamped once, then PackedFloat32Array is read
+	# directly. Avoid four get_cell() calls and their repeated clamps.
 	var gx: float = clampf(position.x / cell_size, 0.0, float(width - 1))
 	var gy: float = clampf(position.y / cell_size, 0.0, float(height - 1))
 	var x0: int = floori(gx)
@@ -100,9 +102,16 @@ func sample_world(position: Vector2) -> float:
 	var tx: float = gx - float(x0)
 	var ty: float = gy - float(y0)
 
-	var a: float = lerpf(get_cell(x0, y0), get_cell(x1, y0), tx)
-	var b: float = lerpf(get_cell(x0, y1), get_cell(x1, y1), tx)
-	return lerpf(a, b, ty)
+	var row0: int = y0 * width
+	var row1: int = y1 * width
+	var v00: float = values[row0 + x0]
+	var v10: float = values[row0 + x1]
+	var v01: float = values[row1 + x0]
+	var v11: float = values[row1 + x1]
+
+	var a: float = v00 + (v10 - v00) * tx
+	var b: float = v01 + (v11 - v01) * tx
+	return a + (b - a) * ty
 
 
 func gradient_world(position: Vector2) -> Vector2:
