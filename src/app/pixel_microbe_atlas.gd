@@ -82,9 +82,9 @@ func _draw_microbe(
 ) -> void:
 	var center_x: int = 18
 	var center_y: int = 10
-	var body_length: int = [9, 12, 15][size_class]
-	var left: int = center_x - body_length / 2
-	var right: int = center_x + body_length / 2
+	var body_length: int = int([9, 12, 15][size_class])
+	var left: int = center_x - floori(float(body_length) / 2.0)
+	var right: int = center_x + floori(float(body_length) / 2.0)
 
 	var outline := Color(0.15, 0.17, 0.19, 1.0)
 	var body := Color(0.88, 0.90, 0.91, 1.0)
@@ -211,7 +211,7 @@ func _draw_dividing_body(
 		dark
 	)
 
-	var center_x: int = (left + right) / 2
+	var center_x: int = floori(float(left + right) / 2.0)
 
 	# Visible septum / constriction.
 	for y in range(center_y - 2, center_y + 3):
@@ -278,7 +278,7 @@ func _draw_flagella(
 	var wave: Array = phase_table[frame]
 
 	for tail in range(count):
-		var y_bias: int = tail - (count - 1) / 2
+		var y_bias: int = tail - floori(float(count - 1) / 2.0)
 		for step in range(9):
 			var x: int = start_x - step
 			var y: int = center_y + int(wave[step]) + y_bias * 2
@@ -300,7 +300,7 @@ func _draw_pili(
 ) -> void:
 	var anchors: Array = [
 		left + 1,
-		(left + right) / 2,
+		floori(float(left + right) / 2.0),
 		right - 1,
 	]
 
