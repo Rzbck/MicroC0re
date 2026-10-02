@@ -38,6 +38,7 @@ We use real mathematical structures where they help:
 Every approximation should be documented. Parameters are considered **uncalibrated** until validation work explicitly says otherwise.
 
 See:
+- **[Current direction](docs/CURRENT_DIRECTION.md)** — read this first; it overrides stale visual priorities
 - [Research references](docs/RESEARCH.md)
 - [Mathematical model](docs/MATH.md)
 - [Biology model](docs/BIOLOGY.md)
@@ -104,5 +105,9 @@ The local executable path is **not** stored in project settings.
 9. Artistic exaggeration is allowed only when documented as artistic.
 
 ## Status
+
+**Current gate: Epic #14 — Visual Rebuild v0.2.**
+
+The first visible renderer is intentionally considered a rejected debug baseline: it exposed grey outside the world, dropped to ~5–8 FPS at close zoom in the observed test, and read as vector/procedural rather than true pixel art. Agents should read `docs/CURRENT_DIRECTION.md` before adding features.
 
 Bootstrap work is happening on `bootstrap/petri-kernel-v0.1`.
