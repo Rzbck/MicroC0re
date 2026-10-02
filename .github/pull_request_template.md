@@ -29,3 +29,22 @@ Command:
 ## Notes / limitations
 
 Document uncalibrated parameters, shortcuts, and follow-up work.
+
+
+## Visual / performance gate
+
+For renderer/art/camera work:
+- [ ] I read `docs/CURRENT_DIRECTION.md`.
+- [ ] No Godot default grey/clear area is visible at supported zoom.
+- [ ] Pixel-art work follows `docs/ART_DIRECTION.md` rather than relying on nearest filtering alone.
+- [ ] Off-screen culling / LOD behavior was considered.
+- [ ] Before/after FPS or timing numbers are included below for performance-sensitive changes.
+- [ ] The agreed baseline does not fall below 60 FPS without an explicit documented exception.
+- [ ] Important interactions are staged/readable rather than collision -> delete.
+
+### Performance measurements
+
+Scene / population / zoom:
+Before:
+After:
+Bottleneck notes:
