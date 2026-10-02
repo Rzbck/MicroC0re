@@ -31,7 +31,9 @@ The viewer should be able to:
 - immediately read different organisms/lineages at normal zoom;
 - see deliberate pixel-level structure at close zoom;
 - observe interactions that persist long enough to understand: growth, fission, adhesion, feeding, lysis, later predation/engulfment;
-- watch the system evolve without needing a debug explanation.
+- watch the system evolve without needing a debug explanation;
+- inspect an individual organism and understand how its lineage/traits differ;
+- witness both vertical mutation and horizontal acquisition of mobile traits.
 
 The simulation remains continuous and deterministic where intended. The **presentation** is pixel art.
 
@@ -104,11 +106,26 @@ Required:
 - optional repeated/procedural microscope microtexture outside the active Petri region;
 - zoom toward cursor;
 - stable pan at every zoom;
-- dynamic fit view;
-- a much wider zoom-out range than the current prototype;
+- **overview-or-zoom-in only**: the minimum zoom must cover the viewport with simulated world;
+- camera position must be clamped so panning never exposes outside-world space;
+- F returns to the overview;
 - close zoom for pixel/sprite inspection.
 
 "World is finite" is acceptable. "Outside world is accidental grey" is not.
+
+## UI / inspection contract
+
+The simulation view should read as artwork first, not as a developer dashboard.
+
+Required:
+- no permanent FPS/debug/status block in the microscope view;
+- no F1 debug overlay as the primary interface;
+- Escape opens a real pause menu;
+- clicking an organism opens a left-side detail inspector;
+- the inspector shows identity, lineage, generation, energy/state and heritable traits;
+- bacterial mobile DNA / HGT state should be visible in the inspector;
+- clicking empty world or pressing Escape closes the inspector;
+- diagnostic profiling remains available through development tools/benchmarks, not permanent screen clutter.
 
 ## Organism design contract
 
