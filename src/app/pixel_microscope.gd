@@ -1157,7 +1157,7 @@ func _refresh_field_texture() -> void:
 			var cue: float = pow(cue_value, 0.62)
 			var p: float = pow(producer_value, 1.08)
 			var shimmer: float = 0.94 + 0.06 * sin(
-				simulation_time * 1.15 + float(x) * 0.37 + float(y) * 0.23
+				float(sim.simulation_time) * 1.15 + float(x) * 0.37 + float(y) * 0.23
 			)
 
 			field_image.set_pixel(

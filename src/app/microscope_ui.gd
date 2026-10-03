@@ -135,8 +135,8 @@ func _build_inspector() -> void:
 	inspector_panel.anchor_bottom = 0.0
 	inspector_panel.offset_left = 4.0
 	inspector_panel.offset_top = 4.0
-	inspector_panel.offset_right = 148.0
-	inspector_panel.offset_bottom = 112.0
+	inspector_panel.offset_right = 136.0
+	inspector_panel.offset_bottom = 94.0
 	inspector_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.90))
 	inspector_panel.visible = false
