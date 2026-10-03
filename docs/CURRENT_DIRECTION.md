@@ -182,7 +182,7 @@ Important interactions should persist long enough to observe. Avoid `collision -
 
 Epic #38 is now an active product direction alongside the visual rebuild.
 
-The biome presentation must be **generative pixel art, not a heatmap**. Environmental scalar fields choose cached pixel motifs, density and event accents. Producer mats, detritus, EPS, damage, oxygen-rich areas and nutrient-rich areas require distinct pixel structure. New actions/reactions should use the shared biological-event FX atlas rather than ad-hoc vector markers. #61 owns this presentation layer; #57 owns its later GPU-resident implementation.
+The biome presentation must be **game-art material driven, not a heatmap or animated wallpaper**. A dedicated low-contrast water shader forms the base. A separate biome-material shader reads slow simulation masks and reveals sparse local material on the same 0.25-world-unit pixel grid as organism sprites. Field evolution and organism activity control those masks; the shader never invents ecology. #61 owns presentation; #57 owns the later GPU-resident path.
 
 The simulated world should evolve into an aquatic micro-ecosystem with:
 - oxygen, light, detritus, EPS, damage cues and water flow;

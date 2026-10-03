@@ -14,7 +14,9 @@ const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd"
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
-const PixelBiomeAtlasScript = preload("res://src/app/pixel_biome_atlas.gd")
+const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
+const WaterBackgroundShader = preload("res://src/app/shaders/water_background.gdshader")
+const BiomeMaterialShader = preload("res://src/app/shaders/biome_material.gdshader")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 
 const STEPS := 600
@@ -25,17 +27,11 @@ func _init() -> void:
 	var errors := PackedStringArray()
 	_validate_preloaded_scripts(errors)
 
-	var biome_assets = PixelBiomeAtlasScript.new()
-	var biome_probe: PackedInt32Array = biome_assets.classify(
-		0.1, 0.2, 0.0, 0.0, 0.0, 1.0, 0.0
-	)
-	if int(biome_probe[0]) != PixelBiomeAtlasScript.KIND_PRODUCER:
-		errors.append("render: producer-rich biome did not select producer tile")
-	var producer_tile: Image = biome_assets.get_tile_image(
-		PixelBiomeAtlasScript.KIND_PRODUCER, 3, 0, 0
-	)
-	if producer_tile.get_width() != PixelBiomeAtlasScript.TILE_SIZE:
-		errors.append("render: invalid generative biome tile size")
+	var biome_renderer_probe = BiomeMaterialRendererScript.new()
+	if biome_renderer_probe == null:
+		errors.append("render: biome material renderer failed to instantiate")
+	if WaterBackgroundShader == null or BiomeMaterialShader == null:
+		errors.append("render: biome shader resources failed to preload")
 
 	var effect_assets = PixelEffectAtlasScript.new()
 	var lysis_fx: Texture2D = effect_assets.get_texture(
@@ -271,7 +267,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["pixel_protozoa_atlas", PixelProtozoaAtlasScript],
 		["pixel_ciliate_atlas", PixelCiliateAtlasScript],
 		["pixel_ecology_atlas", PixelEcologyAtlasScript],
-		["pixel_biome_atlas", PixelBiomeAtlasScript],
+		["biome_material_renderer", BiomeMaterialRendererScript],
 		["pixel_effect_atlas", PixelEffectAtlasScript],
 	]
 

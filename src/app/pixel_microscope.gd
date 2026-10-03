@@ -8,14 +8,14 @@ const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
-const PixelBiomeAtlasScript = preload("res://src/app/pixel_biome_atlas.gd")
+const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 4
 const SIMULATION_FRAME_BUDGET_USEC := 9000
-const FIELD_REFRESH_INTERVAL := 1.0 / 10.0
+const FIELD_REFRESH_INTERVAL := 0.5
 const INSPECTOR_REFRESH_INTERVAL := 0.15
 const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
@@ -44,7 +44,7 @@ var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
 var ecology_atlas: Variant
-var biome_atlas: Variant
+var biome_renderer: Node2D
 var effect_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
@@ -58,8 +58,6 @@ var visual_time: float = 0.0
 var camera: Camera2D
 var dragging_camera: bool = false
 
-var field_image: Image
-var field_texture: ImageTexture
 var field_refresh_accumulator: float = 0.0
 
 var inspector_refresh_accumulator: float = 0.0
@@ -91,15 +89,13 @@ func _ready() -> void:
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
 	ecology_atlas = PixelEcologyAtlasScript.new()
-	biome_atlas = PixelBiomeAtlasScript.new()
 	effect_atlas = PixelEffectAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
 	_setup_camera()
-	_setup_field_texture()
+	_setup_biome_renderer()
 	_setup_ui()
-	_refresh_field_texture()
 	call_deferred("_fit_camera")
 	queue_redraw()
 
@@ -156,17 +152,13 @@ func _setup_camera() -> void:
 	add_child(camera)
 
 
-func _setup_field_texture() -> void:
-	var field: Variant = sim.nutrient
-	var tile_size: int = int(PixelBiomeAtlasScript.TILE_SIZE)
-	field_image = Image.create(
-		int(field.width) * tile_size,
-		int(field.height) * tile_size,
-		false,
-		Image.FORMAT_RGBA8
-	)
-	field_image.fill(Color(0.01, 0.06, 0.07, 1.0))
-	field_texture = ImageTexture.create_from_image(field_image)
+func _setup_biome_renderer() -> void:
+	biome_renderer = BiomeMaterialRendererScript.new()
+	biome_renderer.name = "BiomeMaterialRenderer"
+	biome_renderer.z_as_relative = false
+	biome_renderer.z_index = -20
+	add_child(biome_renderer)
+	biome_renderer.initialize(sim)
 
 
 func _setup_ui() -> void:
@@ -217,7 +209,8 @@ func _process(delta: float) -> void:
 			FIELD_REFRESH_INTERVAL
 		)
 		var field_start: int = Time.get_ticks_usec()
-		_refresh_field_texture()
+		if biome_renderer != null:
+			biome_renderer.refresh_from_sim(sim)
 		field_ms = _smooth_metric(
 			field_ms,
 			float(Time.get_ticks_usec() - field_start) / 1000.0
@@ -243,19 +236,6 @@ func _draw() -> void:
 	var world_rect := Rect2(Vector2.ZERO, Vector2(sim.world_size))
 	draw_rect(world_rect, Color(0.005, 0.012, 0.014, 1.0), true)
 
-	if field_texture != null:
-		var scene_light: float = float(
-			sim.sample_light(Vector2(sim.world_size) * 0.5)
-		)
-		var biome_tint := Color(
-			0.72 + scene_light * 0.28,
-			0.66 + scene_light * 0.34,
-			0.76 + scene_light * 0.24,
-			1.0
-		)
-		draw_texture_rect(field_texture, world_rect, false, biome_tint)
-
-	_draw_water_flow_cues()
 	_draw_bacteria()
 	_draw_protozoa()
 	_draw_ciliates()
@@ -368,7 +348,7 @@ func _draw_gene_transfers() -> void:
 	if sim == null or camera == null or camera.zoom.x < 1.8:
 		return
 
-	var pixel_size: float = maxf(0.16, 0.85 / camera.zoom.x)
+	var pixel_size: float = SPRITE_WORLD_PIXEL
 	for donor in sim.bacteria:
 		if int(donor.transfer_role) != 1:
 			continue
@@ -761,45 +741,6 @@ func _draw_decomposers() -> void:
 
 
 
-func _draw_water_flow_cues() -> void:
-	if sim == null or camera == null:
-		return
-	var visible: Rect2 = _visible_world_rect()
-	var zoom_value: float = camera.zoom.x
-	var px: float = maxf(0.10, 0.58 / zoom_value)
-	var cols: int = 6
-	var rows: int = 4
-
-	# Sparse screen-distributed motes make the aqueous phase readable without
-	# simulating literal particles. Their direction is sampled from the real
-	# deterministic water-flow field owned by the simulation.
-	for gy in range(rows):
-		for gx in range(cols):
-			var uv := Vector2(
-				(float(gx) + 0.5) / float(cols),
-				(float(gy) + 0.5) / float(rows)
-			)
-			var base: Vector2 = visible.position + visible.size * uv
-			var flow: Vector2 = Vector2(sim.sample_water_flow(base))
-			if flow.length_squared() <= 0.00001:
-				continue
-			var direction: Vector2 = flow.normalized()
-			var phase: float = fmod(
-				visual_time * (0.18 + flow.length() * 0.10)
-				+ float(gx * 7 + gy * 11) * 0.071,
-				1.0
-			)
-			var p: Vector2 = base + direction * (phase - 0.5) * (6.0 / maxf(zoom_value, 0.25))
-			for i in range(3):
-				var q: Vector2 = p - direction * px * float(i) * 1.7
-				var c := Color(0.48, 0.82, 0.86, 0.16 - float(i) * 0.035)
-				draw_rect(
-					Rect2(q - Vector2.ONE * px * 0.35, Vector2.ONE * px * 0.70),
-					c,
-					true
-				)
-
-
 func _draw_life_state_cues() -> void:
 	if sim == null or camera == null or effect_atlas == null:
 		return
@@ -922,8 +863,7 @@ func _draw_effect_asset(
 	if effect_atlas == null or camera == null:
 		return
 	var texture: Texture2D = effect_atlas.get_texture(kind, frame)
-	var world_pixel: float = 1.0 / maxf(camera.zoom.x, 0.001)
-	var size: Vector2 = texture.get_size() * world_pixel * scale
+	var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL * scale
 	draw_texture_rect(
 		texture,
 		Rect2(position - size * 0.5, size),
@@ -1082,7 +1022,7 @@ func _draw_feeding_link(
 		return
 
 	var zoom_value: float = camera.zoom.x
-	var pixel_size: float = maxf(0.12, 0.90 / zoom_value)
+	var pixel_size: float = SPRITE_WORLD_PIXEL
 	var normal: Vector2 = delta.normalized().orthogonal()
 	var visibility: float = lerpf(
 		0.50,
@@ -1151,7 +1091,7 @@ func _draw_lysis_fragments(
 		clampi(floori(clampf(progress, 0.0, 0.999) * 4.0), 0, 3),
 		1.0 + progress * 0.30
 	)
-	var pixel_size: float = maxf(0.13, 0.75 / zoom_value)
+	var pixel_size: float = SPRITE_WORLD_PIXEL
 	var radius: float = 0.7 + progress * 3.2
 	for i in range(6):
 		var phase: float = (
@@ -1241,113 +1181,6 @@ func _visible_world_rect() -> Rect2:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var half_extents: Vector2 = viewport_size * 0.5 / camera.zoom.x
 	return Rect2(camera.position - half_extents, half_extents * 2.0)
-
-
-func _refresh_field_texture() -> void:
-	if (
-		sim == null
-		or field_image == null
-		or field_texture == null
-		or biome_atlas == null
-	):
-		return
-
-	var nutrient_field: Variant = sim.nutrient
-	var waste_field: Variant = sim.waste
-	var oxygen_field: Variant = sim.oxygen
-	var detritus_field: Variant = sim.detritus
-	var eps_field: Variant = sim.eps
-	var cue_field: Variant = sim.damage_cue
-	var producer_field: Variant = sim.producer_biomass
-	var width: int = int(nutrient_field.width)
-	var height: int = int(nutrient_field.height)
-	var tile_size: int = int(PixelBiomeAtlasScript.TILE_SIZE)
-	var frame: int = posmod(floori(float(sim.simulation_time) * 3.0), 4)
-	var source_rect := Rect2i(0, 0, tile_size, tile_size)
-
-	for y in range(height):
-		for x in range(width):
-			var nutrient_value: float = clampf(
-				float(nutrient_field.get_cell(x, y)) * 2.0,
-				0.0,
-				1.0
-			)
-			var waste_value: float = clampf(
-				float(waste_field.get_cell(x, y)) * 2.7,
-				0.0,
-				1.0
-			)
-			var oxygen_value: float = clampf(
-				float(oxygen_field.get_cell(x, y)) * 1.5,
-				0.0,
-				1.0
-			)
-			var detritus_value: float = clampf(
-				float(detritus_field.get_cell(x, y)) * 6.0,
-				0.0,
-				1.0
-			)
-			var eps_value: float = clampf(
-				float(eps_field.get_cell(x, y)) * 6.5,
-				0.0,
-				1.0
-			)
-			var cue_value: float = clampf(
-				float(cue_field.get_cell(x, y)) * 12.0,
-				0.0,
-				1.0
-			)
-			var producer_value: float = clampf(
-				float(producer_field.get_cell(x, y)) * 1.6,
-				0.0,
-				1.0
-			)
-
-			var classified: PackedInt32Array = biome_atlas.classify(
-				nutrient_value,
-				oxygen_value,
-				detritus_value,
-				eps_value,
-				cue_value,
-				producer_value,
-				waste_value
-			)
-			var primary_kind: int = int(classified[0])
-			var primary_level: int = int(classified[1])
-			var secondary_kind: int = int(classified[2])
-			var secondary_level: int = int(classified[3])
-			var variant: int = posmod(
-				x * 17 + y * 31 + current_seed * 7,
-				4
-			)
-			var tile: Image = biome_atlas.get_tile_image(
-				primary_kind,
-				primary_level,
-				variant,
-				frame
-			)
-			var destination := Vector2i(x * tile_size, y * tile_size)
-			field_image.blit_rect(tile, source_rect, destination)
-
-			# One secondary pixel prevents the biome from becoming a set of mutually
-			# exclusive categorical islands. It reads as layered ecological material
-			# while staying cheap and deterministic.
-			if (
-				secondary_kind != PixelBiomeAtlasScript.KIND_WATER
-				and secondary_level >= 1
-				and secondary_kind != primary_kind
-			):
-				var accent: Vector2i = biome_atlas.accent_offset(variant, frame)
-				field_image.set_pixel(
-					destination.x + accent.x,
-					destination.y + accent.y,
-					biome_atlas.accent_color(
-						secondary_kind,
-						secondary_level
-					)
-				)
-
-	field_texture.update(field_image)
 
 
 func _refresh_selected_inspector() -> void:

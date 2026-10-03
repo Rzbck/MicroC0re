@@ -387,29 +387,20 @@ Agent populations should remain bounded until GPU-resident agent mechanics is va
 
 ## Visual contract
 
-The biome must remain readable **generative pixel art**, never primarily a scalar-field heatmap.
+The biome is a slowly evolving ecological material layer, not a heatmap and not animated wallpaper.
 
-Current presentation pipeline:
-- each 96x64 simulation field cell selects a cached 4x4 pixel motif;
-- water, producer mats, detritus, EPS, damage, oxygen and nutrient-rich zones have different pixel structures and palettes;
-- deterministic seed/coordinate variants prevent obvious repeated blocks;
-- motif density communicates field strength;
-- a secondary field can add a small accent so mixed niches remain layered;
-- event FX use cached assets for division, adhesion, reproduction, pursuit, feeding, digestion, stress and lysis;
-- the simulation owns state; the renderer only chooses assets from that state.
+Rendering layers:
+1. dedicated low-contrast water shader;
+2. dedicated biome shader driven by slow simulation masks;
+3. organism sprites;
+4. local biological-event FX.
 
-At overview:
-- large environmental structures are visible as clustered material, not flat color slabs;
-- organisms use consistent LOD markers;
-- no single stale LOD path may produce a giant sprite.
+All game art uses the same **0.25 world-unit source-pixel scale**.
 
-At close zoom:
-- producer mats should read as clustered/vegetation-like microbial material;
-- detritus should read as particulate debris;
-- EPS should read as matrix/web material;
-- damage/lysis should read as warm fragmented residue;
-- oxygen/nutrient-rich patches should use distinct micro-grain/glint languages;
-- feeding, digestion, reproduction and death states are animated;
-- organism morphology remains more important than debug overlays.
+Producer biomass reveals clustered chlorophyll/mat pixels; EPS reveals sparse teal matrix; detritus reveals particulate brown fragments; damage/lysis reveals short-lived warm residue. Oxygen/nutrient/waste remain subordinate micro-grains. Most water remains uncovered.
 
-Issue #61 owns this asset/presentation grammar; #57 owns its later GPU-resident composition.
+Shader coordinates are spatially stable. There is no global frame-swapping animation. Masks refresh slowly from real simulation fields, so patches change only as the simulation changes. Bacterial producer/EPS/scavenger activity, feeding and death modify the fields that drive these visuals.
+
+Action/reaction FX use a compact shared 7x7 atlas at the same source-pixel scale: division, adhesion, reproduction, pursuit, feeding, digestion, stress and lysis.
+
+Issue #61 owns this game-art presentation layer. Issue #57 owns migration to a GPU-resident path.

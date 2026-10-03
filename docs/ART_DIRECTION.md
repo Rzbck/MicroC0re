@@ -56,31 +56,27 @@ Current implementation choices for the rebuild branch:
 
 These are prototype constraints, not permanent project limits. Change them only with a documented visual/performance reason.
 
-## Generative biome pixel-art contract
+## Biome material / shader contract
 
-The environmental fields are **simulation data**, not final artwork. They must not be shown primarily as smooth gradients or flat debug heatmaps.
+The rejected 4x4 full-screen motif atlas is **not** the baseline.
 
-The visible biome is assembled from cached, deterministic pixel motifs selected by local field state:
-- water: dark aqueous microtexture / glints;
-- producer biomass: moss/algal mat clusters;
-- detritus/carrion: brown particulate flecks;
-- EPS: teal matrix/web motifs;
-- damage/lysis: warm fragmented residue;
-- oxygen-rich patches: cyan activity/glint clusters;
-- nutrient-rich patches: muted fertile grains.
+All visible biological/environmental art shares one source-pixel scale: **0.25 world units**. Organism atlases, biome shader pixels and biological-event FX use that same grid.
+
+The environment is split into real game-art materials:
+- **water shader**: always present, dark, low contrast, spatially stable grain, only a very slow continuous luminance drift;
+- **biome material shader**: consumes slowly refreshed simulation masks and reveals sparse local producer, detritus, EPS, damage, oxygen, nutrient and waste material.
 
 Rules:
-- a 96x64 simulation field cell currently maps to a 4x4 authored/generative pixel tile;
-- tile variation is deterministic from seed + field coordinate;
-- discrete intensity levels change motif density, not merely RGB brightness;
-- a secondary field may add a small accent so mixed niches remain layered;
-- biome animation advances through a tiny cached frame set;
-- day/night may modulate the composed scene, while the tile geometry stays crisp;
-- the renderer remains read-only relative to the simulation.
+- water remains visually dominant;
+- most biome shader pixels are transparent;
+- no global frame-swapping/tile animation;
+- patches change because simulation fields accumulate/decay;
+- producer/EPS/scavenger/death activity alters the fields that drive the art;
+- CPU reference masks refresh at 2 Hz; #57 owns the GPU-resident path;
+- biological-event FX use a compact 7x7 atlas at the same source-pixel scale.
 
-Biological event FX use a separate cached pixel atlas for division, adhesion/EPS, reproduction/budding, feeding, lysis and stress. New actions should extend this atlas/language instead of adding arbitrary vector debug shapes.
+Primary implementation: #61.
 
-Primary implementation: #61. GPU-resident generation/composition remains owned by #57.
 
 ## Pixel strategy
 

@@ -146,7 +146,7 @@ Previous 2026-10-02 observations:
 - water-current advection affects all current mobile organism classes;
 - a deterministic 180 s diel light cycle drives producer activity and oxygenation;
 - producer mats now self-shade, reducing effective light for dense producer patches; explicit microalgae visibly respond to local light;
-- renderer converts nutrient, waste, oxygen, producers, EPS, detritus and damage into deterministic 4x4 pixel-art biome motifs instead of exposing them as a flat heatmap.
+- renderer exposes nutrient, waste, oxygen, producers, EPS, detritus and damage through sparse shader-driven local material over a dedicated water layer.
 
 ### Functional diversity
 Bacteria now include four heritable functional ecotypes:
@@ -176,12 +176,15 @@ Explicit non-bacterial guilds now also exist:
 - predator death renders fragments/fade and recycles biomass;
 - a regression test now verifies ciliate feeding remains attached to non-bacterial prey across frames.
 
-### Generative biome / event asset pass
-- new cached `pixel_biome_atlas.gd` generates deterministic 4x4 water, producer, detritus, EPS, damage, oxygen and nutrient motifs;
-- simulation fields select motif family + density; a secondary field contributes a small accent for mixed niches;
-- the composed biome texture is now 384x256 for the current 96x64 field, retaining crisp world-scale pixel clusters;
-- new cached `pixel_effect_atlas.gd` defines division, adhesion, reproduction, pursuit, feeding, digestion, lysis and stress FX;
-- field-art refresh is limited to 10 Hz to control CPU-reference presentation cost; #57 remains the GPU path.
+### Shader biome / event asset rebuild
+- rejected the full-screen 4x4 animated motif atlas after maintainer video review;
+- dedicated water shader provides a stable low-contrast aqueous base;
+- dedicated biome material shader consumes producer/detritus/EPS/damage/oxygen/nutrient/waste masks;
+- all biome/event source pixels use the same 0.25-world-unit scale as organism atlases;
+- masks refresh at 2 Hz; shader pattern coordinates are stable and do not crawl;
+- water remains dominant and ecological material stays sparse/local;
+- event FX atlas is 7x7 at organism source-pixel scale;
+- #57 remains the GPU-resident field/mask path.
 
 ### Interaction / microscope readability pass
 - visible app now limits wall-clock catch-up work; stale backlog is dropped instead of running many expensive ticks in one frame;
