@@ -273,3 +273,16 @@ First structural pass:
 - generic biological FX remain accents and no longer rescale independently.
 
 Next visual gate: replace shader speckle with coherent biome clusters and simplify interaction VFX hierarchy before adding further guilds.
+
+
+Second visual-language pass:
+- biome shader no longer samples per-pixel hash noise as the visible unit;
+  producers, EPS, detritus, damage and exudate now render as stable multi-pixel
+  material clusters on the shared source grid;
+- dissolved nutrient/oxygen/waste are demoted to rare paired-pixel notation;
+- generic predator pursuit/digestion and starvation icon soup removed from the
+  normal view;
+- active feeding now reads as progress-staged contact geometry driven by the
+  simulation's capture progress;
+- inspector local-biome line now explains qualitative niche/resource state
+  instead of dumping six unlabeled scalar values.

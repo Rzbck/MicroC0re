@@ -217,3 +217,22 @@ The renderer now follows these hard rules:
 
 This is the baseline for #15/#18/#60. Future visual work must improve authored
 silhouettes and state frames without reintroducing fractional sprite scaling.
+
+
+## Visual hierarchy / signal budget
+
+The renderer now spends visual contrast in this order:
+
+1. **critical biological event** — active capture, lysis, phage infection;
+2. **organism silhouette/state** — identity and body pose;
+3. **persistent ecological material** — producer mat, EPS, detritus;
+4. **dissolved chemistry** — only exceptional concentrations receive subtle notation;
+5. **water** — lowest contrast base.
+
+Generic pursuit/digestion/stress icons must not orbit every organism. If an action
+has a body state and a progress value, the body frame and contact geometry carry
+the action first; a small FX asset may only accent the final stage.
+
+Biome art must use multi-pixel material clusters. Stable coarse hashes may choose
+where an entire tuft/fragment/matrix stroke exists, but may not spray isolated
+per-pixel noise across the dish.

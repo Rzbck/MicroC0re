@@ -822,142 +822,38 @@ func _draw_extracellular_dna() -> void:
 func _draw_life_state_cues() -> void:
 	if sim == null or camera == null or effect_atlas == null:
 		return
-	var visible_rect: Rect2 = _visible_world_rect().grow(6.0)
-	var zoom_value: float = camera.zoom.x
-	if zoom_value < SPRITE_LOD_START_ZOOM:
+	if camera.zoom.x < DETAIL_LOD_ZOOM:
 		return
-	var frame: int = posmod(floori(visual_time * 7.0), 4)
+
+	var visible_rect: Rect2 = _visible_world_rect().grow(5.0)
+	var frame: int = posmod(floori(visual_time * 6.0), 4)
 
 	for cell in sim.bacteria:
 		var p: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(p):
 			continue
+
 		if bool(cell.phage_infected) and not bool(cell.dying):
 			_draw_effect_asset(
 				p,
 				PixelEffectAtlasScript.EFFECT_STRESS,
-				frame,
-				1.02 + float(cell.phage_progress) * 0.18
+				clampi(floori(float(cell.phage_progress) * 3.999), 0, 3),
+				1.0
 			)
 		elif bool(cell.dividing):
 			_draw_effect_asset(
 				p,
 				PixelEffectAtlasScript.EFFECT_DIVISION,
-				frame,
-				1.05
+				clampi(floori(float(cell.division_progress) * 3.999), 0, 3),
+				1.0
 			)
 		elif float(cell.adhesion_timer) > 0.0:
 			_draw_effect_asset(
 				p,
 				PixelEffectAtlasScript.EFFECT_ADHESION,
 				frame,
-				1.00
+				1.0
 			)
-		elif float(cell.energy) < 0.72:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_STRESS,
-				frame,
-				0.86
-			)
-
-	for alga in sim.microalgae:
-		var p: Vector2 = Vector2(alga.position)
-		if not visible_rect.has_point(p):
-			continue
-		if bool(alga.reproducing):
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_REPRODUCTION,
-				frame,
-				1.05
-			)
-		elif not bool(alga.dying) and float(alga.energy) < 0.82:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_STRESS,
-				frame,
-				0.84
-			)
-
-	for yeast in sim.decomposers:
-		var p: Vector2 = Vector2(yeast.position)
-		if not visible_rect.has_point(p):
-			continue
-		if bool(yeast.budding):
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_REPRODUCTION,
-				frame,
-				1.02
-			)
-		elif not bool(yeast.dying) and float(yeast.energy) < 0.78:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_STRESS,
-				frame,
-				0.82
-			)
-
-
-	for proto in sim.protozoa:
-		var p: Vector2 = Vector2(proto.position)
-		if not visible_rect.has_point(p) or bool(proto.dying):
-			continue
-		if int(proto.feeding_target_id) >= 0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_PURSUIT,
-				frame,
-				1.08
-			)
-		elif float(proto.cooldown) > 0.0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_DIGESTION,
-				frame,
-				1.04
-			)
-
-	for ciliate in sim.ciliates:
-		var p: Vector2 = Vector2(ciliate.position)
-		if not visible_rect.has_point(p) or bool(ciliate.dying):
-			continue
-		if int(ciliate.feeding_target_id) >= 0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_PURSUIT,
-				frame,
-				0.96
-			)
-		elif float(ciliate.cooldown) > 0.0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_DIGESTION,
-				frame,
-				0.92
-			)
-
-
-	for flagellate in sim.flagellates:
-		var p: Vector2 = Vector2(flagellate.position)
-		if not visible_rect.has_point(p) or bool(flagellate.dying):
-			continue
-		if int(flagellate.feeding_target_id) >= 0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_PURSUIT,
-				frame,
-				0.72
-			)
-		elif float(flagellate.cooldown) > 0.0:
-			_draw_effect_asset(
-				p,
-				PixelEffectAtlasScript.EFFECT_DIGESTION,
-				frame,
-				0.68
-			)
-
 
 func _draw_effect_asset(
 	position: Vector2,
@@ -1158,60 +1054,51 @@ func _draw_feeding_link(
 	if delta.length_squared() <= 0.000001:
 		return
 
-	var zoom_value: float = camera.zoom.x
-	var pixel_size: float = SPRITE_WORLD_PIXEL
-	var normal: Vector2 = delta.normalized().orthogonal()
-	var visibility: float = lerpf(
-		0.50,
-		1.0,
-		_overview_sprite_blend(zoom_value)
+	var p: float = clampf(progress, 0.0, 1.0)
+	var pixel_size: float = maxf(
+		SPRITE_WORLD_PIXEL,
+		1.0 / maxf(camera.zoom.x, 0.001)
 	)
-	var pulse_index: int = posmod(
-		floori(visual_time * 13.0) + organism_id,
-		7
-	)
+	var bead_count: int = 2
+	if p >= 0.25:
+		bead_count = 3
+	if p >= 0.72:
+		bead_count = 4
 
-	for i in range(7):
-		var t: float = float(i + 1) / 8.0
-		var p: Vector2 = prey_position.lerp(predator_position, t)
-		p += normal * sin(visual_time * 9.0 + float(i) * 1.7) * pixel_size * 0.55
+	# PREPARE -> HOLD -> INGEST. Progress, not wall-clock animation, chooses
+	# which contact clusters are emphasized.
+	var hot_index: int = clampi(
+		floori(p * float(bead_count)),
+		0,
+		bead_count - 1
+	)
+	for i in range(bead_count):
+		var t: float = float(i + 1) / float(bead_count + 1)
+		if p >= 0.72:
+			# Late handling visually collapses material toward the predator.
+			t = lerpf(t, 0.86, (p - 0.72) / 0.28 * 0.55)
+		var q: Vector2 = prey_position.lerp(predator_position, t)
 		var bead_color: Color = color
-		bead_color.a *= visibility * (0.42 + progress * 0.42)
-		if i == pulse_index:
-			bead_color = bead_color.lightened(0.30)
-			bead_color.a = minf(1.0, bead_color.a + 0.32)
+		bead_color.a *= 0.52 + p * 0.36
+		if i == hot_index:
+			bead_color = bead_color.lightened(0.24)
+			bead_color.a = minf(1.0, bead_color.a + 0.18)
 		draw_rect(
 			Rect2(
-				p - Vector2(pixel_size, pixel_size) * 0.5,
-				Vector2(pixel_size, pixel_size)
+				q - Vector2.ONE * pixel_size * 0.5,
+				Vector2.ONE * pixel_size
 			),
 			bead_color,
 			true
 		)
 
-	_draw_effect_asset(
-		predator_position,
-		PixelEffectAtlasScript.EFFECT_FEEDING,
-		posmod(floori(visual_time * 8.0) + organism_id, 4),
-		1.0 + clampf(progress, 0.0, 1.0) * 0.18
-	)
-
-	# Pixel vacuole/handling ring around the predator grows through ingestion.
-	var ring_radius: float = pixel_size * (2.0 + clampf(progress, 0.0, 1.0) * 1.8)
-	for i in range(6):
-		var phase: float = float(i) * TAU / 6.0 + visual_time * 1.6
-		var p: Vector2 = predator_position + Vector2.RIGHT.rotated(phase) * ring_radius
-		var ring_color: Color = color.lightened(0.18)
-		ring_color.a *= visibility * (0.30 + progress * 0.55)
-		draw_rect(
-			Rect2(
-				p - Vector2(pixel_size, pixel_size) * 0.42,
-				Vector2(pixel_size, pixel_size) * 0.84
-			),
-			ring_color,
-			true
+	if p >= 0.82 and camera.zoom.x >= DETAIL_LOD_ZOOM:
+		_draw_effect_asset(
+			predator_position,
+			PixelEffectAtlasScript.EFFECT_DIGESTION,
+			clampi(floori((p - 0.82) / 0.18 * 3.999), 0, 3),
+			1.0
 		)
-
 
 func _draw_lysis_fragments(
 	position: Vector2,
@@ -1743,15 +1630,70 @@ func _compact_state_text(organism: Variant) -> String:
 
 
 func _compact_biome_text(position: Vector2) -> String:
-	return "L %.2f N %.2f O2 %.2f\nD %.2f E %.2f X %.2f" % [
-		float(sim.sample_light(position)),
-		float(sim.nutrient.sample_world(position)),
-		float(sim.oxygen.sample_world(position)),
-		float(sim.detritus.sample_world(position)),
-		float(sim.eps.sample_world(position)),
-		float(sim.exudate.sample_world(position)),
+	var light: float = float(sim.sample_light(position))
+	var nutrient: float = float(sim.nutrient.sample_world(position))
+	var oxygen: float = float(sim.oxygen.sample_world(position))
+	var detritus_value: float = float(sim.detritus.sample_world(position))
+	var eps_value: float = float(sim.eps.sample_world(position))
+	var exudate_value: float = float(sim.exudate.sample_world(position))
+	var damage_value: float = float(sim.damage_cue.sample_world(position))
+
+	var resource_text: String = _level_word(
+		nutrient + exudate_value * 0.85,
+		0.075,
+		0.26,
+		"resource poor",
+		"resource mixed",
+		"resource rich"
+	)
+	var oxygen_text: String = _level_word(
+		oxygen,
+		0.30,
+		0.62,
+		"low O2",
+		"normal O2",
+		"high O2"
+	)
+	var light_text: String = _level_word(
+		light,
+		0.28,
+		0.70,
+		"dim",
+		"lit",
+		"bright"
+	)
+
+	var niche_text: String = "open water"
+	if damage_value >= 0.045:
+		niche_text = "fresh damage plume"
+	elif detritus_value >= 0.065:
+		niche_text = "detritus patch"
+	elif eps_value >= 0.080:
+		niche_text = "biofilm matrix"
+	elif exudate_value >= 0.055:
+		niche_text = "exudate niche"
+
+	return "%s  %s\n%s  %s" % [
+		resource_text,
+		oxygen_text,
+		niche_text,
+		light_text,
 	]
 
+
+func _level_word(
+	value: float,
+	low: float,
+	high: float,
+	low_text: String,
+	mid_text: String,
+	high_text: String
+) -> String:
+	if value < low:
+		return low_text
+	if value >= high:
+		return high_text
+	return mid_text
 
 func _update_selection_camera(delta: float) -> void:
 	if not follow_selected or selected_id < 0 or camera == null:
