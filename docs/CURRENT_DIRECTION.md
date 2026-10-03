@@ -41,11 +41,13 @@ The simulation remains continuous and deterministic where intended. The **presen
 
 Until Epic #14 is complete, work in this order:
 
-1. **#17 Performance / profiling / LOD**
-2. **#16 Camera / infinite-feel background / zoom**
-3. **#15 True pixel-art pipeline + art bible**
-4. **#18 Readable organic animation / interactions**
-5. Small, observable ecology slices may proceed when they stay inside the measured performance budget; deeper ecology remains gated.
+1. **#17 Performance / profiling / overload behavior**
+2. **#59 Smooth LOD transitions / readable overview silhouettes**
+3. **#18 + #45 Readable organic animation / feeding / death / recycling**
+4. **#57 GPU-resident biome fields**, after the visible baseline is readable and benchmarked
+5. Small ecology slices may proceed only when they materially improve visible interactions and stay inside the measured performance budget.
+
+The 2026-10-03 live RTX review explicitly rejected the current interaction readability and hard LOD transitions. Do not treat technically present feeding/death states as finished merely because smoke tests pass.
 
 This priority order is intentional: do not add expensive visual detail or unbounded species systems before we know the render budget.
 

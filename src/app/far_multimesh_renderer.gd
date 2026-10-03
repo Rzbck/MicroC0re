@@ -48,13 +48,14 @@ func update_from_cells(
 	cells: Array,
 	visible_rect: Rect2,
 	zoom_value: float,
-	palette: Array
+	palette: Array,
+	alpha_scale: float = 1.0
 ) -> int:
 	if multimesh == null:
 		return 0
 
 	var count: int = 0
-	var world_pixel: float = maxf(0.30, 1.15 / maxf(zoom_value, 0.001))
+	var safe_zoom: float = maxf(zoom_value, 0.001)
 
 	for cell in cells:
 		if count >= capacity:
@@ -80,17 +81,29 @@ func update_from_cells(
 			)
 		elif float(cell.adhesion_timer) > 0.0:
 			color = color.lightened(0.12)
+		color.a *= clampf(alpha_scale, 0.0, 1.0)
+
+		# Far LOD is a tiny rod-like silhouette instead of a single square pixel.
+		# Size is screen-space biased so overview remains readable and cheap.
+		var screen_length: float = clampf(
+			1.8 + float(cell.length) * 0.28,
+			2.2,
+			3.5
+		)
+		var screen_thickness: float = 1.15
+		var world_length: float = maxf(0.30, screen_length / safe_zoom)
+		var world_thickness: float = maxf(0.20, screen_thickness / safe_zoom)
 
 		var base: int = count * FLOATS_PER_INSTANCE
 
 		# Transform2D buffer row-major order:
 		# x.x, y.x, pad, origin.x, x.y, y.y, pad, origin.y
-		buffer[base + 0] = world_pixel
+		buffer[base + 0] = world_length
 		buffer[base + 1] = 0.0
 		buffer[base + 2] = 0.0
 		buffer[base + 3] = position.x
 		buffer[base + 4] = 0.0
-		buffer[base + 5] = world_pixel
+		buffer[base + 5] = world_thickness
 		buffer[base + 6] = 0.0
 		buffer[base + 7] = position.y
 		buffer[base + 8] = color.r

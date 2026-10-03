@@ -21,6 +21,8 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #15 true pixel-art pipeline / art bible
 - #17 performance / profiling / LOD
 - #18 readable life animation and interactions
+- #45 visible killing / feeding / lysis / recycling — live review rejected current subtlety; active again
+- #59 smooth LOD transitions / readable overview silhouettes
 - #23 GPU MultiMesh rendering
 - #26 GPU compute path research
 - #27 GPU-first desktop pipeline
@@ -48,7 +50,6 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #39 oxygen/light/detritus/EPS/damage biome fields
 - #41 scavengers / carrion / damage-cue chemotaxis
 - #46 compact organism inspector
-- #45 visible killing / feeding / lysis / recycling
 - #47 overview LOD consistency fix
 
 These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
@@ -86,9 +87,27 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #25 native C++ GDExtension kernel
   - only start if algorithmic/GPU/data-layout work still needs a native CPU kernel.
 
-## Latest maintainer feedback — 2026-10-02
+## Latest maintainer feedback — 2026-10-03
 
-Observed:
+Local Windows / RTX 5080 validation at `58e8b0f`:
+- smoke PASS with the hardened fail-closed runner;
+- CPU benchmark: 100 = 9.886 ms/tick, 500 = 30.806 ms/tick, 1000 = 75.222 ms/tick;
+- 1000-agent breakdown: chemistry 6.207 ms, agents 21.831 ms, mechanics 44.952 ms;
+- GPU 96x64 diffusion benchmark: 1182.5 M cell-updates/s;
+- visible app still develops severe long-run stutter under load;
+- overview reads as isolated pixels;
+- zoom transitions feel staged;
+- biome/resource state is too subtle to understand visually;
+- feeding, killing, death and recycling are technically present but not yet visually convincing.
+
+Immediate active correction:
+- bound visible-app catch-up work so slow ticks cannot trigger a multi-step freeze spiral;
+- cross-fade overview markers into sprites rather than hard-swapping LOD;
+- use small far silhouettes instead of one-square-pixel bacteria;
+- strengthen field contrast for producer/detritus/damage/EPS/oxygen;
+- add persistent pixel feeding links / vacuole cues and stronger lysis blooms.
+
+Previous 2026-10-02 observations:
 - the ecosystem still needs substantially more life, niches and interaction density;
 - the overview showed one accidentally huge organism while other organisms were tiny;
 - the left inspector was far too large;

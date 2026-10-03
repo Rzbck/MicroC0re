@@ -11,12 +11,17 @@ const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
-const MAX_STEPS_PER_FRAME := 12
+const MAX_STEPS_PER_FRAME := 4
+const SIMULATION_FRAME_BUDGET_USEC := 9000
 const FIELD_REFRESH_INTERVAL := 1.0 / 20.0
 const INSPECTOR_REFRESH_INTERVAL := 0.15
 const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
 const ANGLE_STEPS := 32.0
+const OVERVIEW_FADE_START := 1.04
+const OVERVIEW_FADE_END := 1.42
+const DETAIL_LOD_SCALE := 2.10
+const WHEEL_ZOOM_FACTOR := 1.12
 
 const LINEAGE_PALETTE := [
 	Color(0.38, 0.82, 0.42, 1.0),
@@ -169,12 +174,20 @@ func _process(delta: float) -> void:
 
 	var sim_start: int = Time.get_ticks_usec()
 	if not paused:
-		accumulator += minf(delta * simulation_speed, 0.20)
+		# Fixed-step biology remains deterministic, but the visible app must not
+		# enter a catch-up death spiral when a tick becomes slower than realtime.
+		# Once the per-frame simulation budget is spent, stale wall-clock backlog
+		# is dropped instead of executing many expensive ticks in one render frame.
+		accumulator += minf(delta * simulation_speed, 0.05)
 		var steps: int = 0
 		while accumulator >= FIXED_DT and steps < MAX_STEPS_PER_FRAME:
 			sim.step(FIXED_DT)
 			accumulator -= FIXED_DT
 			steps += 1
+			if Time.get_ticks_usec() - sim_start >= SIMULATION_FRAME_BUDGET_USEC:
+				break
+		if accumulator >= FIXED_DT:
+			accumulator = fmod(accumulator, FIXED_DT)
 	sim_ms = _smooth_metric(
 		sim_ms,
 		float(Time.get_ticks_usec() - sim_start) / 1000.0
@@ -217,11 +230,12 @@ func _draw() -> void:
 		draw_texture_rect(field_texture, world_rect, false)
 
 	_draw_bacteria()
-	_draw_gene_transfers()
 	_draw_protozoa()
 	_draw_ciliates()
 	_draw_microalgae()
 	_draw_decomposers()
+	_draw_active_feeding_links()
+	_draw_gene_transfers()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
 
 	draw_ms = _smooth_metric(
@@ -234,23 +248,28 @@ func _draw_bacteria() -> void:
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
 	var overview_zoom: float = _minimum_camera_zoom()
-	var far_lod: bool = zoom_value < overview_zoom * 1.16
-	var mid_lod: bool = zoom_value < overview_zoom * 2.10
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var marker_alpha: float = 1.0 - sprite_blend
+	var mid_lod: bool = zoom_value < overview_zoom * DETAIL_LOD_SCALE
 	var frame: int = posmod(int(floor(visual_time * 8.0)), 4)
 
-	if far_lod:
-		var count: int = int(far_renderer.update_from_cells(
+	var far_count: int = 0
+	if marker_alpha > 0.001:
+		far_count = int(far_renderer.update_from_cells(
 			sim.bacteria,
 			visible_rect,
 			zoom_value,
-			LINEAGE_PALETTE
+			LINEAGE_PALETTE,
+			marker_alpha
 		))
-		visible_cells = count
-		far_cells = count
+		far_cells = far_count
+	else:
+		far_renderer.clear()
+
+	if sprite_blend <= 0.001:
+		visible_cells = far_count
 		sprite_cells = 0
 		return
-
-	far_renderer.clear()
 
 	for cell in sim.bacteria:
 		var position: Vector2 = Vector2(cell.position)
@@ -265,9 +284,12 @@ func _draw_bacteria() -> void:
 			color.a = clampf(1.0 - float(cell.lysis_progress) * 0.72, 0.20, 1.0)
 		elif float(cell.adhesion_timer) > 0.0:
 			color = color.lightened(0.12)
-
-		if far_lod:
-			continue
+		else:
+			var starvation: float = clampf(1.0 - float(cell.energy) / 0.95, 0.0, 1.0)
+			if starvation > 0.0:
+				color = color.lerp(Color(0.60, 0.32, 0.24, color.a), starvation * 0.68)
+				color.a *= 0.78 + 0.22 * sin(visual_time * 7.0 + float(cell.id))
+		color.a *= sprite_blend
 
 		sprite_cells += 1
 		var size_class: int = _size_class(cell)
@@ -278,7 +300,7 @@ func _draw_bacteria() -> void:
 		elif bool(cell.dividing):
 			state = 1
 
-		var cell_frame: int = 0 if mid_lod else posmod(
+		var cell_frame: int = posmod(
 			frame + int(floor(float(cell.visual_phase))),
 			4
 		)
@@ -365,22 +387,22 @@ func _draw_protozoa() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(12.0)
 	var zoom_value: float = camera.zoom.x
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
 
 	for proto in sim.protozoa:
 		var position: Vector2 = Vector2(proto.position)
 		if not visible_rect.has_point(position):
 			continue
 
-		if zoom_value < _minimum_camera_zoom() * 1.16:
-			var marker_size: float = maxf(0.55, 1.65 / zoom_value)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.34, 0.82, 0.78, 0.95),
-				true
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				position,
+				3.2,
+				2.2,
+				Color(0.34, 0.82, 0.78, 0.96),
+				1.0 - sprite_blend
 			)
+		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 1 if int(proto.feeding_target_id) >= 0 else 0
@@ -427,6 +449,8 @@ func _draw_protozoa() -> void:
 			)
 			texture_size *= 1.0 + death_progress * 0.30
 
+		color.a *= sprite_blend
+
 		var angle_step: float = TAU / 16.0
 		var pixel_angle: float = roundf(float(proto.angle) / angle_step) * angle_step
 
@@ -467,22 +491,22 @@ func _draw_ciliates() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(10.0)
 	var zoom_value: float = camera.zoom.x
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
 
 	for ciliate in sim.ciliates:
 		var position: Vector2 = Vector2(ciliate.position)
 		if not visible_rect.has_point(position):
 			continue
 
-		if zoom_value < _minimum_camera_zoom() * 1.16:
-			var marker_size: float = maxf(0.48, 1.35 / zoom_value)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				position,
+				3.6,
+				1.5,
 				Color(0.60, 0.66, 0.98, 0.96),
-				true
+				1.0 - sprite_blend
 			)
+		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 1 if int(ciliate.feeding_target_id) >= 0 else 0
@@ -536,6 +560,8 @@ func _draw_ciliates() -> void:
 			)
 			texture_size *= 1.0 + death_progress * 0.22
 
+		color.a *= sprite_blend
+
 		var angle_step: float = TAU / 24.0
 		var pixel_angle: float = roundf(float(ciliate.angle) / angle_step) * angle_step
 
@@ -576,23 +602,22 @@ func _draw_microalgae() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var overview: bool = zoom_value < _minimum_camera_zoom() * 1.16
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
 
 	for alga in sim.microalgae:
 		var position: Vector2 = Vector2(alga.position)
 		if not visible_rect.has_point(position):
 			continue
 
-		if overview:
-			var marker_size: float = maxf(0.34, 0.95 / zoom_value)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				position,
+				2.2,
+				2.2,
 				Color(0.42, 1.0, 0.38, 0.95),
-				true
+				1.0 - sprite_blend
 			)
+		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 0
@@ -616,6 +641,11 @@ func _draw_microalgae() -> void:
 			0.28 + local_light * 0.18,
 			1.0
 		)
+		if not bool(alga.dying):
+			var starvation: float = clampf(1.0 - float(alga.energy) / 1.25, 0.0, 1.0)
+			if starvation > 0.0:
+				color = color.lerp(Color(0.62, 0.48, 0.20, color.a), starvation * 0.72)
+				color.a *= 0.78 + 0.22 * sin(visual_time * 6.0 + float(alga.id))
 
 		if float(alga.engulf_progress) > 0.0:
 			var p: float = clampf(float(alga.engulf_progress), 0.0, 1.0)
@@ -630,6 +660,8 @@ func _draw_microalgae() -> void:
 				0.28,
 				clampf(1.0 - death * 0.82, 0.15, 1.0)
 			)
+
+		color.a *= sprite_blend
 
 		var angle_step: float = TAU / 24.0
 		var pixel_angle: float = roundf(float(alga.angle) / angle_step) * angle_step
@@ -671,23 +703,22 @@ func _draw_decomposers() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var overview: bool = zoom_value < _minimum_camera_zoom() * 1.16
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
 
 	for yeast in sim.decomposers:
 		var position: Vector2 = Vector2(yeast.position)
 		if not visible_rect.has_point(position):
 			continue
 
-		if overview:
-			var marker_size: float = maxf(0.36, 1.0 / zoom_value)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				position,
+				2.4,
+				2.0,
 				Color(0.96, 0.64, 0.27, 0.96),
-				true
+				1.0 - sprite_blend
 			)
+		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 0
@@ -705,6 +736,11 @@ func _draw_decomposers() -> void:
 			0.26 + float(yeast.radius) * 0.017
 		)
 		var color := Color(1.0, 0.70, 0.34, 1.0)
+		if not bool(yeast.dying):
+			var starvation: float = clampf(1.0 - float(yeast.energy) / 1.20, 0.0, 1.0)
+			if starvation > 0.0:
+				color = color.lerp(Color(0.58, 0.30, 0.22, color.a), starvation * 0.70)
+				color.a *= 0.80 + 0.20 * sin(visual_time * 6.5 + float(yeast.id))
 
 		if float(yeast.engulf_progress) > 0.0:
 			var p: float = clampf(float(yeast.engulf_progress), 0.0, 1.0)
@@ -719,6 +755,8 @@ func _draw_decomposers() -> void:
 				0.25,
 				clampf(1.0 - death * 0.82, 0.15, 1.0)
 			)
+
+		color.a *= sprite_blend
 
 		var angle_step: float = TAU / 24.0
 		var pixel_angle: float = roundf(float(yeast.angle) / angle_step) * angle_step
@@ -754,6 +792,140 @@ func _draw_decomposers() -> void:
 			)
 
 
+func _overview_sprite_blend(zoom_value: float) -> float:
+	var overview_zoom: float = _minimum_camera_zoom()
+	return smoothstep(
+		overview_zoom * OVERVIEW_FADE_START,
+		overview_zoom * OVERVIEW_FADE_END,
+		zoom_value
+	)
+
+
+func _draw_overview_marker(
+	position: Vector2,
+	width_pixels: float,
+	height_pixels: float,
+	color: Color,
+	alpha_scale: float
+) -> void:
+	var pixel_world: float = 1.0 / maxf(camera.zoom.x, 0.001)
+	var marker_size := Vector2(
+		maxf(0.22, width_pixels * pixel_world),
+		maxf(0.18, height_pixels * pixel_world)
+	)
+	var marker_color: Color = color
+	marker_color.a *= clampf(alpha_scale, 0.0, 1.0)
+	draw_rect(
+		Rect2(position - marker_size * 0.5, marker_size),
+		marker_color,
+		true
+	)
+
+	# One bright center cluster keeps the far silhouette biological rather than
+	# reading as an isolated single debug pixel.
+	if marker_color.a > 0.20:
+		var core_size := Vector2.ONE * maxf(0.14, 0.72 * pixel_world)
+		var core_color: Color = marker_color.lightened(0.22)
+		core_color.a *= 0.70
+		draw_rect(
+			Rect2(position - core_size * 0.5, core_size),
+			core_color,
+			true
+		)
+
+
+func _draw_active_feeding_links() -> void:
+	if sim == null or camera == null:
+		return
+
+	for proto in sim.protozoa:
+		if int(proto.feeding_target_id) < 0:
+			continue
+		var prey: Variant = sim.find_edible_by_id(int(proto.feeding_target_id))
+		if prey == null:
+			continue
+		_draw_feeding_link(
+			Vector2(proto.position),
+			Vector2(prey.position),
+			float(proto.feeding_progress),
+			Color(1.0, 0.58, 0.26, 0.94),
+			int(proto.id)
+		)
+
+	for ciliate in sim.ciliates:
+		if int(ciliate.feeding_target_id) < 0:
+			continue
+		var prey: Variant = sim.find_edible_by_id(int(ciliate.feeding_target_id))
+		if prey == null:
+			continue
+		_draw_feeding_link(
+			Vector2(ciliate.position),
+			Vector2(prey.position),
+			float(ciliate.feeding_progress),
+			Color(0.92, 0.55, 1.0, 0.92),
+			int(ciliate.id)
+		)
+
+
+func _draw_feeding_link(
+	predator_position: Vector2,
+	prey_position: Vector2,
+	progress: float,
+	color: Color,
+	organism_id: int
+) -> void:
+	var delta: Vector2 = predator_position - prey_position
+	if delta.length_squared() <= 0.000001:
+		return
+
+	var zoom_value: float = camera.zoom.x
+	var pixel_size: float = maxf(0.12, 0.90 / zoom_value)
+	var normal: Vector2 = delta.normalized().orthogonal()
+	var visibility: float = lerpf(
+		0.50,
+		1.0,
+		_overview_sprite_blend(zoom_value)
+	)
+	var pulse_index: int = posmod(
+		floori(visual_time * 13.0) + organism_id,
+		7
+	)
+
+	for i in range(7):
+		var t: float = float(i + 1) / 8.0
+		var p: Vector2 = prey_position.lerp(predator_position, t)
+		p += normal * sin(visual_time * 9.0 + float(i) * 1.7) * pixel_size * 0.55
+		var bead_color: Color = color
+		bead_color.a *= visibility * (0.42 + progress * 0.42)
+		if i == pulse_index:
+			bead_color = bead_color.lightened(0.30)
+			bead_color.a = minf(1.0, bead_color.a + 0.32)
+		draw_rect(
+			Rect2(
+				p - Vector2(pixel_size, pixel_size) * 0.5,
+				Vector2(pixel_size, pixel_size)
+			),
+			bead_color,
+			true
+		)
+
+	# Pixel vacuole/handling ring around the predator grows through ingestion.
+	var ring_radius: float = pixel_size * (2.0 + clampf(progress, 0.0, 1.0) * 1.8)
+	for i in range(6):
+		var phase: float = float(i) * TAU / 6.0 + visual_time * 1.6
+		var p: Vector2 = predator_position + Vector2.RIGHT.rotated(phase) * ring_radius
+		var ring_color: Color = color.lightened(0.18)
+		ring_color.a *= visibility * (0.30 + progress * 0.55)
+		draw_rect(
+			Rect2(
+				p - Vector2(pixel_size, pixel_size) * 0.42,
+				Vector2(pixel_size, pixel_size) * 0.84
+			),
+			ring_color,
+			true
+		)
+
+
 func _draw_lysis_fragments(
 	position: Vector2,
 	organism_id: int,
@@ -782,7 +954,29 @@ func _draw_lysis_fragments(
 			true
 		)
 
-
+	# A larger warm pixel bloom makes death readable at normal zoom and leaves
+	# a visual hand-off toward the detritus/damage fields behind the organism.
+	var bloom_radius: float = 1.8 + progress * 5.2
+	for i in range(8):
+		var phase: float = (
+			float(i) * TAU / 8.0
+			+ float(organism_id % 7) * 0.29
+		)
+		var p: Vector2 = position + Vector2.RIGHT.rotated(phase) * bloom_radius
+		var bloom_color := Color(
+			1.0,
+			0.34 + progress * 0.12,
+			0.16,
+			0.42 * (1.0 - progress * 0.58)
+		)
+		draw_rect(
+			Rect2(
+				p - Vector2(pixel_size, pixel_size) * 0.55,
+				Vector2(pixel_size, pixel_size) * 1.10
+			),
+			bloom_color,
+			true
+		)
 func _guild_color(guild: int) -> Color:
 	match guild:
 		BacteriumScript.GUILD_SCAVENGER:
@@ -850,37 +1044,37 @@ func _refresh_field_texture() -> void:
 	for y in range(height):
 		for x in range(width):
 			var nutrient_value: float = clampf(
-				float(nutrient_field.get_cell(x, y)) * 1.65,
+				float(nutrient_field.get_cell(x, y)) * 2.0,
 				0.0,
 				1.0
 			)
 			var waste_value: float = clampf(
-				float(waste_field.get_cell(x, y)) * 2.2,
+				float(waste_field.get_cell(x, y)) * 2.7,
 				0.0,
 				1.0
 			)
 			var oxygen_value: float = clampf(
-				float(oxygen_field.get_cell(x, y)) * 1.35,
+				float(oxygen_field.get_cell(x, y)) * 1.5,
 				0.0,
 				1.0
 			)
 			var detritus_value: float = clampf(
-				float(detritus_field.get_cell(x, y)) * 4.2,
+				float(detritus_field.get_cell(x, y)) * 6.0,
 				0.0,
 				1.0
 			)
 			var eps_value: float = clampf(
-				float(eps_field.get_cell(x, y)) * 5.0,
+				float(eps_field.get_cell(x, y)) * 6.5,
 				0.0,
 				1.0
 			)
 			var cue_value: float = clampf(
-				float(cue_field.get_cell(x, y)) * 7.0,
+				float(cue_field.get_cell(x, y)) * 12.0,
 				0.0,
 				1.0
 			)
 			var producer_value: float = clampf(
-				float(producer_field.get_cell(x, y)) * 1.35,
+				float(producer_field.get_cell(x, y)) * 1.6,
 				0.0,
 				1.0
 			)
@@ -898,17 +1092,17 @@ func _refresh_field_texture() -> void:
 				y,
 				Color(
 					clampf(
-						0.004 + n * 0.012 + w * 0.11 + d * 0.15 + cue * 0.24,
+						0.004 + n * 0.018 + w * 0.13 + d * 0.28 + cue * 0.50,
 						0.0,
 						1.0
 					),
 					clampf(
-						0.009 + n * 0.15 + o * 0.055 + p * 0.22 + e * 0.11,
+						0.009 + n * 0.19 + o * 0.070 + p * 0.32 + e * 0.15 + d * 0.07,
 						0.0,
 						1.0
 					),
 					clampf(
-						0.014 + n * 0.08 + o * 0.12 + w * 0.10 + e * 0.15,
+						0.014 + n * 0.08 + o * 0.18 + w * 0.08 + e * 0.20 + cue * 0.08,
 						0.0,
 						1.0
 					),
@@ -959,12 +1153,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mouse_button := event as InputEventMouseButton
 
 		if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_button.pressed:
-			_zoom_at_screen_position(mouse_button.position, 1.22)
+			_zoom_at_screen_position(mouse_button.position, WHEEL_ZOOM_FACTOR)
 			get_viewport().set_input_as_handled()
 			return
 
 		if mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_button.pressed:
-			_zoom_at_screen_position(mouse_button.position, 1.0 / 1.22)
+			_zoom_at_screen_position(mouse_button.position, 1.0 / WHEEL_ZOOM_FACTOR)
 			get_viewport().set_input_as_handled()
 			return
 

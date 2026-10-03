@@ -151,7 +151,7 @@ var conjugation_pull: float = 0.10
 var protozoan_speed: float = 5.4
 var protozoan_perception: float = 28.0
 var protozoan_engulf_distance: float = 4.2
-var protozoan_engulf_duration: float = 1.35
+var protozoan_engulf_duration: float = 1.65
 var protozoan_maintenance: float = 0.065
 var protozoan_reproduction_energy: float = 18.5
 
@@ -161,7 +161,7 @@ var protozoan_reproduction_energy: float = 18.5
 var ciliate_speed: float = 10.5
 var ciliate_perception: float = 34.0
 var ciliate_feed_distance: float = 3.4
-var ciliate_feed_duration: float = 0.62
+var ciliate_feed_duration: float = 1.05
 var ciliate_maintenance: float = 0.090
 var ciliate_reproduction_energy: float = 16.5
 
