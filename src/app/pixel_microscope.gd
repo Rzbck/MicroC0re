@@ -238,6 +238,7 @@ func _draw() -> void:
 	if field_texture != null:
 		draw_texture_rect(field_texture, world_rect, false)
 
+	_draw_water_flow_cues()
 	_draw_bacteria()
 	_draw_protozoa()
 	_draw_ciliates()
@@ -743,6 +744,45 @@ func _draw_decomposers() -> void:
 
 
 
+func _draw_water_flow_cues() -> void:
+	if sim == null or camera == null:
+		return
+	var visible: Rect2 = _visible_world_rect()
+	var zoom_value: float = camera.zoom.x
+	var px: float = maxf(0.10, 0.58 / zoom_value)
+	var cols: int = 6
+	var rows: int = 4
+
+	# Sparse screen-distributed motes make the aqueous phase readable without
+	# simulating literal particles. Their direction is sampled from the real
+	# deterministic water-flow field owned by the simulation.
+	for gy in range(rows):
+		for gx in range(cols):
+			var uv := Vector2(
+				(float(gx) + 0.5) / float(cols),
+				(float(gy) + 0.5) / float(rows)
+			)
+			var base: Vector2 = visible.position + visible.size * uv
+			var flow: Vector2 = Vector2(sim.sample_water_flow(base))
+			if flow.length_squared() <= 0.00001:
+				continue
+			var direction: Vector2 = flow.normalized()
+			var phase: float = fmod(
+				visual_time * (0.18 + flow.length() * 0.10)
+				+ float(gx * 7 + gy * 11) * 0.071,
+				1.0
+			)
+			var p: Vector2 = base + direction * (phase - 0.5) * (6.0 / maxf(zoom_value, 0.25))
+			for i in range(3):
+				var q: Vector2 = p - direction * px * float(i) * 1.7
+				var c := Color(0.48, 0.82, 0.86, 0.16 - float(i) * 0.035)
+				draw_rect(
+					Rect2(q - Vector2.ONE * px * 0.35, Vector2.ONE * px * 0.70),
+					c,
+					true
+				)
+
+
 func _draw_life_state_cues() -> void:
 	if sim == null or camera == null:
 		return
@@ -1107,6 +1147,10 @@ func _refresh_field_texture() -> void:
 	var producer_field: Variant = sim.producer_biomass
 	var width: int = int(nutrient_field.width)
 	var height: int = int(nutrient_field.height)
+	var center_light: float = float(
+		sim.sample_light(Vector2(sim.world_size) * 0.5)
+	)
+	var daylight_visual: float = 0.60 + center_light * 0.40
 
 	for y in range(height):
 		for x in range(width):
@@ -1160,28 +1204,25 @@ func _refresh_field_texture() -> void:
 				float(sim.simulation_time) * 1.15 + float(x) * 0.37 + float(y) * 0.23
 			)
 
-			field_image.set_pixel(
-				x,
-				y,
-				Color(
-					clampf(
-						0.006 + n * 0.025 + w * 0.16 + d * 0.34 + cue * 0.58,
-						0.0,
-						1.0
-					),
-					clampf(
-						(0.012 + n * 0.11 + o * 0.055 + p * 0.38 + e * 0.11 + d * 0.08) * shimmer,
-						0.0,
-						1.0
-					),
-					clampf(
-						(0.020 + n * 0.13 + o * 0.20 + w * 0.10 + e * 0.24 + cue * 0.10) * shimmer,
-						0.0,
-						1.0
-					),
-					1.0
-				)
+			var red: float = clampf(
+				(0.006 + n * 0.025 + w * 0.16 + d * 0.34 + cue * 0.58)
+				* (0.78 + daylight_visual * 0.22),
+				0.0,
+				1.0
 			)
+			var green: float = clampf(
+				(0.012 + n * 0.11 + o * 0.055 + p * 0.38 + e * 0.11 + d * 0.08)
+				* shimmer * daylight_visual,
+				0.0,
+				1.0
+			)
+			var blue: float = clampf(
+				(0.020 + n * 0.13 + o * 0.20 + w * 0.10 + e * 0.24 + cue * 0.10)
+				* shimmer * (0.78 + daylight_visual * 0.22),
+				0.0,
+				1.0
+			)
+			field_image.set_pixel(x, y, Color(red, green, blue, 1.0))
 
 	field_texture.update(field_image)
 

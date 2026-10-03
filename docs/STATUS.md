@@ -51,6 +51,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #47 overview LOD consistency fix
 - #45 visible killing / feeding / lysis / recycling — stronger visual pass awaiting live review
 - #59 smooth LOD transitions / readable overview silhouettes — first cross-fade pass awaiting live review
+- #60 living microscope watchability / cinematic observation
 
 These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
 

@@ -2033,6 +2033,10 @@ func _light_value_for_index(index: int) -> float:
 		float(producer_biomass.values[index])
 	)
 
+func sample_water_flow(position: Vector2) -> Vector2:
+	return _water_flow(position)
+
+
 func _water_flow(position: Vector2) -> Vector2:
 	# Small deterministic aqueous current. It gives the biome a water phase
 	# without turning every organism into a passive particle.
