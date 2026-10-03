@@ -21,8 +21,6 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #15 true pixel-art pipeline / art bible
 - #17 performance / profiling / LOD
 - #18 readable life animation and interactions
-- #45 visible killing / feeding / lysis / recycling — live review rejected current subtlety; active again
-- #59 smooth LOD transitions / readable overview silhouettes
 - #23 GPU MultiMesh rendering
 - #26 GPU compute path research
 - #27 GPU-first desktop pipeline
@@ -51,6 +49,8 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #41 scavengers / carrion / damage-cue chemotaxis
 - #46 compact organism inspector
 - #47 overview LOD consistency fix
+- #45 visible killing / feeding / lysis / recycling — stronger visual pass awaiting live review
+- #59 smooth LOD transitions / readable overview silhouettes — first cross-fade pass awaiting live review
 
 These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
 
@@ -168,6 +168,17 @@ Explicit non-bacterial guilds now also exist:
 - starved amoebae/ciliates enter a staged lysis/death state instead of disappearing instantly;
 - predator death renders fragments/fade and recycles biomass;
 - a regression test now verifies ciliate feeding remains attached to non-bacterial prey across frames.
+
+### Interaction / microscope readability pass
+- visible app now limits wall-clock catch-up work; stale backlog is dropped instead of running many expensive ticks in one frame;
+- overview bacteria use GPU-instanced rod-like silhouettes instead of isolated square pixels;
+- overview markers cross-fade into full sprites over a relative zoom band;
+- mouse-wheel zoom increments are smaller;
+- bacteria/microalgae/decomposers expose low-energy visual stress cues;
+- active protist feeding draws persistent pixel transfer/handling cues;
+- lysis now emits a stronger warm pixel bloom that hands off visually into damage/detritus fields;
+- biome field contrast is stronger for detritus, damage cue, EPS, oxygen and producers;
+- amoeba/ciliate ingestion timings are longer so events remain observable.
 
 ### Validation
 - deterministic smoke signature includes new biome totals, bacterial guild and predator death state;
