@@ -1,6 +1,8 @@
 class_name Bacterium
 extends RefCounted
 
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+
 const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
 
 const PLASMID_CONJUGATION := 1
@@ -115,6 +117,18 @@ var transformation_events: int = 0
 var visual_phase: float = 0.0
 
 
+var physical_genome: Variant = null
+var carried_soil: float = 0.0
+var burrow_depth: float = 0.0
+var terrain_action_clock: float = 0.0
+var terrain_action: String = "none"
+var physical_dig: float = 0.0
+var physical_deposit: float = 0.0
+var physical_burrow: float = 0.0
+var physical_climb: float = 0.0
+var physical_oviposit: float = 0.0
+var physical_armor: float = 0.0
+
 func _init(
 	p_id: int,
 	p_position: Vector2,
@@ -172,6 +186,9 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	genome_recombination_events = 0
 
 	_apply_size_phenotype()
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_MICROBE)
 
 
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
@@ -258,6 +275,20 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	guild = int(genome.baseline_guild())
 
 	_apply_size_phenotype()
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	if parent.physical_genome != null:
+		physical_genome.inherit_and_mutate(
+			parent.physical_genome,
+			p_rng,
+			mutation_rate
+		)
+	else:
+		physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_MICROBE)
+	carried_soil = 0.0
+	burrow_depth = 0.0
+	terrain_action_clock = 0.0
+	terrain_action = "none"
 
 
 func integrate_genome_module(

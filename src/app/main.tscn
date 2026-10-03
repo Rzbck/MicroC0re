@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://src/app/pixel_microscope.gd" id="1_main"]
+[ext_resource type="Script" path="res://src/app/isometric_ecosystem.gd" id="1_main"]
 
-[node name="MicroC0re" type="Node2D"]
+[node name="MicroC0re" type="Node3D"]
 script = ExtResource("1_main")

@@ -332,3 +332,17 @@ Based on the maintainer capture rather than code inspection alone:
 - natural transformation can merge donor functional modules;
 - conjugation has a rare chromosomal-module recombination path;
 - inspector exposes current emergent ecotype label + compact ecotype hash.
+
+
+## Isometric living-world pivot — #65
+- main presentation moved to fullscreen Node3D with orthographic/isometric camera;
+- RMB orbit, MMB pan, wheel zoom, WASD pan, Q/E rotation, F fit;
+- deterministic mutable height field added with a water level;
+- excavation removes real terrain mass and carried soil can be deposited elsewhere;
+- slope relaxation conserves material and turns deposits into mounds;
+- topography feeds back on movement through evolvable climb/burrow capability;
+- every current organism family owns the same variable-length physical
+  capability genome;
+- visible 3D morphology exposes digging, oviposition potential, armor and
+  below-surface burrow depth;
+- legacy 2D microscope remains in-tree but is no longer the main scene.

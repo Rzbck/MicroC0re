@@ -1,6 +1,8 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+const LivingTerrainScript = preload("res://src/simulation/living_terrain.gd")
 const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
 const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
@@ -8,6 +10,7 @@ const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 # Compile the visible app stack during every headless smoke run so renderer
 # script parse errors cannot survive until the manual GUI test.
 const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
+const IsometricEcosystemScript = preload("res://src/app/isometric_ecosystem.gd")
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
@@ -46,7 +49,65 @@ func _init() -> void:
 	if lysis_fx == null or lysis_fx.get_width() <= 0:
 		errors.append("render: lysis effect asset missing")
 
-	# Regression: dense producer biomass must reduce local effective light.
+	# Living-terrain regression: excavation/deposition must conserve material
+	# when the carried material is returned to the world.
+	var terrain_probe = LivingTerrainScript.new(
+		19191,
+		Vector2(192.0, 128.0)
+	)
+	var terrain_mass_before: float = terrain_probe.total_mass()
+	var removed_soil: float = terrain_probe.excavate(
+		Vector2(72.0, 54.0),
+		0.35,
+		2.2
+	)
+	if removed_soil <= 0.0:
+		errors.append("terrain: excavation failed to remove material")
+	var terrain_mass_after_dig: float = terrain_probe.total_mass()
+	if (
+		absf(
+			(terrain_mass_before - terrain_mass_after_dig)
+			- removed_soil
+		) > 0.0005
+	):
+		errors.append("terrain: excavation mass accounting drift")
+	var returned_soil: float = terrain_probe.deposit(
+		Vector2(81.0, 58.0),
+		removed_soil,
+		2.4
+	)
+	if absf(returned_soil - removed_soil) > 0.0005:
+		errors.append("terrain: deposition failed to return carried mass")
+	if absf(terrain_probe.total_mass() - terrain_mass_before) > 0.001:
+		errors.append("terrain: dig/deposit cycle did not conserve terrain mass")
+
+	var physical_rng := RandomNumberGenerator.new()
+	physical_rng.seed = 515151
+	var physical_parent = PhysicalCapabilityGenomeScript.new()
+	physical_parent.configure_founder(
+		physical_rng,
+		PhysicalCapabilityGenomeScript.PROFILE_DECOMPOSER
+	)
+	var physical_child = PhysicalCapabilityGenomeScript.new()
+	var saw_physical_structure: bool = false
+	for i in range(120):
+		physical_child.inherit_and_mutate(
+			physical_parent,
+			physical_rng,
+			0.20
+		)
+		if physical_child.modules.size() != physical_parent.modules.size():
+			saw_physical_structure = true
+			break
+	if (
+		physical_child.modules.size() < 3
+		or physical_child.modules.size() > 18
+	):
+		errors.append("evolution: physical capability genome escaped bounds")
+	if not saw_physical_structure:
+		errors.append("evolution: physical capability structural mutation absent")
+
+		# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)
 	var shade_position := Vector2(21.0, 21.0)
@@ -246,7 +307,23 @@ func _init() -> void:
 	if phage_probe.phage_clouds.size() > 24:
 		errors.append("population guard: phage cloud hard ceiling exceeded")
 
-	var first = PetriSimulationScript.new(424242)
+	var capability_founder_probe = PetriSimulationScript.new(20261003)
+	capability_founder_probe.seed_demo(8)
+	for group in [
+		capability_founder_probe.bacteria,
+		capability_founder_probe.protozoa,
+		capability_founder_probe.ciliates,
+		capability_founder_probe.flagellates,
+		capability_founder_probe.microalgae,
+		capability_founder_probe.decomposers,
+		capability_founder_probe.hyphae,
+	]:
+		for agent in group:
+			if agent.physical_genome == null:
+				errors.append("evolution: founder missing shared physical genome")
+				break
+
+		var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
 	second.seed_demo(24)
@@ -522,6 +599,9 @@ func _init() -> void:
 func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 	var required_scripts: Array = [
 		["petri_simulation", PetriSimulationScript],
+		["physical_capability_genome", PhysicalCapabilityGenomeScript],
+		["living_terrain", LivingTerrainScript],
+		["isometric_ecosystem", IsometricEcosystemScript],
 		["evolvable_genome", EvolvableGenomeScript],
 		["dna_fragment", DNAFragmentScript],
 		["phage_cloud", PhageCloudScript],

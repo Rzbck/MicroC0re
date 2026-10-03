@@ -502,3 +502,56 @@ Use:
 Engineering rule for MicroC0re: use these mechanisms as architecture
 inspiration while keeping the ecological selection local and physically paid
 for. Do not bolt a hidden "interestingness fitness" onto the live simulation.
+
+
+## Living terrain / bioturbation / isometric world
+
+### Burrowing fauna as ecosystem engineers
+Loreggian et al., **The inclusion of burrowing animals in soil hydro-physical
+equations and models: A review**, Earth-Science Reviews 281 (2026).
+https://doi.org/10.1016/j.earscirev.2026.105591
+
+Use:
+- excavation is physical material transport, not a decal;
+- burrowing affects surface transport, mixing, infiltration and soil structure;
+- terrain and organism dynamics need two-way coupling.
+
+### Global zoogeomorphology
+**Global diversity and energy of animals shaping the Earth's surface**, PNAS
+(2025).
+https://pmc.ncbi.nlm.nih.gov/articles/PMC11874378/
+
+Use:
+- agents can alter terrain by bioturbation, bioerosion, bioconstruction and
+  bioprotection.
+
+### Termite mound morphogenesis
+Ocko, Heyde & Mahadevan, **Morphogenesis of termite mounds**, PNAS (2019).
+https://pmc.ncbi.nlm.nih.gov/articles/PMC6397510/
+
+Use:
+- local building changes geometry;
+- geometry changes heat/mass transport and signals;
+- signals alter later building, closing a stigmergic feedback loop.
+
+### Surface curvature and stigmergy
+**Surface curvature guides early construction activity in mound-building
+termites**, Phil. Trans. R. Soc. B (2019).
+https://pmc.ncbi.nlm.nih.gov/articles/PMC6553597/
+
+Use:
+- persistent topography can act as external memory;
+- later builders should sense slope/curvature and evolve deposition rules.
+
+### Godot 4.7
+Camera3D orthogonal projection:
+https://docs.godotengine.org/en/latest/classes/class_camera3d.html
+ArrayMesh:
+https://docs.godotengine.org/en/4.7/classes/class_arraymesh.html
+MultiMesh:
+https://docs.godotengine.org/en/4.7/tutorials/performance/using_multimesh.html
+
+Use:
+- orthographic Camera3D provides a rotatable isometric-like view;
+- procedural meshes support mutable terrain;
+- MultiMesh batches large organism populations and capability appendages.

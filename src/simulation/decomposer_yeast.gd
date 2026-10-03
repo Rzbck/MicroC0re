@@ -1,6 +1,8 @@
 class_name DecomposerYeast
 extends RefCounted
 
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+
 var id: int
 var parent_id: int = -1
 var lineage_id: int
@@ -33,6 +35,18 @@ var lineage_hue: float = 0.09
 var visual_phase: float = 0.0
 
 
+var physical_genome: Variant = null
+var carried_soil: float = 0.0
+var burrow_depth: float = 0.0
+var terrain_action_clock: float = 0.0
+var terrain_action: String = "none"
+var physical_dig: float = 0.0
+var physical_deposit: float = 0.0
+var physical_burrow: float = 0.0
+var physical_climb: float = 0.0
+var physical_oviposit: float = 0.0
+var physical_armor: float = 0.0
+
 func _init(
 	p_id: int,
 	p_position: Vector2,
@@ -56,6 +70,9 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	lineage_hue = wrapf(0.08 + p_rng.randfn(0.0, 0.030), 0.0, 1.0)
 	visual_phase = p_rng.randf_range(0.0, TAU)
 	radius = 1.55 * gene_size
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_DECOMPOSER)
 
 
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
@@ -88,6 +105,20 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	)
 	visual_phase = p_rng.randf_range(0.0, TAU)
 	radius = 1.55 * gene_size
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	if parent.physical_genome != null:
+		physical_genome.inherit_and_mutate(
+			parent.physical_genome,
+			p_rng,
+			mutation_rate
+		)
+	else:
+		physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_DECOMPOSER)
+	carried_soil = 0.0
+	burrow_depth = 0.0
+	terrain_action_clock = 0.0
+	terrain_action = "none"
 
 
 func begin_budding() -> void:

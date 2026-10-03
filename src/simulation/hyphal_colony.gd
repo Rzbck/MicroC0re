@@ -1,6 +1,8 @@
 class_name HyphalColony
 extends RefCounted
 
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+
 var id: int
 var parent_id: int = -1
 var lineage_id: int
@@ -30,6 +32,18 @@ var mutation_rate: float = 0.040
 var lineage_hue: float = 0.10
 
 
+var physical_genome: Variant = null
+var carried_soil: float = 0.0
+var burrow_depth: float = 0.0
+var terrain_action_clock: float = 0.0
+var terrain_action: String = "none"
+var physical_dig: float = 0.0
+var physical_deposit: float = 0.0
+var physical_burrow: float = 0.0
+var physical_climb: float = 0.0
+var physical_oviposit: float = 0.0
+var physical_armor: float = 0.0
+
 func _init(p_id: int, root: Vector2, p_phase: float = 0.0) -> void:
 	id = p_id
 	lineage_id = p_id
@@ -47,6 +61,9 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_efficiency = clampf(1.0 + p_rng.randfn(0.0, 0.07), 0.70, 1.45)
 	mutation_rate = clampf(0.040 + p_rng.randfn(0.0, 0.006), 0.015, 0.10)
 	lineage_hue = wrapf(0.10 + p_rng.randfn(0.0, 0.025), 0.0, 1.0)
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_FILAMENTOUS)
 
 
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
@@ -74,6 +91,20 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 		0.0,
 		1.0
 	)
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	if parent.physical_genome != null:
+		physical_genome.inherit_and_mutate(
+			parent.physical_genome,
+			p_rng,
+			mutation_rate
+		)
+	else:
+		physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_FILAMENTOUS)
+	carried_soil = 0.0
+	burrow_depth = 0.0
+	terrain_action_clock = 0.0
+	terrain_action = "none"
 
 
 func add_node(parent_index: int, node_position: Vector2) -> int:

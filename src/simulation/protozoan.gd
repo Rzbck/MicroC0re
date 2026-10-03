@@ -1,6 +1,8 @@
 class_name Protozoan
 extends RefCounted
 
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+
 var id: int
 var parent_id: int = -1
 var lineage_id: int
@@ -34,6 +36,18 @@ var gene_size: float = 1.0
 var gene_metabolism: float = 1.0
 var mutation_rate: float = 0.06
 
+
+var physical_genome: Variant = null
+var carried_soil: float = 0.0
+var burrow_depth: float = 0.0
+var terrain_action_clock: float = 0.0
+var terrain_action: String = "none"
+var physical_dig: float = 0.0
+var physical_deposit: float = 0.0
+var physical_burrow: float = 0.0
+var physical_climb: float = 0.0
+var physical_oviposit: float = 0.0
+var physical_armor: float = 0.0
 
 func _init(
 	p_id: int,
@@ -74,6 +88,9 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	mutation_rate = clampf(0.06 + p_rng.randfn(0.0, 0.01), 0.02, 0.14)
 	radius = 3.2 * gene_size
 
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_PREDATOR)
+
 
 func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	parent_id = int(parent.id)
@@ -106,6 +123,20 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	)
 	deform_phase = p_rng.randf_range(0.0, TAU)
 	radius = 3.2 * gene_size
+
+	physical_genome = PhysicalCapabilityGenomeScript.new()
+	if parent.physical_genome != null:
+		physical_genome.inherit_and_mutate(
+			parent.physical_genome,
+			p_rng,
+			mutation_rate
+		)
+	else:
+		physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_PREDATOR)
+	carried_soil = 0.0
+	burrow_depth = 0.0
+	terrain_action_clock = 0.0
+	terrain_action = "none"
 
 
 func _mutate_float(

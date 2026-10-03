@@ -229,3 +229,26 @@ This is **not yet unlimited open-ended evolution**: module function types and
 environmental channels are still bounded. #64 phase 4 will replace more
 hard-coded metabolic roles with evolvable reaction modules over explicit
 chemical channels.
+
+
+## Shared physical-capability genome — #65
+
+Every current organism family now carries the same bounded, variable-length
+physical capability program. Digging, carrying, deposition, burrowing, climbing,
+oviposition potential and armor are therefore not permanently owned by a
+hard-coded species.
+
+Capability modules have strength, sensor, regulatory threshold, polarity and an
+innovation identity. They can duplicate, delete, insert, rewire their sensor,
+flip regulation and rarely transmute into another capability. Founder biases
+differ, but the representation is shared across bacteria, protists, algae,
+decomposers and hyphae.
+
+The first physical expression is terraforming: excavation removes actual
+height-field material into an organism's carried-soil store; deposition returns
+that mass elsewhere. Slopes feed back on movement, so climbing and burrowing
+change what terrain an organism can traverse. Digging, armor, oviposition
+potential and below-surface depth also alter visible 3D morphology.
+
+Explicit egg entities and true tunnel occupancy are phase 2 of #65; the
+evolvable capability representation is already in place for them.
