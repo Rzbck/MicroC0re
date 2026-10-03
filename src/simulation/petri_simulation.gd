@@ -1074,9 +1074,9 @@ func _grow_hyphal_colony(colony: Variant) -> void:
 	var best_signal: float = -INF
 	for tip_index in colony.tips:
 		var tip_position: Vector2 = colony.nodes[int(tip_index)]
-		var signal: float = float(detritus.sample_world(tip_position))
-		if signal > best_signal:
-			best_signal = signal
+		var substrate_signal: float = float(detritus.sample_world(tip_position))
+		if substrate_signal > best_signal:
+			best_signal = substrate_signal
 			best_tip_index = int(tip_index)
 
 	var origin: Vector2 = colony.nodes[best_tip_index]
