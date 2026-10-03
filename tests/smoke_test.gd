@@ -29,7 +29,9 @@ func _init() -> void:
 	var shade_position := Vector2(21.0, 21.0)
 	shade_probe.producer_biomass.fill(0.0)
 	var open_light: float = float(shade_probe.sample_light(shade_position))
-	shade_probe.producer_biomass.add_nearest_world(shade_position, 1.0)
+	# Fill the field so bilinear sampling observes a fully dense local patch
+	# instead of averaging one occupied cell with three empty neighbors.
+	shade_probe.producer_biomass.fill(1.0)
 	var shaded_light: float = float(shade_probe.sample_light(shade_position))
 	if shaded_light >= open_light * 0.80:
 		errors.append("biome: producer self-shading did not attenuate local light")
