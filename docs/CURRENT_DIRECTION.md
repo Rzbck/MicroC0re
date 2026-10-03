@@ -231,3 +231,18 @@ Epic #14 is ready to unblock deeper ecology when:
 - Simulation performance: #9
 - Ecology research: #10
 - Evolution: #13
+
+
+### Visual-language gate — 2026-10-03
+
+Do not add another ecological guild until the existing ecosystem passes the
+new readability gate:
+
+- integer-scaled root viewport at default presentation;
+- one shared 0.25-world-unit source-pixel scale;
+- binary/dithered LOD handoff with no translucent double bodies;
+- stable 8-direction presentation until authored directional sprites exist;
+- interactions staged by simulation progress;
+- biome represented as coherent material clusters rather than per-pixel noise;
+- an observer can identify at least three cause/effect ecological chains without
+  opening the inspector.

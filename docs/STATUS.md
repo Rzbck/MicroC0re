@@ -258,3 +258,18 @@ When status changes:
 3. update this file when the summarized workflow materially changes.
 
 Do not put workflow state back into issue titles.
+
+
+## Visual language rebuild — active 2026-10-03
+
+First structural pass:
+- root stretch changed from `canvas_items/expand` to `viewport/keep` with integer scale mode;
+- close organism atlases now share the documented 0.25-world-unit source-pixel scale;
+- removed continuous radius/gene-based texture resizing from current organism renderers;
+- overview/full-sprite LOD now uses deterministic binary dithering rather than alpha crossfade;
+- far bacteria are separate integer-screen-pixel silhouettes with quantized orientation;
+- full organism orientations reduced to 8 stable directions to reduce pixel shimmer;
+- feeding/reproduction/death atlas frames now follow interaction progress where available;
+- generic biological FX remain accents and no longer rescale independently.
+
+Next visual gate: replace shader speckle with coherent biome clusters and simplify interaction VFX hierarchy before adding further guilds.

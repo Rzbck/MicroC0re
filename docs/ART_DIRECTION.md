@@ -187,3 +187,33 @@ These are references for process/readability and examples of low-resolution micr
 ### Shader geometry requirement
 
 For shader-backed world polygons, a valid 1x1 opaque texture is intentionally assigned even when the shader does not sample `TEXTURE`. Godot's `Polygon2D` only builds/passes UV vertex data when a texture is valid. Removing this UV-driver texture collapses the biome mask sampling and is a rendering regression.
+
+
+## Visual-language rebuild contract — 2026-10-03
+
+The previous renderer violated its own source-pixel rule by scaling different
+organism atlases with unrelated floating-point factors and by alpha-crossfading
+overview markers and sprites.
+
+The renderer now follows these hard rules:
+
+- root presentation uses Godot `viewport` stretch with integer scaling;
+- one biological source pixel is always **0.25 world units** in close sprites,
+  event atlases, DNA, phages and hyphal assets;
+- organism gene/radius values do **not** continuously rescale pixel textures;
+  morphology changes belong in authored atlas classes/frames;
+- the camera remains continuously zoomable, but source sprites only enter once
+  the zoom reaches the range where their source pixels are readable;
+- overview-to-sprite handoff uses deterministic per-organism ordered dithering:
+  an organism is one representation or the other, never two translucent bodies;
+- overview silhouettes use integer screen-pixel dimensions and 8-direction
+  orientation;
+- runtime sprite orientation is limited to 8 stable directions to reduce pixel
+  shimmer until direction-specific authored atlas frames replace rotation;
+- action progress drives feeding/reproduction/death key frames where those
+  progress values exist; important actions must not merely loop unrelated FX;
+- generic effect sprites are accents at the same source-pixel scale, never
+  independently scaled pseudo-organisms.
+
+This is the baseline for #15/#18/#60. Future visual work must improve authored
+silhouettes and state frames without reintroducing fractional sprite scaling.

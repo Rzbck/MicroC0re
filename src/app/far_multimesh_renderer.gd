@@ -49,7 +49,7 @@ func update_from_cells(
 	visible_rect: Rect2,
 	zoom_value: float,
 	palette: Array,
-	alpha_scale: float = 1.0
+	sprite_ratio: float = 0.0
 ) -> int:
 	if multimesh == null:
 		return 0
@@ -63,6 +63,8 @@ func update_from_cells(
 
 		var position: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(position):
+			continue
+		if _lod_roll(int(cell.id)) < clampf(sprite_ratio, 0.0, 1.0):
 			continue
 
 		var hue: float = wrapf(float(cell.lineage_hue), 0.0, 1.0)
@@ -81,16 +83,16 @@ func update_from_cells(
 			)
 		elif float(cell.adhesion_timer) > 0.0:
 			color = color.lightened(0.12)
-		color.a *= clampf(alpha_scale, 0.0, 1.0)
 
-		# Far LOD is a tiny rod-like silhouette instead of a single square pixel.
-		# Size is screen-space biased so overview remains readable and cheap.
-		var screen_length: float = clampf(
-			1.8 + float(cell.length) * 0.28,
-			2.2,
-			3.5
-		)
-		var screen_thickness: float = 1.15
+		# Deliberate overview silhouette: integer screen-pixel dimensions and
+		# quantized orientation. This is a separate LOD drawing, not a shrunken
+		# copy of the close sprite.
+		var screen_length: float = roundf(clampf(
+			1.75 + float(cell.length) * 0.34,
+			2.0,
+			4.0
+		))
+		var screen_thickness: float = 1.0
 		var world_length: float = maxf(0.30, screen_length / safe_zoom)
 		var world_thickness: float = maxf(0.20, screen_thickness / safe_zoom)
 
@@ -98,12 +100,16 @@ func update_from_cells(
 
 		# Transform2D buffer row-major order:
 		# x.x, y.x, pad, origin.x, x.y, y.y, pad, origin.y
-		buffer[base + 0] = world_length
-		buffer[base + 1] = 0.0
+		var angle_step: float = TAU / 8.0
+		var angle: float = roundf(float(cell.angle) / angle_step) * angle_step
+		var cosine: float = cos(angle)
+		var sine: float = sin(angle)
+		buffer[base + 0] = cosine * world_length
+		buffer[base + 1] = -sine * world_thickness
 		buffer[base + 2] = 0.0
 		buffer[base + 3] = position.x
-		buffer[base + 4] = 0.0
-		buffer[base + 5] = world_thickness
+		buffer[base + 4] = sine * world_length
+		buffer[base + 5] = cosine * world_thickness
 		buffer[base + 6] = 0.0
 		buffer[base + 7] = position.y
 		buffer[base + 8] = color.r
@@ -116,3 +122,11 @@ func update_from_cells(
 	RenderingServer.multimesh_set_buffer(multimesh.get_rid(), buffer)
 	multimesh.visible_instance_count = count
 	return count
+
+
+func _lod_roll(organism_id: int) -> float:
+	var value: int = (
+		organism_id * 1103515245
+		+ 12345
+	) & 0x7fffffff
+	return float(value % 4093) / 4093.0

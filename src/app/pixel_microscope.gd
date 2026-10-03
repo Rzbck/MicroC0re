@@ -23,10 +23,14 @@ const FIELD_REFRESH_INTERVAL := 0.5
 const INSPECTOR_REFRESH_INTERVAL := 0.15
 const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
-const ANGLE_STEPS := 32.0
-const OVERVIEW_FADE_START := 1.04
-const OVERVIEW_FADE_END := 1.42
-const DETAIL_LOD_SCALE := 2.10
+const ANGLE_STEPS := 8.0
+# Full source sprites only become eligible once one 0.25-world-unit art pixel
+# is close to one internal viewport pixel. The transition is object-dithered:
+# each organism is EITHER its overview silhouette OR its sprite, never two
+# translucent representations on top of each other.
+const SPRITE_LOD_START_ZOOM := 3.20
+const SPRITE_LOD_END_ZOOM := 4.00
+const DETAIL_LOD_ZOOM := 7.00
 const WHEEL_ZOOM_FACTOR := 1.10
 const FOCUS_CAMERA_RESPONSE := 9.0
 const FOCUS_ZOOM_RESPONSE := 7.0
@@ -273,7 +277,7 @@ func _draw_phage_clouds() -> void:
 	if sim == null or phage_atlas == null or camera == null:
 		return
 	var zoom_value: float = camera.zoom.x
-	if zoom_value < _minimum_camera_zoom() * 1.10:
+	if zoom_value < SPRITE_LOD_START_ZOOM:
 		return
 	var visible_rect: Rect2 = _visible_world_rect().grow(12.0)
 
@@ -299,7 +303,7 @@ func _draw_phage_clouds() -> void:
 			var texture: Texture2D = phage_atlas.get_texture(
 				int(cloud.id) + packet_index
 			)
-			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL * 0.86
+			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 			draw_texture_rect(
 				texture,
 				Rect2(position - size * 0.5, size),
@@ -311,33 +315,28 @@ func _draw_phage_clouds() -> void:
 func _draw_bacteria() -> void:
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var overview_zoom: float = _minimum_camera_zoom()
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
-	var marker_alpha: float = 1.0 - sprite_blend
-	var mid_lod: bool = zoom_value < overview_zoom * DETAIL_LOD_SCALE
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
+	var mid_lod: bool = zoom_value < DETAIL_LOD_ZOOM
 	var frame: int = posmod(int(floor(visual_time * 8.0)), 4)
 
 	var far_count: int = 0
-	if marker_alpha > 0.001:
+	if sprite_ratio < 0.999:
 		far_count = int(far_renderer.update_from_cells(
 			sim.bacteria,
 			visible_rect,
 			zoom_value,
 			LINEAGE_PALETTE,
-			marker_alpha
+			sprite_ratio
 		))
-		far_cells = far_count
 	else:
 		far_renderer.clear()
-
-	if sprite_blend <= 0.001:
-		visible_cells = far_count
-		sprite_cells = 0
-		return
+	far_cells = far_count
 
 	for cell in sim.bacteria:
 		var position: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(position):
+			continue
+		if not _lod_uses_sprite(int(cell.id), sprite_ratio):
 			continue
 
 		visible_cells += 1
@@ -361,8 +360,6 @@ func _draw_bacteria() -> void:
 			var starvation: float = clampf(1.0 - float(cell.energy) / 0.95, 0.0, 1.0)
 			if starvation > 0.0:
 				color = color.lerp(Color(0.60, 0.32, 0.24, color.a), starvation * 0.68)
-				color.a *= 0.78 + 0.22 * sin(visual_time * 7.0 + float(cell.id))
-		color.a *= sprite_blend
 
 		sprite_cells += 1
 		var size_class: int = _size_class(cell)
@@ -390,12 +387,6 @@ func _draw_bacteria() -> void:
 		var pixel_angle: float = roundf(float(cell.angle) / angle_step) * angle_step
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		if float(cell.engulf_progress) > 0.0:
-			var engulf_scale: float = 1.0 - 0.68 * clampf(
-				float(cell.engulf_progress),
-				0.0,
-				1.0
-			)
-			texture_size *= engulf_scale
 			color.a *= 1.0 - 0.72 * float(cell.engulf_progress)
 
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
@@ -406,8 +397,6 @@ func _draw_bacteria() -> void:
 			color
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
 
 func _draw_gene_transfers() -> void:
 	if sim == null or camera == null or camera.zoom.x < 1.8:
@@ -449,91 +438,51 @@ func _draw_protozoa() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(12.0)
 	var zoom_value: float = camera.zoom.x
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
 
 	for proto in sim.protozoa:
 		var position: Vector2 = Vector2(proto.position)
 		if not visible_rect.has_point(position):
 			continue
-
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(proto.id), sprite_ratio):
 			_draw_overview_marker(
 				position,
-				3.2,
-				2.2,
+				4.0,
+				3.0,
 				Color(0.34, 0.82, 0.78, 0.96),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 1 if int(proto.feeding_target_id) >= 0 else 0
-		var frame: int = posmod(
-			int(floor(visual_time * (6.0 + float(proto.deform_amount) * 4.0)))
-				+ int(proto.id),
-			6
+		var frame: int = (
+			clampi(floori(float(proto.feeding_progress) * 5.999), 0, 5)
+			if state == 1
+			else posmod(
+				int(floor(visual_time * 6.0)) + int(proto.id),
+				6
+			)
 		)
 		var texture: Texture2D = protozoa_atlas.get_texture(frame, state)
-		var base_scale: float = 0.36 + float(proto.radius) * 0.012
-		var pulse_x: float = 1.0 + sin(float(proto.deform_phase)) * 0.10
-		var pulse_y: float = 1.0 - sin(float(proto.deform_phase)) * 0.08
-		var feeding_bulge: float = 1.0 + float(proto.deform_amount) * 0.18
-		var texture_size: Vector2 = texture.get_size() * base_scale
-		texture_size.x *= pulse_x * feeding_bulge
-		texture_size.y *= pulse_y * feeding_bulge
-
+		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var color := Color(0.38, 0.88, 0.78, 1.0)
 		if state == 1:
 			color = Color(0.55, 0.96, 0.73, 1.0)
-		if not bool(proto.dying):
-			var starvation: float = clampf(
-				1.0 - float(proto.energy) / 2.2,
-				0.0,
-				1.0
-			)
+		elif not bool(proto.dying):
+			var starvation: float = clampf(1.0 - float(proto.energy) / 2.2, 0.0, 1.0)
 			if starvation > 0.0:
-				color = color.lerp(
-					Color(0.45, 0.46, 0.43, color.a),
-					starvation * 0.58
-				)
-				texture_size *= 1.0 - starvation * 0.10
+				color = color.lerp(Color(0.45, 0.46, 0.43, 1.0), starvation * 0.58)
 		if bool(proto.dying):
-			var death_progress: float = clampf(
-				float(proto.lysis_progress),
-				0.0,
-				1.0
-			)
-			color = Color(
-				0.92,
-				0.48,
-				0.34,
-				clampf(1.0 - death_progress * 0.82, 0.16, 1.0)
-			)
-			texture_size *= 1.0 + death_progress * 0.30
+			var death_progress: float = clampf(float(proto.lysis_progress), 0.0, 1.0)
+			color = Color(0.92, 0.48, 0.34, clampf(1.0 - death_progress * 0.82, 0.16, 1.0))
 
-		color.a *= sprite_blend
-
-		var angle_step: float = TAU / 16.0
+		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(proto.angle) / angle_step) * angle_step
-
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
-		draw_texture_rect(
-			texture,
-			Rect2(-texture_size * 0.5, texture_size),
-			false,
-			color
-		)
+		draw_texture_rect(texture, Rect2(-texture_size * 0.5, texture_size), false, color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		if bool(proto.dying):
-			_draw_lysis_fragments(
-				position,
-				int(proto.id),
-				float(proto.lysis_progress),
-				color,
-				zoom_value
-			)
-
-
+			_draw_lysis_fragments(position, int(proto.id), float(proto.lysis_progress), color, zoom_value)
 
 func _draw_ciliates() -> void:
 	if sim == null or ciliate_atlas == null:
@@ -541,168 +490,104 @@ func _draw_ciliates() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(10.0)
 	var zoom_value: float = camera.zoom.x
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
 
 	for ciliate in sim.ciliates:
 		var position: Vector2 = Vector2(ciliate.position)
 		if not visible_rect.has_point(position):
 			continue
-
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(ciliate.id), sprite_ratio):
 			_draw_overview_marker(
 				position,
-				3.6,
-				1.5,
+				4.2,
+				2.0,
 				Color(0.60, 0.66, 0.98, 0.96),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 1 if int(ciliate.feeding_target_id) >= 0 else 0
-		var frame: int = posmod(
-			int(floor(visual_time * (10.0 + float(ciliate.gene_speed) * 2.0)))
-				+ int(ciliate.id),
-			6
+		var frame: int = (
+			clampi(floori(float(ciliate.feeding_progress) * 5.999), 0, 5)
+			if state == 1
+			else posmod(
+				int(floor(visual_time * 9.0)) + int(ciliate.id),
+				6
+			)
 		)
 		var texture: Texture2D = ciliate_atlas.get_texture(frame, state)
-		var base_scale: float = 0.33 + float(ciliate.radius) * 0.014
-		var texture_size: Vector2 = texture.get_size() * base_scale
-		var pulse: float = 1.0 + sin(float(ciliate.swim_phase)) * 0.055
-		texture_size.x *= pulse
-		texture_size.y *= 2.0 - pulse
-
+		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var color := Color(0.68, 0.72, 1.0, 1.0)
-		if not bool(ciliate.dying):
-			var starvation: float = clampf(
-				1.0 - float(ciliate.energy) / 1.8,
-				0.0,
-				1.0
-			)
-			if starvation > 0.0:
-				color = color.lerp(
-					Color(0.48, 0.47, 0.50, color.a),
-					starvation * 0.55
-				)
-				texture_size *= 1.0 - starvation * 0.08
-		if float(ciliate.engulf_progress) > 0.0:
-			var engulf_progress: float = clampf(
-				float(ciliate.engulf_progress),
-				0.0,
-				1.0
-			)
-			var engulf_scale: float = 1.0 - 0.62 * engulf_progress
-			texture_size *= engulf_scale
-			color.a *= 1.0 - 0.70 * engulf_progress
 		if state == 1:
 			color = Color(0.86, 0.72, 1.0, 1.0)
+		elif not bool(ciliate.dying):
+			var starvation: float = clampf(1.0 - float(ciliate.energy) / 1.8, 0.0, 1.0)
+			if starvation > 0.0:
+				color = color.lerp(Color(0.48, 0.47, 0.50, 1.0), starvation * 0.55)
+		if float(ciliate.engulf_progress) > 0.0:
+			color.a *= 1.0 - 0.70 * clampf(float(ciliate.engulf_progress), 0.0, 1.0)
 		if bool(ciliate.dying):
-			var death_progress: float = clampf(
-				float(ciliate.lysis_progress),
-				0.0,
-				1.0
-			)
-			color = Color(
-				0.96,
-				0.52,
-				0.38,
-				clampf(1.0 - death_progress * 0.84, 0.14, 1.0)
-			)
-			texture_size *= 1.0 + death_progress * 0.22
+			var death_progress: float = clampf(float(ciliate.lysis_progress), 0.0, 1.0)
+			color = Color(0.96, 0.52, 0.38, clampf(1.0 - death_progress * 0.84, 0.14, 1.0))
 
-		color.a *= sprite_blend
-
-		var angle_step: float = TAU / 24.0
+		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(ciliate.angle) / angle_step) * angle_step
-
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
-		draw_texture_rect(
-			texture,
-			Rect2(-texture_size * 0.5, texture_size),
-			false,
-			color
-		)
+		draw_texture_rect(texture, Rect2(-texture_size * 0.5, texture_size), false, color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		if bool(ciliate.dying):
-			_draw_lysis_fragments(
-				position,
-				int(ciliate.id),
-				float(ciliate.lysis_progress),
-				color,
-				zoom_value
-			)
-
-
+			_draw_lysis_fragments(position, int(ciliate.id), float(ciliate.lysis_progress), color, zoom_value)
 
 func _draw_flagellates() -> void:
 	if sim == null or flagellate_atlas == null:
 		return
+
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
 
 	for flagellate in sim.flagellates:
 		var position: Vector2 = Vector2(flagellate.position)
 		if not visible_rect.has_point(position):
 			continue
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(flagellate.id), sprite_ratio):
 			_draw_overview_marker(
 				position,
-				2.4,
-				1.3,
+				3.0,
+				1.5,
 				Color(0.96, 0.78, 0.30, 0.96),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 1 if int(flagellate.feeding_target_id) >= 0 else 0
-		var frame: int = posmod(
-			int(floor(visual_time * (8.0 + float(flagellate.gene_speed))))
-				+ int(flagellate.id),
-			6
+		var frame: int = (
+			clampi(floori(float(flagellate.feeding_progress) * 5.999), 0, 5)
+			if state == 1
+			else posmod(
+				int(floor(visual_time * 8.0)) + int(flagellate.id),
+				6
+			)
 		)
 		var texture: Texture2D = flagellate_atlas.get_texture(frame, state)
-		var texture_size: Vector2 = (
-			texture.get_size()
-			* SPRITE_WORLD_PIXEL
-			* float(flagellate.gene_size)
-		)
+		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var color := Color(1.0, 0.84, 0.38, 1.0)
 		if float(flagellate.energy) < 1.4 and not bool(flagellate.dying):
-			var starvation: float = clampf(
-				1.0 - float(flagellate.energy) / 1.4,
-				0.0,
-				1.0
-			)
+			var starvation: float = clampf(1.0 - float(flagellate.energy) / 1.4, 0.0, 1.0)
 			color = color.lerp(Color(0.52, 0.43, 0.28, 1.0), starvation * 0.70)
 		if float(flagellate.engulf_progress) > 0.0:
-			var engulf: float = clampf(float(flagellate.engulf_progress), 0.0, 1.0)
-			texture_size *= 1.0 - engulf * 0.64
-			color.a *= 1.0 - engulf * 0.72
+			color.a *= 1.0 - clampf(float(flagellate.engulf_progress), 0.0, 1.0) * 0.72
 		if bool(flagellate.dying):
 			var death: float = clampf(float(flagellate.lysis_progress), 0.0, 1.0)
 			color = Color(0.94, 0.46, 0.20, clampf(1.0 - death * 0.84, 0.14, 1.0))
-		color.a *= sprite_blend
-		var angle_step: float = TAU / 24.0
+
+		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(flagellate.angle) / angle_step) * angle_step
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
-		draw_texture_rect(
-			texture,
-			Rect2(-texture_size * 0.5, texture_size),
-			false,
-			color
-		)
+		draw_texture_rect(texture, Rect2(-texture_size * 0.5, texture_size), false, color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		if bool(flagellate.dying):
-			_draw_lysis_fragments(
-				position,
-				int(flagellate.id),
-				float(flagellate.lysis_progress),
-				color,
-				zoom_value
-			)
-
+			_draw_lysis_fragments(position, int(flagellate.id), float(flagellate.lysis_progress), color, zoom_value)
 
 func _draw_microalgae() -> void:
 	if sim == null or ecology_atlas == null:
@@ -710,22 +595,20 @@ func _draw_microalgae() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
 
 	for alga in sim.microalgae:
 		var position: Vector2 = Vector2(alga.position)
 		if not visible_rect.has_point(position):
 			continue
-
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(alga.id), sprite_ratio):
 			_draw_overview_marker(
 				position,
-				2.2,
-				2.2,
+				3.0,
+				3.0,
 				Color(0.42, 1.0, 0.38, 0.95),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 0
@@ -734,14 +617,17 @@ func _draw_microalgae() -> void:
 		elif bool(alga.reproducing):
 			state = 1
 
-		var frame: int = posmod(
-			int(floor(visual_time * 4.5 + float(alga.visual_phase))),
-			4
+		var frame: int = (
+			clampi(floori(float(alga.reproduction_progress) * 3.999), 0, 3)
+			if bool(alga.reproducing)
+			else (
+				clampi(floori(float(alga.lysis_progress) * 3.999), 0, 3)
+				if bool(alga.dying)
+				else posmod(int(floor(visual_time * 4.0 + float(alga.visual_phase))), 4)
+			)
 		)
 		var texture: Texture2D = ecology_atlas.get_texture(0, state, frame)
-		var texture_size: Vector2 = texture.get_size() * (
-			0.26 + float(alga.radius) * 0.018
-		)
+		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var local_light: float = float(sim.sample_light(position))
 		var color := Color(
 			0.34 + local_light * 0.18,
@@ -752,46 +638,21 @@ func _draw_microalgae() -> void:
 		if not bool(alga.dying):
 			var starvation: float = clampf(1.0 - float(alga.energy) / 1.25, 0.0, 1.0)
 			if starvation > 0.0:
-				color = color.lerp(Color(0.62, 0.48, 0.20, color.a), starvation * 0.72)
-				color.a *= 0.78 + 0.22 * sin(visual_time * 6.0 + float(alga.id))
-
+				color = color.lerp(Color(0.62, 0.48, 0.20, 1.0), starvation * 0.72)
 		if float(alga.engulf_progress) > 0.0:
-			var p: float = clampf(float(alga.engulf_progress), 0.0, 1.0)
-			texture_size *= 1.0 - p * 0.66
-			color.a *= 1.0 - p * 0.74
-
+			color.a *= 1.0 - clampf(float(alga.engulf_progress), 0.0, 1.0) * 0.74
 		if bool(alga.dying):
 			var death: float = clampf(float(alga.lysis_progress), 0.0, 1.0)
-			color = Color(
-				0.82,
-				0.80,
-				0.28,
-				clampf(1.0 - death * 0.82, 0.15, 1.0)
-			)
+			color = Color(0.82, 0.80, 0.28, clampf(1.0 - death * 0.82, 0.15, 1.0))
 
-		color.a *= sprite_blend
-
-		var angle_step: float = TAU / 24.0
+		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(alga.angle) / angle_step) * angle_step
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
-		draw_texture_rect(
-			texture,
-			Rect2(-texture_size * 0.5, texture_size),
-			false,
-			color
-		)
+		draw_texture_rect(texture, Rect2(-texture_size * 0.5, texture_size), false, color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 		if bool(alga.dying):
-			_draw_lysis_fragments(
-				position,
-				int(alga.id),
-				float(alga.lysis_progress),
-				color,
-				zoom_value
-			)
-
-
+			_draw_lysis_fragments(position, int(alga.id), float(alga.lysis_progress), color, zoom_value)
 
 func _draw_decomposers() -> void:
 	if sim == null or ecology_atlas == null:
@@ -799,22 +660,20 @@ func _draw_decomposers() -> void:
 
 	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
 	var zoom_value: float = camera.zoom.x
-	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+	var sprite_ratio: float = _sprite_lod_ratio(zoom_value)
 
 	for yeast in sim.decomposers:
 		var position: Vector2 = Vector2(yeast.position)
 		if not visible_rect.has_point(position):
 			continue
-
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(yeast.id), sprite_ratio):
 			_draw_overview_marker(
 				position,
-				2.4,
-				2.0,
+				3.0,
+				2.5,
 				Color(0.96, 0.64, 0.27, 0.96),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var state: int = 0
@@ -823,64 +682,42 @@ func _draw_decomposers() -> void:
 		elif bool(yeast.budding):
 			state = 1
 
-		var frame: int = posmod(
-			int(floor(visual_time * 5.5 + float(yeast.visual_phase))),
-			4
+		var frame: int = (
+			clampi(floori(float(yeast.budding_progress) * 3.999), 0, 3)
+			if bool(yeast.budding)
+			else (
+				clampi(floori(float(yeast.lysis_progress) * 3.999), 0, 3)
+				if bool(yeast.dying)
+				else posmod(int(floor(visual_time * 4.5 + float(yeast.visual_phase))), 4)
+			)
 		)
 		var texture: Texture2D = ecology_atlas.get_texture(1, state, frame)
-		var texture_size: Vector2 = texture.get_size() * (
-			0.26 + float(yeast.radius) * 0.017
-		)
+		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var color := Color(1.0, 0.70, 0.34, 1.0)
 		if not bool(yeast.dying):
 			var starvation: float = clampf(1.0 - float(yeast.energy) / 1.20, 0.0, 1.0)
 			if starvation > 0.0:
-				color = color.lerp(Color(0.58, 0.30, 0.22, color.a), starvation * 0.70)
-				color.a *= 0.80 + 0.20 * sin(visual_time * 6.5 + float(yeast.id))
-
+				color = color.lerp(Color(0.58, 0.30, 0.22, 1.0), starvation * 0.70)
 		if float(yeast.engulf_progress) > 0.0:
-			var p: float = clampf(float(yeast.engulf_progress), 0.0, 1.0)
-			texture_size *= 1.0 - p * 0.66
-			color.a *= 1.0 - p * 0.74
-
+			color.a *= 1.0 - clampf(float(yeast.engulf_progress), 0.0, 1.0) * 0.74
 		if bool(yeast.dying):
 			var death: float = clampf(float(yeast.lysis_progress), 0.0, 1.0)
-			color = Color(
-				0.90,
-				0.43,
-				0.25,
-				clampf(1.0 - death * 0.82, 0.15, 1.0)
-			)
+			color = Color(0.90, 0.43, 0.25, clampf(1.0 - death * 0.82, 0.15, 1.0))
 
-		color.a *= sprite_blend
-
-		var angle_step: float = TAU / 24.0
+		var angle_step: float = TAU / ANGLE_STEPS
 		var pixel_angle: float = roundf(float(yeast.angle) / angle_step) * angle_step
 		draw_set_transform(position, pixel_angle, Vector2.ONE)
-		draw_texture_rect(
-			texture,
-			Rect2(-texture_size * 0.5, texture_size),
-			false,
-			color
-		)
+		draw_texture_rect(texture, Rect2(-texture_size * 0.5, texture_size), false, color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 		if bool(yeast.dying):
-			_draw_lysis_fragments(
-				position,
-				int(yeast.id),
-				float(yeast.lysis_progress),
-				color,
-				zoom_value
-			)
-
-
+			_draw_lysis_fragments(position, int(yeast.id), float(yeast.lysis_progress), color, zoom_value)
 
 func _draw_hyphae() -> void:
 	if sim == null or hypha_atlas == null or camera == null:
 		return
 	var visible_rect: Rect2 = _visible_world_rect().grow(5.0)
-	var sprite_blend: float = _overview_sprite_blend(camera.zoom.x)
+	var sprite_ratio: float = _sprite_lod_ratio(camera.zoom.x)
 
 	for colony in sim.hyphae:
 		if colony.nodes.is_empty():
@@ -894,15 +731,14 @@ func _draw_hyphae() -> void:
 			if not any_visible:
 				continue
 
-		if sprite_blend < 0.999:
+		if not _lod_uses_sprite(int(colony.id), sprite_ratio):
 			_draw_overview_marker(
 				Vector2(colony.position),
-				3.0 + sqrt(float(colony.nodes.size())),
-				1.4,
+				4.0 + minf(4.0, sqrt(float(colony.nodes.size()))),
+				2.0,
 				Color(0.86, 0.72, 0.42, 0.88),
-				1.0 - sprite_blend
+				1.0
 			)
-		if sprite_blend <= 0.001:
 			continue
 
 		var child_counts: Array[int] = []
@@ -913,10 +749,10 @@ func _draw_hyphae() -> void:
 			if parent_index >= 0 and parent_index < child_counts.size():
 				child_counts[parent_index] += 1
 
-		var colony_color := Color(0.92, 0.78, 0.48, sprite_blend)
+		var colony_color := Color(0.92, 0.78, 0.48, 1.0)
 		if bool(colony.dying):
 			var death: float = clampf(float(colony.lysis_progress), 0.0, 1.0)
-			colony_color = Color(0.72, 0.36, 0.20, (1.0 - death * 0.78) * sprite_blend)
+			colony_color = Color(0.72, 0.36, 0.20, 1.0 - death * 0.78)
 
 		for node_index in range(1, colony.nodes.size()):
 			var parent_index: int = int(colony.parents[node_index])
@@ -932,16 +768,10 @@ func _draw_hyphae() -> void:
 				node_index
 			)
 			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
-			size.x = maxf(size.x, delta.length() + SPRITE_WORLD_PIXEL)
-			var angle_step: float = TAU / 24.0
+			var angle_step: float = TAU / ANGLE_STEPS
 			var angle: float = roundf(delta.angle() / angle_step) * angle_step
 			draw_set_transform(a.lerp(b, 0.5), angle, Vector2.ONE)
-			draw_texture_rect(
-				texture,
-				Rect2(-size * 0.5, size),
-				false,
-				colony_color
-			)
+			draw_texture_rect(texture, Rect2(-size * 0.5, size), false, colony_color)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 		for node_index in range(colony.nodes.size()):
@@ -963,11 +793,10 @@ func _draw_hyphae() -> void:
 				colony_color
 			)
 
-
 func _draw_extracellular_dna() -> void:
 	if sim == null or dna_atlas == null or camera == null:
 		return
-	if camera.zoom.x < _minimum_camera_zoom() * 1.34:
+	if camera.zoom.x < SPRITE_LOD_START_ZOOM:
 		return
 	var visible_rect: Rect2 = _visible_world_rect().grow(2.0)
 	for fragment in sim.dna_fragments:
@@ -995,7 +824,7 @@ func _draw_life_state_cues() -> void:
 		return
 	var visible_rect: Rect2 = _visible_world_rect().grow(6.0)
 	var zoom_value: float = camera.zoom.x
-	if zoom_value < _minimum_camera_zoom() * 1.18:
+	if zoom_value < SPRITE_LOD_START_ZOOM:
 		return
 	var frame: int = posmod(floori(visual_time * 7.0), 4)
 
@@ -1134,12 +963,12 @@ func _draw_effect_asset(
 	position: Vector2,
 	kind: int,
 	frame: int,
-	scale: float
+	_scale: float
 ) -> void:
 	if effect_atlas == null or camera == null:
 		return
 	var texture: Texture2D = effect_atlas.get_texture(kind, frame)
-	var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL * scale
+	var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 	draw_texture_rect(
 		texture,
 		Rect2(position - size * 0.5, size),
@@ -1211,13 +1040,30 @@ func _draw_selection_focus() -> void:
 		)
 
 
-func _overview_sprite_blend(zoom_value: float) -> float:
-	var overview_zoom: float = _minimum_camera_zoom()
+func _sprite_lod_ratio(zoom_value: float) -> float:
 	return smoothstep(
-		overview_zoom * OVERVIEW_FADE_START,
-		overview_zoom * OVERVIEW_FADE_END,
+		SPRITE_LOD_START_ZOOM,
+		SPRITE_LOD_END_ZOOM,
 		zoom_value
 	)
+
+
+func _lod_roll(organism_id: int) -> float:
+	var value: int = (
+		organism_id * 1103515245
+		+ 12345
+	) & 0x7fffffff
+	return float(value % 4093) / 4093.0
+
+
+func _lod_uses_sprite(organism_id: int, sprite_ratio: float) -> bool:
+	return _lod_roll(organism_id) < clampf(sprite_ratio, 0.0, 1.0)
+
+
+func _overview_sprite_blend(zoom_value: float) -> float:
+	# Kept as a semantic visibility helper for interaction overlays. Organism
+	# LOD itself is binary/dithered and never alpha-crossfades two bodies.
+	return _sprite_lod_ratio(zoom_value)
 
 
 func _draw_overview_marker(
