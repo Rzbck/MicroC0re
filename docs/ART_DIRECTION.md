@@ -281,3 +281,24 @@ Corrections in this pass:
 - selection focus zoom is reduced;
 - inspector footprint/opacity/font scale reduced again;
 - lysis FX are close-detail only while fragments transition into detrital tones.
+
+
+## Pixel-isometric presentation rule — 2026-10-03
+
+Isometric does **not** mean abandoning the pixel microscope art language.
+
+The canonical visible renderer is 2D pixel art projected from the living
+height-field:
+- 2:1 diamond terrain tiles;
+- integer-snapped screen positions;
+- nearest-filtered legacy organism atlases;
+- no smooth spheres, capsules or lit box primitives;
+- no arbitrary camera tilt that deforms the sprite language;
+- world rotation occurs in 90-degree steps;
+- terrain height is shown by exposed pixel side faces;
+- dig/fill state must be readable from the terrain itself, not a debug counter.
+
+Fullscreen presentation may scale fractionally to fill the actual desktop;
+world/sprite coordinates remain snapped and textures remain nearest-filtered.
+A small amount of uneven physical pixel scaling is preferable to a large black
+letterbox that makes the application look windowed.

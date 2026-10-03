@@ -13,6 +13,7 @@ var world_size := Vector2.ZERO
 var width: int = 0
 var height: int = 0
 var heights := PackedFloat32Array()
+var baseline_heights := PackedFloat32Array()
 var fixed_seed: int = 1
 var _relax_accumulator: float = 0.0
 var _terrain_tick: int = 0
@@ -38,6 +39,7 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	height = maxi(3, ceili(world_size.y / CELL_SIZE) + 1)
 	heights.resize(width * height)
 	_generate_seeded_relief()
+	baseline_heights = heights.duplicate()
 
 
 func sample_height(position: Vector2) -> float:
@@ -56,6 +58,13 @@ func sample_height(position: Vector2) -> float:
 
 func height_at_grid(x: int, y: int) -> float:
 	return _height_value(clampi(x, 0, width - 1), clampi(y, 0, height - 1))
+
+
+func height_delta_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	var index: int = _index(sx, sy)
+	return float(heights[index]) - float(baseline_heights[index])
 
 
 func world_position_for_grid(x: int, y: int) -> Vector2:
@@ -408,7 +417,7 @@ func _advance_agent(
 		)
 		agent.angle = wrapf(float(agent.angle) + turn * 0.075, -PI, PI)
 
-	var capacity: float = 0.12 + carry * 0.20
+	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (
 		0.42 + dig * 0.48 + deposit_strength * 0.20
 	)
@@ -444,7 +453,7 @@ func _advance_agent(
 		)
 		var requested: float = minf(
 			float(agent.carried_soil),
-			0.045 + deposit_strength * 0.075
+			0.12 + deposit_strength * 0.16
 		)
 		var placed: float = deposit(
 			target,
@@ -464,7 +473,7 @@ func _advance_agent(
 		)
 		var requested: float = minf(
 			capacity - float(agent.carried_soil),
-			0.038 + dig * 0.072
+			0.11 + dig * 0.15
 		)
 		var removed: float = excavate(
 			dig_target,

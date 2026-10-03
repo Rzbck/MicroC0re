@@ -355,3 +355,29 @@ Based on the maintainer capture rather than code inspection alone:
 - successful uptake merges the donor physical module into the recipient's
   variable-length capability genome;
 - transfer is capped, local, deterministic and energetically costly.
+
+
+## Pixel-isometric correction after captured fullscreen review
+
+The first #65 presentation used native 3D primitives and an integer-scaled
+1280x720 viewport. On a 1366x768 display that produced the visible black frame,
+destroyed the established pixel-art organism language, flattened the apparent
+terraforming, and reintroduced a permanent debug text block.
+
+Correction:
+- main scene is again a Node2D pixel renderer, but with a true 2:1 isometric
+  projection over the living height field;
+- all existing organism pixel atlases are reused instead of boxes/spheres;
+- rotation is restricted to crisp 90-degree world turns so the isometric pixel
+  geometry never shears/deforms;
+- middle-drag pans, right-drag rotates in quarter turns, wheel zooms around the
+  cursor, Q/E rotate and F fits the whole biome;
+- the viewport now fills the physical fullscreen instead of preserving an
+  integer-scaled 1280x720 black frame;
+- always-on top-left debug text is removed; H toggles a small help panel;
+- terrain tops and exposed sides are pixel-drawn, with cuts/fills colored from
+  the difference against the seed terrain;
+- excavation/deposition throughput was increased so mounds and pits become
+  visibly legible on gameplay timescales;
+- carried soil and active dig/deposit actions are visible as restrained pixel
+  clusters attached to the acting organism.
