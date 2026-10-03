@@ -2,6 +2,7 @@ class_name PetriSimulation
 extends RefCounted
 
 const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
+const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
 const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
@@ -224,6 +225,9 @@ var conjugation_contact_rate: float = 0.28
 var conjugation_duration: float = 1.15
 var conjugation_break_distance: float = 2.8
 var conjugation_pull: float = 0.10
+# Rare Hfr-like chromosomal module transfer: conjugation can occasionally add
+# one ecological genome module in addition to plasmid cargo.
+var conjugation_genome_recombination_rate: float = 0.16
 
 # Amoeboid/protist ecology. This is intentionally a distinct organism class:
 # bacteria do not magically fuse into blobs. The larger cell deforms, hunts,
@@ -2291,6 +2295,17 @@ func _advance_gene_transfers(dt: float) -> void:
 			if chosen == int(BacteriumScript.PLASMID_CONJUGATION):
 				recipient.pili_count = maxi(int(recipient.pili_count), 4)
 
+		if (
+			donor.genome != null
+			and recipient.genome != null
+			and rng.randf() < conjugation_genome_recombination_rate
+		):
+			var donor_module: Dictionary = donor.genome.module_for_transfer(
+				rng.randi_range(0, maxi(0, donor.genome.modules.size() - 1))
+			)
+			if recipient.integrate_genome_module(donor_module, rng):
+				recipient.hgt_events = int(recipient.hgt_events) + 1
+
 		donor.clear_transfer_state()
 		recipient.clear_transfer_state()
 
@@ -2399,7 +2414,64 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var cell_position: Vector2 = Vector2(cell.position)
 	var local_nutrient_before: float = float(nutrient.sample_world(cell_position))
 	var local_exudate_before: float = float(exudate.sample_world(cell_position))
+	var local_detritus_before: float = float(detritus.sample_world(cell_position))
+	var local_light_before: float = _sample_light(cell_position)
+	var local_quorum_before: float = float(quorum_signal.sample_world(cell_position))
+	var local_damage_before: float = float(damage_cue.sample_world(cell_position))
+	var local_oxygen_before: float = float(oxygen.sample_world(cell_position))
 	var resource_signal: float = local_nutrient_before + local_exudate_before * 1.25
+
+	var genome_signals: Array = [
+		1.0,
+		clampf(local_nutrient_before * 2.2, 0.0, 1.0),
+		clampf(local_exudate_before * 4.0, 0.0, 1.0),
+		clampf(local_detritus_before * 4.5, 0.0, 1.0),
+		clampf(local_light_before, 0.0, 1.0),
+		clampf(local_quorum_before * 8.0, 0.0, 1.0),
+		clampf(local_damage_before * 7.0, 0.0, 1.0),
+		clampf(1.0 - float(cell.energy) / 2.4, 0.0, 1.0),
+		clampf(local_oxygen_before, 0.0, 1.0),
+	]
+	if cell.genome != null:
+		cell.expression_nutrient = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_NUTRIENT_UPTAKE,
+				genome_signals
+			)
+		)
+		cell.expression_exudate = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_EXUDATE_UPTAKE,
+				genome_signals
+			)
+		)
+		cell.expression_detritus = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_DETRITUS_SCAVENGE,
+				genome_signals
+			)
+		)
+		cell.expression_photo = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+				genome_signals
+			)
+		)
+		cell.expression_matrix = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_MATRIX,
+				genome_signals
+			)
+		)
+		cell.expression_quorum = float(
+			cell.genome.expression(
+				EvolvableGenomeScript.MODULE_QUORUM_SIGNAL,
+				genome_signals
+			)
+		)
+		cell.guild = int(cell.genome.dominant_guild(genome_signals))
+		cell.ecotype_label = String(cell.genome.phenotype_label(genome_signals))
+
 	var dormancy_trait: float = clampf(float(cell.gene_dormancy), 0.45, 1.80)
 
 	# Reversible starvation survival. Dormant cells barely move/metabolize but
@@ -2416,6 +2488,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 					max_exudate_uptake_rate
 					* dormancy_uptake_factor
 					* float(cell.gene_uptake)
+					* maxf(0.15, float(cell.expression_exudate))
 					* dt
 				)
 			)
@@ -2425,6 +2498,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 					max_uptake_rate
 					* dormancy_uptake_factor
 					* float(cell.gene_uptake)
+					* maxf(0.15, float(cell.expression_nutrient))
 					* dt
 				)
 			)
@@ -2451,15 +2525,30 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		cell.dormant_time = 0.0
 		return
 
-	var sensed: float = local_nutrient_before + local_exudate_before * 0.72
+	var sensed: float = (
+		local_nutrient_before * maxf(0.25, float(cell.expression_nutrient))
+		+ local_exudate_before * 0.72 * maxf(0.20, float(cell.expression_exudate))
+	)
 	if (
-		int(cell.guild) == int(BacteriumScript.GUILD_SCAVENGER)
+		float(cell.expression_detritus) > 0.06
 		or cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE)
 	):
-		sensed += float(detritus.sample_world(cell_position)) * 1.30
-		sensed += float(damage_cue.sample_world(cell_position)) * 0.72
-	elif int(cell.guild) == int(BacteriumScript.GUILD_PHOTOTROPH):
-		sensed += _sample_light(cell_position) * 0.18
+		sensed += (
+			local_detritus_before
+			* 1.30
+			* maxf(0.30, float(cell.expression_detritus))
+		)
+		sensed += (
+			local_damage_before
+			* 0.72
+			* maxf(0.30, float(cell.expression_detritus))
+		)
+	if float(cell.expression_photo) > 0.06:
+		sensed += (
+			local_light_before
+			* 0.18
+			* maxf(0.30, float(cell.expression_photo))
+		)
 
 	var improvement: float = sensed - float(cell.sensed_memory)
 	var memory_alpha: float = 1.0 - exp(-dt / maxf(0.001, chemotaxis_memory_tau))
@@ -2491,18 +2580,18 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var size_drag: float = 0.84 + 0.20 * float(cell.gene_size)
 	var energy_speed_factor: float = clampf(float(cell.energy) / 1.6, 0.18, 1.0)
 	var division_mobility: float = 0.16 if bool(cell.dividing) else 1.0
-	var guild_speed_factor: float = 1.0
-	match int(cell.guild):
-		BacteriumScript.GUILD_SCAVENGER:
-			guild_speed_factor = 0.90
-		BacteriumScript.GUILD_BIOFILM:
-			guild_speed_factor = 0.64
-		BacteriumScript.GUILD_PHOTOTROPH:
-			guild_speed_factor = 0.58
+	var ecological_drag: float = clampf(
+		1.0
+		- float(cell.expression_matrix) * 0.17
+		- float(cell.expression_photo) * 0.07
+		- float(cell.expression_detritus) * 0.035,
+		0.52,
+		1.0
+	)
 
 	var local_eps: float = float(eps.sample_world(cell_position))
-	var local_quorum: float = float(quorum_signal.sample_world(cell_position))
-	var local_damage: float = float(damage_cue.sample_world(cell_position))
+	var local_quorum: float = local_quorum_before
+	var local_damage: float = local_damage_before
 	var quorum_response: float = clampf(local_quorum * 8.0, 0.0, 1.0)
 	var competence_drive: float = clampf(
 		(1.55 - float(cell.energy)) * 0.72 + local_damage * 0.65,
@@ -2517,14 +2606,18 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var speed: float = (
 		run_speed
 		* float(cell.gene_speed)
-		* guild_speed_factor
+		* ecological_drag
 		* flagella_propulsion
 		* energy_speed_factor
 		* division_mobility
 		/ size_drag
 	)
-	if int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM):
-		speed *= lerpf(1.0, 0.50, quorum_response)
+	if float(cell.expression_matrix) > 0.08:
+		speed *= lerpf(
+			1.0,
+			0.56,
+			quorum_response * clampf(float(cell.expression_matrix), 0.0, 1.0)
+		)
 
 	var heading: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
 	var flow: Vector2 = _water_flow(cell_position)
@@ -2549,6 +2642,8 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		uptake_rate = (
 			max_uptake_rate
 			* float(cell.gene_uptake)
+			* maxf(0.08, float(cell.expression_nutrient))
+			* _plasmid_uptake_factor(cell)
 			* local_nutrient
 			/ (monod_half_saturation + local_nutrient)
 		)
@@ -2561,6 +2656,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		exudate_rate = (
 			max_exudate_uptake_rate
 			* float(cell.gene_uptake)
+			* maxf(0.05, float(cell.expression_exudate))
 			* local_exudate
 			/ (exudate_half_saturation + local_exudate)
 			* (1.0 + clampf(local_eps, 0.0, 1.5) * eps_retention_bonus)
@@ -2582,13 +2678,16 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 	var scavenged: float = 0.0
 	if (
-		int(cell.guild) == int(BacteriumScript.GUILD_SCAVENGER)
+		float(cell.expression_detritus) > 0.04
 		or cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE)
 	):
 		scavenged = float(
 			detritus.take_nearest_world(
 				cell_position,
-				detritus_scavenge_rate * float(cell.gene_uptake) * dt
+				detritus_scavenge_rate
+				* float(cell.gene_uptake)
+				* maxf(0.18, float(cell.expression_detritus))
+				* dt
 			)
 		)
 		cell.energy = float(cell.energy) + scavenged * detritus_energy_yield
@@ -2612,18 +2711,17 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		+ 0.006 * maxf(0.0, float(cell.gene_adhesion) - 0.7)
 		+ _plasmid_burden(cell)
 	)
+	if cell.genome != null:
+		morphology_cost += float(cell.genome.complexity_cost(genome_signals))
 	morphology_cost *= _plasmid_maintenance_factor(cell)
 	if bool(cell.competent):
 		morphology_cost += competence_cost * float(cell.gene_competence)
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
-	# Every active cell contributes a small density signal. Biofilm builders
-	# amplify this field; signal concentration makes local matrix investment a
-	# collective response instead of a fixed per-cell secretion constant.
-	var signal_factor: float = (
-		1.9
-		if int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM)
-		else 1.0
+	var signal_factor: float = clampf(
+		0.25 + float(cell.expression_quorum),
+		0.18,
+		2.50
 	)
 	var signal_amount: float = (
 		quorum_signal_rate
@@ -2635,19 +2733,17 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	cell.energy = maxf(0.0, float(cell.energy) - signal_amount * 0.05)
 
 	if (
-		int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM)
+		float(cell.expression_matrix) > 0.04
 		or float(cell.gene_adhesion) > 0.95
 		or cell.has_plasmid(BacteriumScript.PLASMID_ADHESION)
 	):
-		var guild_eps_factor: float = (
-			2.2
-			if int(cell.guild) == int(BacteriumScript.GUILD_BIOFILM)
-			else 1.0
+		var matrix_factor: float = (
+			0.55 + 1.65 * clampf(float(cell.expression_matrix), 0.0, 2.0)
 		)
 		var secretion: float = (
 			eps_secretion_rate
-			* guild_eps_factor
-			* maxf(0.0, float(cell.gene_adhesion) - 0.75)
+			* matrix_factor
+			* maxf(0.0, float(cell.gene_adhesion) - 0.70)
 			* clampf(float(cell.energy) / 3.0, 0.2, 1.0)
 			* (0.55 + 1.65 * quorum_response)
 			* dt
@@ -2656,9 +2752,15 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			eps.add_nearest_world(cell_position, secretion)
 			cell.energy = maxf(0.0, float(cell.energy) - secretion * 0.7)
 
-	if int(cell.guild) == int(BacteriumScript.GUILD_PHOTOTROPH):
+	var photo_gain: float = 0.0
+	if float(cell.expression_photo) > 0.04:
 		var local_light: float = _sample_light(cell_position)
-		var photo_gain: float = 0.045 * local_light * dt
+		photo_gain = (
+			0.045
+			* local_light
+			* clampf(float(cell.expression_photo), 0.0, 2.4)
+			* dt
+		)
 		cell.energy = float(cell.energy) + photo_gain
 		oxygen.add_nearest_world(cell_position, photo_gain * 0.34)
 		nutrient.add_nearest_world(cell_position, photo_gain * 0.010)
@@ -2669,11 +2771,17 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		consumed > 0.0
 		or crossfed > 0.0
 		or scavenged > 0.0
+		or photo_gain > 0.0
 	) and not bool(cell.dividing):
 		var growth_delta: float = (
 			growth_per_nutrient
 			* float(cell.gene_growth)
-			* (consumed + crossfed * 0.82 + scavenged * 0.45)
+			* (
+				consumed
+				+ crossfed * 0.82
+				+ scavenged * 0.45
+				+ photo_gain * 0.52
+			)
 		)
 		var max_length_for_cell: float = maximum_length * float(cell.gene_size)
 		growth_delta = minf(
@@ -2690,7 +2798,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 		waste.add_nearest_world(
 			cell_position,
-			(consumed + crossfed * 0.72) * waste_fraction
+			(consumed + crossfed * 0.72 + scavenged * 0.25) * waste_fraction
 		)
 
 	if float(cell.energy) <= 0.0:
@@ -3130,6 +3238,11 @@ func _release_dna_fragments(cell: Variant) -> void:
 			DNAFragmentScript.TRAIT_COUNT
 		)
 		var trait_value: float = _bacterium_trait_value(cell, trait_kind)
+		var module_payload: Dictionary = {}
+		if cell.genome != null and not cell.genome.modules.is_empty():
+			module_payload = cell.genome.module_for_transfer(
+				int(cell.id) + int(cell.generation) + fragment_index * 7
+			)
 		var phase: float = (
 			float(posmod(int(cell.id) * 13 + fragment_index * 17, 360))
 			* PI / 180.0
@@ -3140,7 +3253,8 @@ func _release_dna_fragments(cell: Variant) -> void:
 			int(cell.lineage_id),
 			float(cell.lineage_hue),
 			trait_kind,
-			trait_value
+			trait_value,
+			module_payload
 		)
 		fragment.lifetime = dna_fragment_lifetime
 		dna_fragments.append(fragment)
@@ -3275,6 +3389,9 @@ func _integrate_dna_fragment(cell: Variant, fragment: Variant) -> void:
 			cell.gene_dormancy = lerpf(
 				float(cell.gene_dormancy), float(fragment.trait_value), strength
 			)
+
+	if fragment.has_module_payload():
+		cell.integrate_genome_module(fragment.module_payload, rng)
 
 
 func _bacterium_trait_value(cell: Variant, trait_kind: int) -> float:
@@ -3904,6 +4021,15 @@ func state_signature() -> String:
 				1 if bool(cell.phage_infected) else 0,
 				float(cell.phage_progress),
 				1 if bool(cell.phage_triggered_lysis) else 0,
+			]
+		)
+		parts.append(
+			"eco%d:sm%d:gr%d:gm%s"
+			% [
+				int(cell.ecotype_id),
+				int(cell.structural_mutations),
+				int(cell.genome_recombination_events),
+				String(cell.genome.compact_signature()) if cell.genome != null else "none",
 			]
 		)
 

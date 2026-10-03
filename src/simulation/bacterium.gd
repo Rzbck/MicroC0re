@@ -1,6 +1,8 @@
 class_name Bacterium
 extends RefCounted
 
+const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
+
 const PLASMID_CONJUGATION := 1
 const PLASMID_SCAVENGE := 2
 const PLASMID_ADHESION := 4
@@ -74,6 +76,25 @@ var gene_dormancy: float = 1.0
 var gene_competence: float = 1.0
 var mutation_rate: float = 0.08
 
+# Variable-length ecological genome. The scalar genes above remain quantitative
+# morphology/motility alleles; this program can duplicate/delete/rewire
+# ecological modules and is the first open-ended genotype layer.
+var genome: Variant = null
+var ecotype_id: int = 0
+var ecotype_label: String = "generalist"
+var genome_event: String = "founder"
+var structural_mutations: int = 0
+var genome_recombination_events: int = 0
+
+# Current environmentally regulated expression; kept for rendering/inspection
+# and avoids reevaluating the program outside the simulation step.
+var expression_nutrient: float = 1.0
+var expression_exudate: float = 0.5
+var expression_detritus: float = 0.0
+var expression_photo: float = 0.0
+var expression_matrix: float = 0.0
+var expression_quorum: float = 0.2
+
 # Heritable visual / mechanical appendages.
 var flagella_count: int = 2
 var flagella_length: float = 1.0
@@ -141,6 +162,15 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	lineage_hue = p_rng.randf()
 	visual_phase = p_rng.randf_range(0.0, TAU)
 
+	genome = EvolvableGenomeScript.new()
+	genome.configure_founder(p_rng)
+	guild = int(genome.baseline_guild())
+	ecotype_id = int(genome.ecotype_hash())
+	ecotype_label = "founder"
+	genome_event = String(genome.last_event)
+	structural_mutations = 0
+	genome_recombination_events = 0
+
 	_apply_size_phenotype()
 
 
@@ -160,6 +190,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	phage_host_hue = 0.0
 	phage_source_id = -1
 	phage_triggered_lysis = false
+	genome_recombination_events = int(parent.genome_recombination_events)
 
 	var inherited_rate: float = float(parent.mutation_rate)
 	mutation_rate = clampf(
@@ -213,7 +244,36 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	)
 	visual_phase = p_rng.randf_range(0.0, TAU)
 
+	genome = EvolvableGenomeScript.new()
+	if parent.genome != null:
+		genome.inherit_and_mutate(parent.genome, p_rng, mutation_rate)
+	else:
+		genome.configure_founder(p_rng)
+	structural_mutations = (
+		int(parent.structural_mutations)
+		+ int(genome.last_structural_changes)
+	)
+	genome_event = String(genome.last_event)
+	ecotype_id = int(genome.ecotype_hash())
+	guild = int(genome.baseline_guild())
+
 	_apply_size_phenotype()
+
+
+func integrate_genome_module(
+	module_data: Dictionary,
+	p_rng: RandomNumberGenerator
+) -> bool:
+	if genome == null:
+		genome = EvolvableGenomeScript.new()
+		genome.configure_founder(p_rng)
+	var changed: bool = bool(genome.integrate_module(module_data, p_rng))
+	if changed:
+		genome_recombination_events += 1
+		structural_mutations += int(genome.last_structural_changes)
+		genome_event = String(genome.last_event)
+		ecotype_id = int(genome.ecotype_hash())
+	return changed
 
 
 func guild_name() -> String:

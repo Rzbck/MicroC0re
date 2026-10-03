@@ -174,3 +174,58 @@ Predator traits can coevolve in response.
 - evolvable reaction networks.
 
 These should extend the current inheritance layer rather than replace it.
+
+
+## Open-ended modular genome — #64
+
+The first structural-genome layer replaces the assumption that ecological roles
+must remain a fixed hand-authored guild.
+
+Each bacterium now carries a bounded **variable-length module program** in
+addition to quantitative morphology/motility alleles. Current modules can
+express:
+- dissolved nutrient uptake;
+- exudate/cross-feeding uptake;
+- detrital scavenging;
+- phototrophy;
+- EPS/matrix investment;
+- quorum-signal production.
+
+Each module also carries:
+- expression strength;
+- an environmental sensor;
+- a regulatory threshold;
+- activating or repressing polarity;
+- an innovation identifier.
+
+Sensors currently include nutrient, exudate, detritus, light, quorum signal,
+damage, low energy and oxygen. Therefore the same inherited module topology can
+express a different phenotype in different microenvironments.
+
+Reproduction can now produce point changes **and structural changes**:
+- module duplication;
+- module deletion;
+- new module insertion;
+- regulatory sensor rewiring;
+- activation/repression flips;
+- rare functional rewiring.
+
+Genome size is hard-bounded from 2 to 14 modules in the CPU reference. Expressed
+modules and genome complexity have an energetic cost, preventing a trivial
+"express everything maximally" strategy.
+
+The old four bacterial guild labels are now only a rendering/morphology
+classification derived from the currently expressed program. A cell can become
+a photo+matrix, scavenger+crossfeed or other mosaic phenotype without a new
+scripted species class.
+
+Natural transformation now carries a sampled functional module in addition to a
+scalar allele. Compatible DNA can therefore merge a donor module into the
+recipient genome. Conjugation also has a rare Hfr-like chromosomal-module
+recombination path in addition to plasmid cargo. Vertical ancestry and
+horizontal module acquisition remain distinct counters.
+
+This is **not yet unlimited open-ended evolution**: module function types and
+environmental channels are still bounded. #64 phase 4 will replace more
+hard-coded metabolic roles with evolvable reaction modules over explicit
+chemical channels.

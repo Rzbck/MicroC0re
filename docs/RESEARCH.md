@@ -384,3 +384,121 @@ Use:
 - explorer vs strong-competitor ecotypes;
 - patch disturbance/recolonization;
 - priority effects.
+
+
+## Open-ended artificial evolution / implementation direction
+
+### Karl Sims — evolving morphology and control
+Karl Sims, **Evolving Virtual Creatures**, SIGGRAPH 1994.
+
+https://www.karlsims.com/papers/siggraph94.pdf
+
+Use in MicroC0re:
+- variable-size structured genotypes rather than only fixed scalar knobs;
+- developmental/genotype-to-phenotype separation;
+- mutation/recombination can change structure, not only parameter values.
+
+### NEAT — structural innovation + speciation
+Stanley & Miikkulainen, **Evolving Neural Networks through Augmenting
+Topologies**, Evolutionary Computation 10(2), 2002.
+
+https://direct.mit.edu/evco/article/10/2/99/1123/
+
+Use:
+- incremental complexification is more evolvable than starting with maximal
+  structure;
+- structural innovations need time/protection rather than immediate comparison
+  only against an established optimum;
+- MicroC0re borrows variable topology + innovation identity, not the task
+  fitness function.
+
+### Artificial gene regulatory networks
+Cussat-Blanc, Harrington & Banzhaf, **Artificial Gene Regulatory Networks—A
+Review**, Artificial Life 24(4), 2018.
+
+https://direct.mit.edu/artl/article/24/4/296/2909/
+
+Use:
+- environmental signals mediate genotype -> phenotype;
+- regulation lets one genome express different strategies in different local
+  conditions;
+- current #64 module sensors/thresholds are a deliberately small first GRN.
+
+### Avida / digital evolution
+Review: **Digital Evolution for Ecology Research**, Frontiers in Ecology and
+Evolution, 2021.
+
+https://www.frontiersin.org/journals/ecology-and-evolution/articles/10.3389/fevo.2021.750779/full
+
+Use:
+- implicit fitness: survival/reproductive success emerges from the simulated
+  ecology rather than a designer score;
+- effectively large genotype spaces + ecological interactions are core to
+  interesting eco-evolution.
+
+### Tangled Nature
+Christensen et al., **Tangled Nature: a model of evolutionary ecology**,
+Journal of Theoretical Biology 216(1), 2002.
+
+https://doi.org/10.1006/jtbi.2002.2530
+
+Use:
+- interactions among coexisting genotypes can make species/ecological
+  organizations emerge;
+- useful target behavior is alternating reorganization and quasi-stable
+  communities, not monotonic march toward one optimum.
+
+### Novelty / stepping stones
+Lehman & Stanley, **Abandoning Objectives**, Evolutionary Computation 19(2),
+2011.
+
+https://pubmed.ncbi.nlm.nih.gov/20868264/
+
+Secretan et al., **Picbreeder**, Evolutionary Computation 19(3), 2011.
+
+https://pubmed.ncbi.nlm.nih.gov/20964537/
+
+Use:
+- avoid assuming that a single global objective defines interesting evolution;
+- later #64 novelty archive is observational/diversity-preserving support, not
+  a replacement global fitness function.
+
+### MAP-Elites / quality diversity
+Mouret & Clune, **Illuminating search spaces by mapping elites**, 2015.
+
+https://arxiv.org/abs/1504.04909
+
+Use:
+- later offline/headless analysis can retain representative high-performing
+  ecotypes across phenotype niches instead of reporting only one winner.
+
+### Open-ended evolution
+Taylor et al., **Open-Ended Evolution: Perspectives from the OEE Workshop in
+York**, Artificial Life 22(3), 2016.
+
+https://doi.org/10.1162/ARTL_a_00210
+
+Packard et al., **An Overview of Open-Ended Evolution**, Artificial Life 25(2),
+2019.
+
+https://pubmed.ncbi.nlm.nih.gov/31150285/
+
+Use:
+- continuous novelty is not guaranteed by "having mutations";
+- distinguish exploratory novelty inside a fixed space from later expansive /
+  transformational innovation that changes what phenotypes can exist.
+
+### Creatures
+Grand et al., **The Creatures Global Digital Ecosystem**, Artificial Life 5(1),
+1999.
+
+https://direct.mit.edu/artl/article/5/1/77/2314/
+
+Use:
+- a commercial ALife example where genetically specified internal systems,
+  recurrent control, sexual recombination and gene duplication allowed
+  combinations not explicitly authored as individual creatures.
+
+Engineering rule for MicroC0re: use these mechanisms as architecture
+inspiration while keeping the ecological selection local and physically paid
+for. Do not bolt a hidden "interestingness fitness" onto the live simulation.

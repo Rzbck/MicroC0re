@@ -1572,11 +1572,10 @@ func _inspector_body(organism: Variant) -> String:
 
 	match selected_kind:
 		"bacterium":
-			trait_line = "%s adh %.1f dor %.1f cmp %.1f" % [
-				String(organism.guild_name()),
-				float(organism.gene_adhesion),
-				float(organism.gene_dormancy),
-				float(organism.gene_competence),
+			trait_line = "%s  eco %04X  m%d" % [
+				String(organism.ecotype_label),
+				int(organism.ecotype_id) & 0xFFFF,
+				organism.genome.modules.size() if organism.genome != null else 0,
 			]
 		"amoeba":
 			trait_line = "hunt %.1f  engulf %.1f" % [

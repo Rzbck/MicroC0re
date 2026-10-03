@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
 const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
@@ -147,6 +148,47 @@ func _init() -> void:
 		transform_probe._release_dna_fragments(donor)
 	if transform_probe.dna_fragments.size() > 64:
 		errors.append("evolution: extracellular DNA safety ceiling exceeded")
+
+	# Open-ended modular-genome regression: structural mutation stays bounded,
+	# expression is context-dependent, and donor modules can create a mosaic.
+	var genome_probe = EvolvableGenomeScript.new()
+	var genome_rng := RandomNumberGenerator.new()
+	genome_rng.seed = 771177
+	genome_probe.configure_founder(genome_rng)
+	var founder_modules: int = genome_probe.modules.size()
+	var child_genome = EvolvableGenomeScript.new()
+	var saw_structural_change: bool = false
+	for i in range(80):
+		child_genome.inherit_and_mutate(genome_probe, genome_rng, 0.18)
+		if child_genome.modules.size() != founder_modules:
+			saw_structural_change = true
+			break
+	if child_genome.modules.size() < 2 or child_genome.modules.size() > 14:
+		errors.append("evolution: modular genome escaped hard bounds")
+	if not saw_structural_change:
+		errors.append("evolution: structural mutation probe produced no module change")
+	var context_dark: Array = [1.0, 0.2, 0.1, 0.1, 0.0, 0.0, 0.0, 0.2, 0.5]
+	var context_light: Array = [1.0, 0.2, 0.1, 0.1, 1.0, 0.0, 0.0, 0.2, 0.5]
+	var photo_module := {
+		"kind": EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+		"strength": 1.2,
+		"sensor": EvolvableGenomeScript.SENSOR_LIGHT,
+		"threshold": 0.45,
+		"polarity": 1,
+		"innovation": 998877,
+	}
+	genome_probe.integrate_module(photo_module, genome_rng)
+	if (
+		genome_probe.expression(
+			EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+			context_light
+		)
+		<= genome_probe.expression(
+			EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+			context_dark
+		)
+	):
+		errors.append("evolution: regulatory module ignored environmental context")
 
 	# Predator/prey coevolution regression: handling defence must emerge from
 	# visible costly traits and local matrix, not a hidden resistance variable.
@@ -352,6 +394,10 @@ func _init() -> void:
 
 		if int(cell.guild) < 0 or int(cell.guild) > 3:
 			errors.append("ecology: invalid bacterial guild for cell %d" % cell.id)
+		if cell.genome == null:
+			errors.append("evolution: cell missing modular genome %d" % cell.id)
+		elif cell.genome.modules.size() < 2 or cell.genome.modules.size() > 14:
+			errors.append("evolution: invalid genome module count for cell %d" % cell.id)
 		if int(cell.plasmid_mask) < 0 or int(cell.plasmid_mask) > 15:
 			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
 		if not is_finite(float(cell.gene_dormancy)):
@@ -476,6 +522,7 @@ func _init() -> void:
 func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 	var required_scripts: Array = [
 		["petri_simulation", PetriSimulationScript],
+		["evolvable_genome", EvolvableGenomeScript],
 		["dna_fragment", DNAFragmentScript],
 		["phage_cloud", PhageCloudScript],
 		["bacterium", BacteriumScript],

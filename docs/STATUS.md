@@ -318,3 +318,17 @@ Based on the maintainer capture rather than code inspection alone:
 - inspector remains compact but is slightly wider so words no longer collapse;
 - hyphal art reduced from thick orange cable-like branches to one-pixel fungal
   filaments with distinct tip/junction clusters.
+
+
+## #64 open-ended genome foundation
+- bacteria now carry bounded variable-length ecological module programs;
+- modules can duplicate, delete, insert, rewire sensors, flip regulation and
+  rarely change function during vertical reproduction;
+- local nutrient/exudate/detritus/light/quorum/damage/energy/oxygen signals
+  regulate module expression;
+- bacterial ecological role is derived from current expression instead of being
+  permanently locked to one guild;
+- module expression and genome complexity have explicit energetic costs;
+- natural transformation can merge donor functional modules;
+- conjugation has a rare chromosomal-module recombination path;
+- inspector exposes current emergent ecotype label + compact ecotype hash.
