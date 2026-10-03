@@ -8,12 +8,14 @@ const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
+const PixelBiomeAtlasScript = preload("res://src/app/pixel_biome_atlas.gd")
+const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 4
 const SIMULATION_FRAME_BUDGET_USEC := 9000
-const FIELD_REFRESH_INTERVAL := 1.0 / 20.0
+const FIELD_REFRESH_INTERVAL := 1.0 / 10.0
 const INSPECTOR_REFRESH_INTERVAL := 0.15
 const MAX_ZOOM := 48.0
 const SPRITE_WORLD_PIXEL := 0.25
@@ -42,6 +44,8 @@ var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
 var ecology_atlas: Variant
+var biome_atlas: Variant
+var effect_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
 var current_seed: int = 1337
@@ -87,6 +91,8 @@ func _ready() -> void:
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
 	ecology_atlas = PixelEcologyAtlasScript.new()
+	biome_atlas = PixelBiomeAtlasScript.new()
+	effect_atlas = PixelEffectAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -152,12 +158,14 @@ func _setup_camera() -> void:
 
 func _setup_field_texture() -> void:
 	var field: Variant = sim.nutrient
+	var tile_size: int = int(PixelBiomeAtlasScript.TILE_SIZE)
 	field_image = Image.create(
-		int(field.width),
-		int(field.height),
+		int(field.width) * tile_size,
+		int(field.height) * tile_size,
 		false,
 		Image.FORMAT_RGBA8
 	)
+	field_image.fill(Color(0.01, 0.06, 0.07, 1.0))
 	field_texture = ImageTexture.create_from_image(field_image)
 
 
@@ -236,7 +244,16 @@ func _draw() -> void:
 	draw_rect(world_rect, Color(0.005, 0.012, 0.014, 1.0), true)
 
 	if field_texture != null:
-		draw_texture_rect(field_texture, world_rect, false)
+		var scene_light: float = float(
+			sim.sample_light(Vector2(sim.world_size) * 0.5)
+		)
+		var biome_tint := Color(
+			0.72 + scene_light * 0.28,
+			0.66 + scene_light * 0.34,
+			0.76 + scene_light * 0.24,
+			1.0
+		)
+		draw_texture_rect(field_texture, world_rect, false, biome_tint)
 
 	_draw_water_flow_cues()
 	_draw_bacteria()
@@ -784,55 +801,95 @@ func _draw_water_flow_cues() -> void:
 
 
 func _draw_life_state_cues() -> void:
-	if sim == null or camera == null:
+	if sim == null or camera == null or effect_atlas == null:
 		return
 	var visible_rect: Rect2 = _visible_world_rect().grow(6.0)
 	var zoom_value: float = camera.zoom.x
 	if zoom_value < _minimum_camera_zoom() * 1.18:
 		return
-	var px: float = maxf(0.10, 0.72 / zoom_value)
+	var frame: int = posmod(floori(visual_time * 7.0), 4)
 
-	# Division becomes a visible two-pole event instead of only a changed atlas.
 	for cell in sim.bacteria:
-		if not bool(cell.dividing):
-			continue
 		var p: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(p):
 			continue
-		var axis: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
-		var separation: float = 0.8 + float(cell.division_progress) * 2.0
-		for side in [-1.0, 1.0]:
-			var q: Vector2 = p + axis * separation * side
-			var c := Color(0.78, 1.0, 0.54, 0.76)
-			draw_rect(Rect2(q - Vector2.ONE * px * 0.5, Vector2.ONE * px), c, true)
+		if bool(cell.dividing):
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_DIVISION,
+				frame,
+				1.05
+			)
+		elif float(cell.adhesion_timer) > 0.0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_ADHESION,
+				frame,
+				1.00
+			)
+		elif float(cell.energy) < 0.72:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_STRESS,
+				frame,
+				0.86
+			)
 
-	# Adhesion/EPS builders get a sparse matrix halo. This is presentation-only:
-	# the actual adhesion state remains owned by the simulation.
-	for cell in sim.bacteria:
-		if float(cell.adhesion_timer) <= 0.0:
-			continue
-		var p: Vector2 = Vector2(cell.position)
-		if not visible_rect.has_point(p):
-			continue
-		for i in range(4):
-			var phase: float = float(i) * TAU / 4.0 + visual_time * 0.9
-			var q: Vector2 = p + Vector2.RIGHT.rotated(phase) * (1.2 + px * 1.8)
-			var c := Color(0.30, 0.94, 0.72, 0.44)
-			draw_rect(Rect2(q - Vector2.ONE * px * 0.45, Vector2.ONE * px * 0.90), c, true)
-
-	# Reproduction cues for producer/decomposer guilds.
 	for alga in sim.microalgae:
-		if not bool(alga.reproducing):
-			continue
 		var p: Vector2 = Vector2(alga.position)
-		if visible_rect.has_point(p):
-			_draw_reproduction_orbit(p, float(alga.reproduction_progress), px, Color(0.62, 1.0, 0.42, 0.65))
-	for yeast in sim.decomposers:
-		if not bool(yeast.budding):
+		if not visible_rect.has_point(p):
 			continue
+		if bool(alga.reproducing):
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_REPRODUCTION,
+				frame,
+				1.05
+			)
+		elif not bool(alga.dying) and float(alga.energy) < 0.82:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_STRESS,
+				frame,
+				0.84
+			)
+
+	for yeast in sim.decomposers:
 		var p: Vector2 = Vector2(yeast.position)
-		if visible_rect.has_point(p):
-			_draw_reproduction_orbit(p, float(yeast.budding_progress), px, Color(1.0, 0.68, 0.30, 0.65))
+		if not visible_rect.has_point(p):
+			continue
+		if bool(yeast.budding):
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_REPRODUCTION,
+				frame,
+				1.02
+			)
+		elif not bool(yeast.dying) and float(yeast.energy) < 0.78:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_STRESS,
+				frame,
+				0.82
+			)
+
+
+func _draw_effect_asset(
+	position: Vector2,
+	kind: int,
+	frame: int,
+	scale: float
+) -> void:
+	if effect_atlas == null or camera == null:
+		return
+	var texture: Texture2D = effect_atlas.get_texture(kind, frame)
+	var world_pixel: float = 1.0 / maxf(camera.zoom.x, 0.001)
+	var size: Vector2 = texture.get_size() * world_pixel * scale
+	draw_texture_rect(
+		texture,
+		Rect2(position - size * 0.5, size),
+		false
+	)
 
 
 func _draw_reproduction_orbit(
@@ -1016,6 +1073,13 @@ func _draw_feeding_link(
 			true
 		)
 
+	_draw_effect_asset(
+		predator_position,
+		PixelEffectAtlasScript.EFFECT_FEEDING,
+		posmod(floori(visual_time * 8.0) + organism_id, 4),
+		1.0 + clampf(progress, 0.0, 1.0) * 0.18
+	)
+
 	# Pixel vacuole/handling ring around the predator grows through ingestion.
 	var ring_radius: float = pixel_size * (2.0 + clampf(progress, 0.0, 1.0) * 1.8)
 	for i in range(6):
@@ -1042,6 +1106,12 @@ func _draw_lysis_fragments(
 ) -> void:
 	if progress <= 0.05:
 		return
+	_draw_effect_asset(
+		position,
+		PixelEffectAtlasScript.EFFECT_LYSIS,
+		clampi(floori(clampf(progress, 0.0, 0.999) * 4.0), 0, 3),
+		1.0 + progress * 0.30
+	)
 	var pixel_size: float = maxf(0.13, 0.75 / zoom_value)
 	var radius: float = 0.7 + progress * 3.2
 	for i in range(6):
@@ -1135,7 +1205,12 @@ func _visible_world_rect() -> Rect2:
 
 
 func _refresh_field_texture() -> void:
-	if sim == null or field_image == null or field_texture == null:
+	if (
+		sim == null
+		or field_image == null
+		or field_texture == null
+		or biome_atlas == null
+	):
 		return
 
 	var nutrient_field: Variant = sim.nutrient
@@ -1147,10 +1222,9 @@ func _refresh_field_texture() -> void:
 	var producer_field: Variant = sim.producer_biomass
 	var width: int = int(nutrient_field.width)
 	var height: int = int(nutrient_field.height)
-	var center_light: float = float(
-		sim.sample_light(Vector2(sim.world_size) * 0.5)
-	)
-	var daylight_visual: float = 0.60 + center_light * 0.40
+	var tile_size: int = int(PixelBiomeAtlasScript.TILE_SIZE)
+	var frame: int = posmod(floori(float(sim.simulation_time) * 3.0), 4)
+	var source_rect := Rect2i(0, 0, tile_size, tile_size)
 
 	for y in range(height):
 		for x in range(width):
@@ -1190,39 +1264,49 @@ func _refresh_field_texture() -> void:
 				1.0
 			)
 
-			# Avoid sqrt() here: it amplified tiny background concentrations until
-			# the entire biome became one flat green debug wash. High-value patches
-			# now dominate while low background concentrations recede.
-			var n: float = pow(nutrient_value, 1.10)
-			var w: float = pow(waste_value, 0.90)
-			var o: float = pow(oxygen_value, 1.25)
-			var d: float = pow(detritus_value, 0.72)
-			var e: float = pow(eps_value, 0.78)
-			var cue: float = pow(cue_value, 0.62)
-			var p: float = pow(producer_value, 1.08)
-			var shimmer: float = 0.94 + 0.06 * sin(
-				float(sim.simulation_time) * 1.15 + float(x) * 0.37 + float(y) * 0.23
+			var classified: PackedInt32Array = biome_atlas.classify(
+				nutrient_value,
+				oxygen_value,
+				detritus_value,
+				eps_value,
+				cue_value,
+				producer_value,
+				waste_value
 			)
+			var primary_kind: int = int(classified[0])
+			var primary_level: int = int(classified[1])
+			var secondary_kind: int = int(classified[2])
+			var secondary_level: int = int(classified[3])
+			var variant: int = posmod(
+				x * 17 + y * 31 + current_seed * 7,
+				4
+			)
+			var tile: Image = biome_atlas.get_tile_image(
+				primary_kind,
+				primary_level,
+				variant,
+				frame
+			)
+			var destination := Vector2i(x * tile_size, y * tile_size)
+			field_image.blit_rect(tile, source_rect, destination)
 
-			var red: float = clampf(
-				(0.006 + n * 0.025 + w * 0.16 + d * 0.34 + cue * 0.58)
-				* (0.78 + daylight_visual * 0.22),
-				0.0,
-				1.0
-			)
-			var green: float = clampf(
-				(0.012 + n * 0.11 + o * 0.055 + p * 0.38 + e * 0.11 + d * 0.08)
-				* shimmer * daylight_visual,
-				0.0,
-				1.0
-			)
-			var blue: float = clampf(
-				(0.020 + n * 0.13 + o * 0.20 + w * 0.10 + e * 0.24 + cue * 0.10)
-				* shimmer * (0.78 + daylight_visual * 0.22),
-				0.0,
-				1.0
-			)
-			field_image.set_pixel(x, y, Color(red, green, blue, 1.0))
+			# One secondary pixel prevents the biome from becoming a set of mutually
+			# exclusive categorical islands. It reads as layered ecological material
+			# while staying cheap and deterministic.
+			if (
+				secondary_kind != PixelBiomeAtlasScript.KIND_WATER
+				and secondary_level >= 1
+				and secondary_kind != primary_kind
+			):
+				var accent: Vector2i = biome_atlas.accent_offset(variant, frame)
+				field_image.set_pixel(
+					destination.x + accent.x,
+					destination.y + accent.y,
+					biome_atlas.accent_color(
+						secondary_kind,
+						secondary_level
+					)
+				)
 
 	field_texture.update(field_image)
 

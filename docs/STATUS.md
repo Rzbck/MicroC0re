@@ -36,6 +36,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #56 day/night / diel oxygen cycle
 - #57 fused GPU multi-field biome compute
 - #60 living microscope watchability / cinematic observation
+- #61 generative pixel biome atlas / biological event FX
 
 ## REVIEW
 
@@ -145,7 +146,7 @@ Previous 2026-10-02 observations:
 - water-current advection affects all current mobile organism classes;
 - a deterministic 180 s diel light cycle drives producer activity and oxygenation;
 - producer mats now self-shade, reducing effective light for dense producer patches; explicit microalgae visibly respond to local light;
-- renderer composites nutrient, waste, oxygen, producers, EPS, detritus and damage plumes.
+- renderer converts nutrient, waste, oxygen, producers, EPS, detritus and damage into deterministic 4x4 pixel-art biome motifs instead of exposing them as a flat heatmap.
 
 ### Functional diversity
 Bacteria now include four heritable functional ecotypes:
@@ -174,6 +175,13 @@ Explicit non-bacterial guilds now also exist:
 - starved amoebae/ciliates enter a staged lysis/death state instead of disappearing instantly;
 - predator death renders fragments/fade and recycles biomass;
 - a regression test now verifies ciliate feeding remains attached to non-bacterial prey across frames.
+
+### Generative biome / event asset pass
+- new cached `pixel_biome_atlas.gd` generates deterministic 4x4 water, producer, detritus, EPS, damage, oxygen and nutrient motifs;
+- simulation fields select motif family + density; a secondary field contributes a small accent for mixed niches;
+- the composed biome texture is now 384x256 for the current 96x64 field, retaining crisp world-scale pixel clusters;
+- new cached `pixel_effect_atlas.gd` defines division, adhesion, reproduction, feeding, lysis and stress FX;
+- field-art refresh is limited to 10 Hz to control CPU-reference presentation cost; #57 remains the GPU path.
 
 ### Interaction / microscope readability pass
 - visible app now limits wall-clock catch-up work; stale backlog is dropped instead of running many expensive ticks in one frame;
