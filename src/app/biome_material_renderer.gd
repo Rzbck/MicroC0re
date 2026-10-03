@@ -78,8 +78,13 @@ func refresh_from_sim(sim: Variant) -> void:
 				1.0
 			)
 			var waste := clampf(float(sim.waste.get_cell(x, y)) * 1.55, 0.0, 1.0)
+			var exudate_value := clampf(
+				float(sim.exudate.get_cell(x, y)) * 3.2,
+				0.0,
+				1.0
+			)
 			_mask_a_image.set_pixel(x, y, Color(producer, detritus, eps, damage))
-			_mask_b_image.set_pixel(x, y, Color(oxygen, nutrient, waste, 0.0))
+			_mask_b_image.set_pixel(x, y, Color(oxygen, nutrient, waste, exudate_value))
 	_mask_a_texture.update(_mask_a_image)
 	_mask_b_texture.update(_mask_b_image)
 	var scene_light := clampf(float(sim.sample_light(_world_size * 0.5)), 0.0, 1.0)

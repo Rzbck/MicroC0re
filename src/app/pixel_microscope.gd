@@ -291,6 +291,9 @@ func _draw_bacteria() -> void:
 
 		if bool(cell.dying):
 			color.a = clampf(1.0 - float(cell.lysis_progress) * 0.72, 0.20, 1.0)
+		elif bool(cell.dormant):
+			color = color.lerp(Color(0.32, 0.46, 0.48, color.a), 0.72)
+			color.a *= 0.78
 		elif float(cell.adhesion_timer) > 0.0:
 			color = color.lightened(0.12)
 		else:
@@ -309,9 +312,10 @@ func _draw_bacteria() -> void:
 		elif bool(cell.dividing):
 			state = 1
 
-		var cell_frame: int = posmod(
-			frame + int(floor(float(cell.visual_phase))),
-			4
+		var cell_frame: int = (
+			0
+			if bool(cell.dormant)
+			else posmod(frame + int(floor(float(cell.visual_phase))), 4)
 		)
 		var texture: Texture2D = atlas.get_texture(
 			clampi(int(cell.guild), 0, 3),
@@ -1445,10 +1449,11 @@ func _inspector_body(organism: Variant) -> String:
 
 	match selected_kind:
 		"bacterium":
-			trait_line = "%s  spd %.1f  adh %.1f" % [
+			trait_line = "%s spd %.1f adh %.1f dor %.1f" % [
 				String(organism.guild_name()),
 				float(organism.gene_speed),
 				float(organism.gene_adhesion),
+				float(organism.gene_dormancy),
 			]
 		"amoeba":
 			trait_line = "hunt %.1f  engulf %.1f" % [
@@ -1494,6 +1499,8 @@ func _compact_state_text(organism: Variant) -> String:
 				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
 			if bool(organism.dividing):
 				return "FISSION %.0f%%" % (float(organism.division_progress) * 100.0)
+			if bool(organism.dormant):
+				return "DORMANT %.1fs" % float(organism.dormant_time)
 			if int(organism.engulfed_by_id) >= 0:
 				return "ENGULFED %.0f%%" % (float(organism.engulf_progress) * 100.0)
 			if int(organism.transfer_role) != 0:
@@ -1541,13 +1548,13 @@ func _compact_state_text(organism: Variant) -> String:
 
 
 func _compact_biome_text(position: Vector2) -> String:
-	return "L %.2f N %.2f O2 %.2f\nD %.2f EPS %.2f DMG %.2f" % [
+	return "L %.2f N %.2f O2 %.2f\nD %.2f E %.2f X %.2f" % [
 		float(sim.sample_light(position)),
 		float(sim.nutrient.sample_world(position)),
 		float(sim.oxygen.sample_world(position)),
 		float(sim.detritus.sample_world(position)),
 		float(sim.eps.sample_world(position)),
-		float(sim.damage_cue.sample_world(position)),
+		float(sim.exudate.sample_world(position)),
 	]
 
 

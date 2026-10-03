@@ -32,6 +32,7 @@ void fragment() {
 	float oxygen = b.r;
 	float nutrient = b.g;
 	float waste = b.b;
+	float exudate = b.a;
 	float h0 = hash21(pixel);
 	float h1 = hash21(pixel + vec2(19.0, 7.0));
 	float h2 = hash21(cluster + vec2(5.0, 17.0));
@@ -96,6 +97,21 @@ void fragment() {
 	if (waste_grain > 0.01 && alpha < 0.30) {
 		color = mix(color, vec3(0.35, 0.19, 0.13), waste_grain);
 		alpha = max(alpha, waste_grain * 0.20);
+	}
+
+	// Labile exudate / phycosphere material: rare soft jade-gold pixels close
+	// to active producers/decomposers. This is deliberately subordinate to
+	// organisms and EPS; it should read as a local niche, never a screen tint.
+	float exudate_grain = density_alpha(exudate, h3, 0.16)
+		* smoothstep(0.06, 0.20, exudate);
+	if (exudate_grain > 0.01 && alpha < 0.38) {
+		vec3 exudate_color = mix(
+			vec3(0.18, 0.42, 0.25),
+			vec3(0.52, 0.58, 0.22),
+			step(0.72, h1)
+		);
+		color = mix(color, exudate_color, exudate_grain * 0.82);
+		alpha = max(alpha, exudate_grain * 0.28);
 	}
 	float day = mix(0.78, 1.0, clamp(scene_light, 0.0, 1.0));
 	COLOR = vec4(color * day, clamp(alpha, 0.0, 0.82));

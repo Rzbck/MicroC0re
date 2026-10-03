@@ -37,6 +37,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #57 fused GPU multi-field biome compute
 - #60 living microscope watchability / cinematic observation
 - #61 generative pixel biome atlas / biological event FX
+- #62 cross-feeding / quorum biofilm / dormancy
 
 ## REVIEW
 
@@ -132,6 +133,10 @@ Previous 2026-10-02 observations:
 - inspector remains scrollable and now exposes local biome values.
 
 ### Living biome
+- new exudate field links microalgae, phototrophic bacteria, decomposers and heterotrophic uptake;
+- new quorum field makes biofilm/EPS production density-responsive;
+- EPS now slows predator handling and boosts local exudate capture, making matrix a functional niche/refuge;
+- bacteria can reversibly enter dormancy under low resource and wake when local dissolved resource returns;
 - dynamic oxygen field;
 - detritus/carrion field;
 - EPS/biofilm matrix field;

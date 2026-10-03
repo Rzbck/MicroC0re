@@ -190,6 +190,8 @@ The simulated world should evolve into an aquatic micro-ecosystem with:
 - protist grazing and later multi-trophic predation;
 - visible death/recycling;
 - cross-feeding and niche construction;
+- explicit producer/decomposer exudate niches and density-responsive biofilm engineering;
+- reversible dormancy / seed-bank behavior under resource collapse;
 - succession/dormancy;
 - later phages, fungi and larger microfauna.
 

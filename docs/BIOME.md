@@ -414,3 +414,20 @@ Two concrete faults were found after the black/no-biome recordings:
 - producer-mat growth previously omitted the biomass term in its logistic growth law, allowing zero-biomass cells to create producers spontaneously. Growth now requires an existing seed, while a very small diffusion term provides slow spatial spread. Seed sources, explicit microalgae and phototrophic bacteria can establish/strengthen producer material.
 
 The visual consequence should be stable water plus slowly changing, spatially attributable ecological patches rather than either a black dish or full-screen animated wallpaper.
+
+
+## Cross-feeding / quorum / dormancy slice (#62)
+
+The active ecosystem now includes two additional bounded scalar fields:
+- **labile exudate** — local soluble metabolites released by microalgae, phototrophic bacteria and decomposers;
+- **quorum signal** — a short-lived density signal released by active bacteria.
+
+Interactions:
+- bacteria chemotax partly toward exudate and can use it as a second dissolved energy/resource channel;
+- EPS-rich patches increase effective exudate capture, creating a retention advantage for attached communities;
+- biofilm builders emit more signal, and high local signal increases EPS investment while reducing free-swimming speed;
+- EPS slows protist handling/engulfment, making dense matrix a real grazing refuge with an energetic production cost;
+- low-resource bacteria can enter a reversible low-metabolism dormant state and wake when dissolved resource/exudate returns;
+- microalgae create local phycosphere-like exudate niches; decomposers create cross-feeding products while mineralizing detritus.
+
+These are qualitative ecosystem mechanisms, not calibrated metabolite chemistry or a claim that one universal quorum molecule exists across all bacteria. The fields remain GPU-friendly and run on the slow biome cadence in the CPU reference.

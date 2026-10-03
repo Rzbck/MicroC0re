@@ -38,6 +38,11 @@ var dying: bool = false
 var lysis_progress: float = 0.0
 var adhesion_timer: float = 0.0
 
+# Reversible phenotype state: starving cells may enter a low-metabolism
+# dormant/persister-like state without changing genotype.
+var dormant: bool = false
+var dormant_time: float = 0.0
+
 # Engulfment is used by the amoeboid/protist class. The bacterium remains
 # visible while it is being pulled inside the predator; completion removes it
 # without pretending that ordinary bacteria "fuse" together.
@@ -56,6 +61,7 @@ var gene_growth: float = 1.0
 var gene_size: float = 1.0
 var gene_tumble: float = 1.0
 var gene_adhesion: float = 1.0
+var gene_dormancy: float = 1.0
 var mutation_rate: float = 0.08
 
 # Heritable visual / mechanical appendages.
@@ -100,6 +106,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.72, 1.35)
 	gene_tumble = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.60, 1.45)
 	gene_adhesion = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.45, 1.70)
+	gene_dormancy = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.55, 1.60)
 	mutation_rate = clampf(0.08 + p_rng.randfn(0.0, 0.012), 0.025, 0.16)
 
 	flagella_count = clampi(2 + p_rng.randi_range(-1, 1), 1, 4)
@@ -163,6 +170,9 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	gene_adhesion = _mutate_float(
 		float(parent.gene_adhesion), 0.070, 0.30, 2.00, mutation_rate, p_rng
 	)
+	gene_dormancy = _mutate_float(
+		float(parent.gene_dormancy), 0.060, 0.45, 1.80, mutation_rate, p_rng
+	)
 	flagella_length = _mutate_float(
 		float(parent.flagella_length), 0.060, 0.55, 1.80, mutation_rate, p_rng
 	)
@@ -222,7 +232,7 @@ func clear_transfer_state() -> void:
 
 
 func begin_division() -> void:
-	if dying or dividing or transfer_role != TRANSFER_NONE:
+	if dying or dividing or dormant or transfer_role != TRANSFER_NONE:
 		return
 	dividing = true
 	division_progress = 0.0
@@ -233,6 +243,8 @@ func begin_lysis() -> void:
 		return
 	dying = true
 	alive = false
+	dormant = false
+	dormant_time = 0.0
 	clear_transfer_state()
 	dividing = false
 	division_progress = 0.0

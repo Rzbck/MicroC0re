@@ -67,6 +67,28 @@ func _init() -> void:
 	if mat_probe.producer_biomass.total() <= seeded_before:
 		errors.append("biome: seeded producer mat failed to grow")
 
+	# Cross-feeding / dormancy regression.
+	var interaction_probe = PetriSimulationScript.new(88231)
+	interaction_probe.seed_demo(1)
+	var interaction_cell = interaction_probe.bacteria[0]
+	interaction_probe.nutrient.fill(0.0)
+	interaction_probe.exudate.fill(0.0)
+	interaction_cell.energy = 0.30
+	interaction_cell.dormant = false
+	interaction_probe._advance_cell(interaction_cell, DT)
+	if not bool(interaction_cell.dormant):
+		errors.append("ecology: starving bacterium failed to enter dormancy")
+	interaction_probe.exudate.add_radial_world(
+		Vector2(interaction_cell.position), 3.0, 0.80
+	)
+	interaction_probe._advance_cell(interaction_cell, DT)
+	if bool(interaction_cell.dormant):
+		errors.append("ecology: dormant bacterium failed to wake on exudate")
+	var exudate_before: float = interaction_probe.exudate.total()
+	interaction_probe._advance_cell(interaction_cell, 0.50)
+	if interaction_probe.exudate.total() >= exudate_before:
+		errors.append("ecology: bacterium failed to consume cross-feeding exudate")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
@@ -140,8 +162,16 @@ func _init() -> void:
 		errors.append("biome: negative damage cue detected")
 	if first.producer_biomass.min_value() < -0.000001:
 		errors.append("biome: negative producer biomass detected")
+	if first.exudate.min_value() < -0.000001:
+		errors.append("biome: negative exudate detected")
+	if first.quorum_signal.min_value() < -0.000001:
+		errors.append("biome: negative quorum signal detected")
 	if first.producer_biomass.total() <= 0.0:
 		errors.append("biome: producer mat disappeared")
+	if first.exudate.total() <= 0.0:
+		errors.append("ecology: cross-feeding exudate field remained empty")
+	if first.quorum_signal.total() <= 0.0:
+		errors.append("ecology: quorum signal field remained empty")
 
 	var ids := {}
 	var saw_genotype_variation: bool = false
@@ -175,6 +205,10 @@ func _init() -> void:
 			errors.append("ecology: invalid bacterial guild for cell %d" % cell.id)
 		if int(cell.plasmid_mask) < 0 or int(cell.plasmid_mask) > 15:
 			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
+		if not is_finite(float(cell.gene_dormancy)):
+			errors.append("ecology: invalid dormancy trait for cell %d" % cell.id)
+		if float(cell.dormant_time) < 0.0 or not is_finite(float(cell.dormant_time)):
+			errors.append("ecology: invalid dormant timer for cell %d" % cell.id)
 		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
 			errors.append("evolution: invalid transfer role for cell %d" % cell.id)
 		if (
@@ -244,7 +278,7 @@ func _init() -> void:
 
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
@@ -256,6 +290,8 @@ func _init() -> void:
 				first.oxygen.total(),
 				first.detritus.total(),
 				first.producer_biomass.total(),
+				first.exudate.total(),
+				first.quorum_signal.total(),
 			]
 		)
 		quit(0)
