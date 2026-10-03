@@ -9,10 +9,12 @@ const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
+const FlagellateScript = preload("res://src/simulation/flagellate.gd")
 const MicroalgaScript = preload("res://src/simulation/microalga.gd")
 const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
 const WaterBackgroundShader = preload("res://src/app/shaders/water_background.gdshader")
@@ -132,6 +134,8 @@ func _init() -> void:
 		errors.append("ecology: amoeboid predator guild disappeared during smoke")
 	if first.ciliates.is_empty():
 		errors.append("ecology: ciliate predator guild disappeared during smoke")
+	if first.flagellates.is_empty():
+		errors.append("ecology: flagellate grazer guild disappeared during smoke")
 	if first.microalgae.is_empty():
 		errors.append("ecology: explicit microalgae guild disappeared during smoke")
 	if first.decomposers.is_empty():
@@ -142,6 +146,8 @@ func _init() -> void:
 		errors.append("population guard: protozoan hard ceiling exceeded")
 	if first.ciliates.size() > 16:
 		errors.append("population guard: ciliate hard ceiling exceeded")
+	if first.flagellates.size() > 28:
+		errors.append("population guard: flagellate hard ceiling exceeded")
 	if first.microalgae.size() > 64:
 		errors.append("population guard: microalgae hard ceiling exceeded")
 	if first.decomposers.size() > 48:
@@ -250,6 +256,19 @@ func _init() -> void:
 		if bool(ciliate.consumed) and int(ciliate.engulfed_by_id) >= 0:
 			errors.append("ecology: consumed ciliate still owned by predator %d" % ciliate.id)
 
+	for flagellate in first.flagellates:
+		if not _finite_vector(flagellate.position) or not is_finite(flagellate.energy):
+			errors.append("ecology: invalid flagellate state %d" % flagellate.id)
+		if (
+			float(flagellate.lysis_progress) < 0.0
+			or float(flagellate.lysis_progress) > 1.000001
+			or float(flagellate.feeding_progress) < 0.0
+			or float(flagellate.feeding_progress) > 1.000001
+			or float(flagellate.engulf_progress) < 0.0
+			or float(flagellate.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid flagellate transition state %d" % flagellate.id)
+
 	for alga in first.microalgae:
 		if not _finite_vector(alga.position) or not is_finite(alga.energy):
 			errors.append("ecology: invalid microalga state %d" % alga.id)
@@ -278,12 +297,13 @@ func _init() -> void:
 
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
 				first.protozoa.size(),
 				first.ciliates.size(),
+				first.flagellates.size(),
 				first.microalgae.size(),
 				first.decomposers.size(),
 				first.nutrient.total(),
@@ -310,10 +330,12 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["far_multimesh_renderer", FarMultiMeshRendererScript],
 		["protozoan", ProtozoanScript],
 		["ciliate", CiliateScript],
+		["flagellate", FlagellateScript],
 		["microalga", MicroalgaScript],
 		["decomposer_yeast", DecomposerYeastScript],
 		["pixel_protozoa_atlas", PixelProtozoaAtlasScript],
 		["pixel_ciliate_atlas", PixelCiliateAtlasScript],
+		["pixel_flagellate_atlas", PixelFlagellateAtlasScript],
 		["pixel_ecology_atlas", PixelEcologyAtlasScript],
 		["biome_material_renderer", BiomeMaterialRendererScript],
 		["pixel_effect_atlas", PixelEffectAtlasScript],

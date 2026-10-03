@@ -431,3 +431,16 @@ Interactions:
 - microalgae create local phycosphere-like exudate niches; decomposers create cross-feeding products while mineralizing detritus.
 
 These are qualitative ecosystem mechanisms, not calibrated metabolite chemistry or a claim that one universal quorum molecule exists across all bacteria. The fields remain GPU-friendly and run on the slow biome cadence in the CPU reference.
+
+
+## Flagellate bacterivore tier (#63)
+
+A new small flagellate-like protist now occupies the intermediate grazer niche:
+- primarily hunts bacteria;
+- uses a distinct 14x9 cached pixel silhouette with a frame-authored flagellum;
+- staged feeding keeps bacterial prey visible during capture;
+- reproduces from prey-derived energy and lyses/recycles under starvation;
+- follows exudate gradients when direct prey is absent, indirectly coupling it to producer phycospheres;
+- can itself be captured by larger ciliates and amoebae.
+
+This creates a bounded tri-trophic chain: **bacteria -> flagellates -> ciliates/amoebae**, while flagellates and ciliates compete for bacterial prey. The first slice is deliberately capped at 28 agents and does not add another unbounded search structure.

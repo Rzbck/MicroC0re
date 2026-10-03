@@ -5,6 +5,7 @@ const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
+const FlagellateScript = preload("res://src/simulation/flagellate.gd")
 const MicroalgaScript = preload("res://src/simulation/microalga.gd")
 const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
 
@@ -24,6 +25,7 @@ const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 const SAFETY_POPULATION_LIMIT := 420
 const PROTOZOAN_SAFETY_LIMIT := 18
 const CILIATE_SAFETY_LIMIT := 16
+const FLAGELLATE_SAFETY_LIMIT := 28
 const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
 
@@ -47,6 +49,7 @@ var quorum_signal: Variant
 var bacteria: Array = []
 var protozoa: Array = []
 var ciliates: Array = []
+var flagellates: Array = []
 var microalgae: Array = []
 var decomposers: Array = []
 var _population_buffer: Array = []
@@ -190,6 +193,15 @@ var ciliate_feed_duration: float = 1.05
 var ciliate_maintenance: float = 0.090
 var ciliate_reproduction_energy: float = 16.5
 
+# Small flagellate-like bacterivore: an intermediate grazer tier that
+# competes for bacterial prey and can itself be consumed by larger protists.
+var flagellate_speed: float = 8.8
+var flagellate_perception: float = 25.0
+var flagellate_feed_distance: float = 2.4
+var flagellate_feed_duration: float = 0.90
+var flagellate_maintenance: float = 0.052
+var flagellate_reproduction_energy: float = 8.8
+
 # Explicit producer and decomposer guilds.
 var microalga_photo_rate: float = 0.115
 var microalga_nutrient_rate: float = 0.018
@@ -224,6 +236,7 @@ func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
 	protozoa.clear()
 	ciliates.clear()
+	flagellates.clear()
 	microalgae.clear()
 	decomposers.clear()
 	_population_buffer.clear()
@@ -336,6 +349,29 @@ func seed_demo(count: int = 36) -> void:
 		)
 		ciliate.configure_founder(rng)
 		ciliates.append(ciliate)
+
+	# Small flagellate bacterivores form an intermediate trophic tier. They
+	# start near resource patches where bacterial prey are likely to be dense.
+	for flagellate_index in range(4):
+		var flag_source: Vector2 = nutrient_sources[
+			(flagellate_index * 2 + 3) % nutrient_sources.size()
+		]
+		var flag_position: Vector2 = (
+			flag_source
+			+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+			* rng.randf_range(5.0, 13.0)
+		)
+		flag_position.x = clampf(flag_position.x, 6.0, world_size.x - 6.0)
+		flag_position.y = clampf(flag_position.y, 6.0, world_size.y - 6.0)
+		var flagellate: Variant = FlagellateScript.new(
+			_allocate_id(),
+			flag_position,
+			rng.randf_range(-PI, PI),
+			rng.randf_range(0.0, TAU)
+		)
+		flagellate.configure_founder(rng)
+		flagellate.energy = rng.randf_range(3.8, 4.8)
+		flagellates.append(flagellate)
 
 	# Explicit producer cells complement the continuum producer mat. They are
 	# slow drifting microalgae-like cells that oxygenate the local water and
@@ -500,6 +536,7 @@ func step(dt: float) -> void:
 	_advance_gene_transfers(dt)
 	_advance_microalgae(dt)
 	_advance_decomposers(dt)
+	_advance_flagellates(dt)
 	_advance_protozoa(dt)
 	_advance_ciliates(dt)
 
@@ -860,6 +897,248 @@ func _constrain_small_organism(organism: Variant) -> void:
 	organism.position = position
 
 
+func _advance_flagellates(dt: float) -> void:
+	var next_flagellates: Array = []
+	var available_births: int = maxi(
+		0,
+		FLAGELLATE_SAFETY_LIMIT - flagellates.size()
+	)
+
+	for flagellate in flagellates:
+		if bool(flagellate.consumed):
+			continue
+
+		if int(flagellate.engulfed_by_id) >= 0:
+			next_flagellates.append(flagellate)
+			continue
+
+		if bool(flagellate.dying):
+			_advance_predator_lysis(flagellate, dt)
+			if float(flagellate.lysis_progress) >= 1.0:
+				_recycle_predator_body(
+					Vector2(flagellate.position),
+					float(flagellate.radius),
+					0.48
+				)
+			else:
+				next_flagellates.append(flagellate)
+			continue
+
+		flagellate.age = float(flagellate.age) + dt
+		flagellate.cooldown = maxf(0.0, float(flagellate.cooldown) - dt)
+		flagellate.swim_phase = wrapf(
+			float(flagellate.swim_phase) + dt * (7.2 + float(flagellate.gene_speed)),
+			0.0,
+			TAU
+		)
+
+		var maintenance: float = (
+			flagellate_maintenance
+			* float(flagellate.gene_metabolism)
+			* (0.82 + 0.18 * float(flagellate.gene_size))
+		)
+		flagellate.energy = float(flagellate.energy) - maintenance * dt
+
+		if float(flagellate.energy) <= 0.0:
+			_release_predator_prey(
+				int(flagellate.feeding_target_id),
+				int(flagellate.id)
+			)
+			flagellate.finish_feed()
+			flagellate.begin_lysis()
+			next_flagellates.append(flagellate)
+			continue
+
+		if int(flagellate.feeding_target_id) >= 0:
+			_advance_flagellate_feed(flagellate, dt)
+			next_flagellates.append(flagellate)
+			continue
+
+		var prey: Variant = _find_flagellate_prey(flagellate)
+		var desired_angle: float = float(flagellate.angle)
+
+		if prey != null:
+			var to_prey: Vector2 = Vector2(prey.position) - Vector2(flagellate.position)
+			if to_prey.length_squared() > 0.000001:
+				desired_angle = to_prey.angle()
+			if (
+				float(flagellate.cooldown) <= 0.0
+				and to_prey.length() <= flagellate_feed_distance
+			):
+				flagellate.begin_feed(int(prey.id))
+				prey.engulfed_by_id = int(flagellate.id)
+				prey.engulf_progress = 0.0
+				next_flagellates.append(flagellate)
+				continue
+		else:
+			# Flagellates do not eat the exudate directly; following its gradient
+			# keeps them near producer phycospheres where bacterial prey accumulate.
+			var exudate_gradient: Vector2 = Vector2(
+				exudate.gradient_world(Vector2(flagellate.position))
+			)
+			if exudate_gradient.length_squared() > 0.000001:
+				desired_angle = lerp_angle(
+					desired_angle,
+					exudate_gradient.angle(),
+					0.36
+				)
+			else:
+				desired_angle += sin(
+					simulation_time * 1.35 + float(flagellate.swim_phase)
+				) * 0.34
+
+		flagellate.angle = lerp_angle(
+			float(flagellate.angle),
+			desired_angle,
+			clampf(dt * 4.0, 0.0, 1.0)
+		)
+		var stroke: float = 0.86 + 0.14 * sin(float(flagellate.swim_phase))
+		var starvation: float = clampf(float(flagellate.energy) / 1.4, 0.28, 1.0)
+		var speed: float = (
+			flagellate_speed
+			* float(flagellate.gene_speed)
+			* stroke
+			* starvation
+		)
+		flagellate.position = (
+			Vector2(flagellate.position)
+			+ Vector2.RIGHT.rotated(float(flagellate.angle)) * speed * dt
+			+ _water_flow(Vector2(flagellate.position)) * dt * 0.72
+		)
+		_constrain_flagellate(flagellate)
+
+		if (
+			available_births > 0
+			and float(flagellate.energy) >= flagellate_reproduction_energy
+			and float(flagellate.age) >= 8.0
+			and float(flagellate.cooldown) <= 0.0
+		):
+			next_flagellates.append_array(_divide_flagellate(flagellate))
+			available_births -= 1
+		else:
+			next_flagellates.append(flagellate)
+
+	flagellates = next_flagellates
+
+
+func _find_flagellate_prey(flagellate: Variant) -> Variant:
+	var best: Variant = null
+	var perception: float = (
+		flagellate_perception * float(flagellate.gene_perception)
+	)
+	var best_distance_sq: float = perception * perception
+	var origin: Vector2 = Vector2(flagellate.position)
+	for cell in bacteria:
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = cell
+	return best
+
+
+func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
+	var prey: Variant = find_cell_by_id(int(flagellate.feeding_target_id))
+	if prey == null or bool(prey.consumed) or bool(prey.dying):
+		if prey != null:
+			prey.engulfed_by_id = -1
+			prey.engulf_progress = 0.0
+		flagellate.finish_feed()
+		return
+
+	var prey_eps: float = float(eps.sample_world(Vector2(prey.position)))
+	var duration: float = (
+		flagellate_feed_duration
+		* (1.0 + clampf(prey_eps, 0.0, 1.5) * eps_grazer_protection)
+		/ maxf(0.45, float(flagellate.gene_capture))
+	)
+	var progress: float = minf(
+		1.0,
+		float(flagellate.feeding_progress) + dt / maxf(0.001, duration)
+	)
+	flagellate.feeding_progress = progress
+	prey.engulf_progress = progress
+	damage_cue.add_radial_world(
+		Vector2(prey.position),
+		2.4,
+		0.005 * dt * (1.0 + progress * 2.0)
+	)
+	var mouth: Vector2 = (
+		Vector2(flagellate.position)
+		+ Vector2.RIGHT.rotated(float(flagellate.angle))
+		* float(flagellate.radius) * 0.72
+	)
+	prey.position = Vector2(prey.position).lerp(
+		mouth,
+		clampf(dt * (4.0 + progress * 6.0), 0.0, 1.0)
+	)
+
+	if progress >= 1.0:
+		prey.consumed = true
+		prey.alive = false
+		prey.engulfed_by_id = -1
+		detritus.add_radial_world(
+			Vector2(prey.position),
+			1.8,
+			0.010 + float(prey.biomass_size()) * 0.0035
+		)
+		damage_cue.add_radial_world(Vector2(prey.position), 3.0, 0.022)
+		flagellate.energy = minf(
+			11.0,
+			float(flagellate.energy) + 0.62 + float(prey.biomass_size()) * 0.10
+		)
+		flagellate.finish_feed()
+
+
+func _divide_flagellate(parent: Variant) -> Array:
+	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
+	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.72
+	var daughter_energy: float = float(parent.energy) * 0.44
+	var a: Variant = FlagellateScript.new(
+		_allocate_id(),
+		Vector2(parent.position) - offset,
+		float(parent.angle) + rng.randfn(0.0, 0.16),
+		rng.randf_range(0.0, TAU)
+	)
+	var b: Variant = FlagellateScript.new(
+		_allocate_id(),
+		Vector2(parent.position) + offset,
+		float(parent.angle) + PI + rng.randfn(0.0, 0.16),
+		rng.randf_range(0.0, TAU)
+	)
+	for daughter in [a, b]:
+		daughter.inherit_and_mutate(parent, rng)
+		daughter.energy = daughter_energy
+		daughter.cooldown = 1.8
+		_constrain_flagellate(daughter)
+	return [a, b]
+
+
+func _constrain_flagellate(flagellate: Variant) -> void:
+	var margin: float = float(flagellate.radius) + 0.7
+	var position: Vector2 = Vector2(flagellate.position)
+	var angle: float = float(flagellate.angle)
+	if position.x < margin:
+		position.x = margin
+		angle = PI - angle
+	elif position.x > world_size.x - margin:
+		position.x = world_size.x - margin
+		angle = PI - angle
+	if position.y < margin:
+		position.y = margin
+		angle = -angle
+	elif position.y > world_size.y - margin:
+		position.y = world_size.y - margin
+		angle = -angle
+	flagellate.position = position
+	flagellate.angle = wrapf(angle, -PI, PI)
+
+
 func _advance_protozoa(dt: float) -> void:
 	var next_protozoa: Array = []
 	var available_births: int = maxi(0, PROTOZOAN_SAFETY_LIMIT - protozoa.size())
@@ -1012,6 +1291,21 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 		if distance_sq < best_distance_sq:
 			best_distance_sq = distance_sq
 			best = cell
+
+	for flagellate in flagellates:
+		if (
+			bool(flagellate.dying)
+			or bool(flagellate.consumed)
+			or int(flagellate.engulfed_by_id) >= 0
+			or float(flagellate.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var flag_distance_sq: float = origin.distance_squared_to(
+			Vector2(flagellate.position)
+		)
+		if flag_distance_sq < best_distance_sq:
+			best_distance_sq = flag_distance_sq
+			best = flagellate
 
 	# A sufficiently large amoeba can also handle a smaller ciliate. This
 	# establishes a real second trophic edge instead of hard-coding every
@@ -1254,6 +1548,12 @@ func _advance_ciliates(dt: float) -> void:
 				float(ciliate.cooldown) <= 0.0
 				and to_prey.length() <= feed_distance
 			):
+				if prey.has_method("finish_feed"):
+					_release_predator_prey(
+						int(prey.feeding_target_id),
+						int(prey.id)
+					)
+					prey.finish_feed()
 				ciliate.begin_feed(int(prey.id))
 				prey.engulfed_by_id = int(ciliate.id)
 				prey.engulf_progress = 0.0
@@ -1332,6 +1632,21 @@ func _find_ciliate_prey(ciliate: Variant) -> Variant:
 		if distance_sq < best_distance_sq:
 			best_distance_sq = distance_sq
 			best = cell
+
+	for flagellate in flagellates:
+		if (
+			bool(flagellate.dying)
+			or bool(flagellate.consumed)
+			or int(flagellate.engulfed_by_id) >= 0
+			or float(flagellate.biomass_size()) > max_prey_biomass
+		):
+			continue
+		var flag_distance_sq: float = origin.distance_squared_to(
+			Vector2(flagellate.position)
+		)
+		if flag_distance_sq < best_distance_sq:
+			best_distance_sq = flag_distance_sq
+			best = flagellate
 
 	for alga in microalgae:
 		if (
@@ -2531,6 +2846,9 @@ func count_engulfing() -> int:
 	for ciliate in ciliates:
 		if int(ciliate.feeding_target_id) >= 0:
 			count += 1
+	for flagellate in flagellates:
+		if int(flagellate.feeding_target_id) >= 0:
+			count += 1
 	return count
 
 
@@ -2548,6 +2866,9 @@ func find_edible_by_id(organism_id: int) -> Variant:
 	for ciliate in ciliates:
 		if int(ciliate.id) == organism_id:
 			return ciliate
+	for flagellate in flagellates:
+		if int(flagellate.id) == organism_id:
+			return flagellate
 	for alga in microalgae:
 		if int(alga.id) == organism_id:
 			return alga
@@ -2572,6 +2893,7 @@ func state_signature() -> String:
 	parts.append("sig:%.5f" % quorum_signal.total())
 	parts.append("p:%d" % protozoa.size())
 	parts.append("c:%d" % ciliates.size())
+	parts.append("f:%d" % flagellates.size())
 	parts.append("a:%d" % microalgae.size())
 	parts.append("y:%d" % decomposers.size())
 
@@ -2642,6 +2964,28 @@ func state_signature() -> String:
 				int(ciliate.engulfed_by_id),
 				float(ciliate.engulf_progress),
 				1 if bool(ciliate.consumed) else 0,
+			]
+		)
+
+	for flagellate in flagellates:
+		parts.append(
+			"f%d:g%d:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%d:%.3f:d%d:lp%.3f:e%d:ep%.3f:x%d"
+			% [
+				int(flagellate.id),
+				int(flagellate.generation),
+				float(flagellate.position.x),
+				float(flagellate.position.y),
+				float(flagellate.angle),
+				float(flagellate.energy),
+				float(flagellate.gene_speed),
+				float(flagellate.gene_capture),
+				int(flagellate.feeding_target_id),
+				float(flagellate.feeding_progress),
+				1 if bool(flagellate.dying) else 0,
+				float(flagellate.lysis_progress),
+				int(flagellate.engulfed_by_id),
+				float(flagellate.engulf_progress),
+				1 if bool(flagellate.consumed) else 0,
 			]
 		)
 

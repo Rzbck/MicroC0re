@@ -38,6 +38,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #60 living microscope watchability / cinematic observation
 - #61 generative pixel biome atlas / biological event FX
 - #62 cross-feeding / quorum biofilm / dormancy
+- #63 flagellate bacterivore / tri-trophic grazing
 
 ## REVIEW
 
@@ -168,6 +169,7 @@ Current niche effects:
 - bacterial ecotypes now use distinct cached pixel silhouettes instead of color-only reskins.
 
 Explicit non-bacterial guilds now also exist:
+- small flagellate-like bacterivores, forming an intermediate prey/predator tier between bacteria and larger ciliates/amoebae;
 - evolving microalgae-like producers with light-driven oxygenation, exudates, division and lysis;
 - evolving yeast-like decomposers with detritus consumption, mineralization, budding and lysis.
 

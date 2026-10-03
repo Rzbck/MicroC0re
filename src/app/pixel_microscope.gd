@@ -7,6 +7,7 @@ const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
@@ -43,6 +44,7 @@ var sim: Variant
 var atlas: Variant
 var protozoa_atlas: Variant
 var ciliate_atlas: Variant
+var flagellate_atlas: Variant
 var ecology_atlas: Variant
 var biome_renderer: Node2D
 var effect_atlas: Variant
@@ -88,6 +90,7 @@ func _ready() -> void:
 	atlas = PixelAtlasScript.new()
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
+	flagellate_atlas = PixelFlagellateAtlasScript.new()
 	ecology_atlas = PixelEcologyAtlasScript.new()
 	effect_atlas = PixelEffectAtlasScript.new()
 	_setup_infinite_background()
@@ -239,6 +242,7 @@ func _draw() -> void:
 	_draw_bacteria()
 	_draw_protozoa()
 	_draw_ciliates()
+	_draw_flagellates()
 	_draw_microalgae()
 	_draw_decomposers()
 	_draw_life_state_cues()
@@ -573,6 +577,76 @@ func _draw_ciliates() -> void:
 
 
 
+func _draw_flagellates() -> void:
+	if sim == null or flagellate_atlas == null:
+		return
+	var visible_rect: Rect2 = _visible_world_rect().grow(8.0)
+	var zoom_value: float = camera.zoom.x
+	var sprite_blend: float = _overview_sprite_blend(zoom_value)
+
+	for flagellate in sim.flagellates:
+		var position: Vector2 = Vector2(flagellate.position)
+		if not visible_rect.has_point(position):
+			continue
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				position,
+				2.4,
+				1.3,
+				Color(0.96, 0.78, 0.30, 0.96),
+				1.0 - sprite_blend
+			)
+		if sprite_blend <= 0.001:
+			continue
+
+		var state: int = 1 if int(flagellate.feeding_target_id) >= 0 else 0
+		var frame: int = posmod(
+			int(floor(visual_time * (8.0 + float(flagellate.gene_speed))))
+				+ int(flagellate.id),
+			6
+		)
+		var texture: Texture2D = flagellate_atlas.get_texture(frame, state)
+		var texture_size: Vector2 = (
+			texture.get_size()
+			* SPRITE_WORLD_PIXEL
+			* float(flagellate.gene_size)
+		)
+		var color := Color(1.0, 0.84, 0.38, 1.0)
+		if float(flagellate.energy) < 1.4 and not bool(flagellate.dying):
+			var starvation: float = clampf(
+				1.0 - float(flagellate.energy) / 1.4,
+				0.0,
+				1.0
+			)
+			color = color.lerp(Color(0.52, 0.43, 0.28, 1.0), starvation * 0.70)
+		if float(flagellate.engulf_progress) > 0.0:
+			var engulf: float = clampf(float(flagellate.engulf_progress), 0.0, 1.0)
+			texture_size *= 1.0 - engulf * 0.64
+			color.a *= 1.0 - engulf * 0.72
+		if bool(flagellate.dying):
+			var death: float = clampf(float(flagellate.lysis_progress), 0.0, 1.0)
+			color = Color(0.94, 0.46, 0.20, clampf(1.0 - death * 0.84, 0.14, 1.0))
+		color.a *= sprite_blend
+		var angle_step: float = TAU / 24.0
+		var pixel_angle: float = roundf(float(flagellate.angle) / angle_step) * angle_step
+		draw_set_transform(position, pixel_angle, Vector2.ONE)
+		draw_texture_rect(
+			texture,
+			Rect2(-texture_size * 0.5, texture_size),
+			false,
+			color
+		)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if bool(flagellate.dying):
+			_draw_lysis_fragments(
+				position,
+				int(flagellate.id),
+				float(flagellate.lysis_progress),
+				color,
+				zoom_value
+			)
+
+
 func _draw_microalgae() -> void:
 	if sim == null or ecology_atlas == null:
 		return
@@ -858,6 +932,26 @@ func _draw_life_state_cues() -> void:
 			)
 
 
+	for flagellate in sim.flagellates:
+		var p: Vector2 = Vector2(flagellate.position)
+		if not visible_rect.has_point(p) or bool(flagellate.dying):
+			continue
+		if int(flagellate.feeding_target_id) >= 0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_PURSUIT,
+				frame,
+				0.72
+			)
+		elif float(flagellate.cooldown) > 0.0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_DIGESTION,
+				frame,
+				0.68
+			)
+
+
 func _draw_effect_asset(
 	position: Vector2,
 	kind: int,
@@ -1011,6 +1105,21 @@ func _draw_active_feeding_links() -> void:
 			float(ciliate.feeding_progress),
 			Color(0.92, 0.55, 1.0, 0.92),
 			int(ciliate.id)
+		)
+
+
+	for flagellate in sim.flagellates:
+		if int(flagellate.feeding_target_id) < 0:
+			continue
+		var prey: Variant = sim.find_edible_by_id(int(flagellate.feeding_target_id))
+		if prey == null:
+			continue
+		_draw_feeding_link(
+			Vector2(flagellate.position),
+			Vector2(prey.position),
+			float(flagellate.feeding_progress),
+			Color(1.0, 0.78, 0.30, 0.90),
+			int(flagellate.id)
 		)
 
 
@@ -1347,6 +1456,14 @@ func _select_nearest_organism(world_position: Vector2) -> void:
 			best_id = int(ciliate.id)
 			best_kind = "ciliate"
 
+	for flagellate in sim.flagellates:
+		var distance: float = Vector2(flagellate.position).distance_to(world_position)
+		var radius: float = maxf(base_radius, float(flagellate.radius) * 1.7)
+		if distance <= radius and distance < best_distance:
+			best_distance = distance
+			best_id = int(flagellate.id)
+			best_kind = "flagellate"
+
 	for alga in sim.microalgae:
 		var distance: float = Vector2(alga.position).distance_to(world_position)
 		var radius: float = maxf(base_radius, float(alga.radius) * 1.7)
@@ -1401,6 +1518,11 @@ func _selected_organism() -> Variant:
 			if int(ciliate.id) == selected_id:
 				return ciliate
 
+	if selected_kind == "flagellate":
+		for flagellate in sim.flagellates:
+			if int(flagellate.id) == selected_id:
+				return flagellate
+
 	if selected_kind == "alga":
 		for alga in sim.microalgae:
 			if int(alga.id) == selected_id:
@@ -1431,6 +1553,8 @@ func _inspector_title(organism: Variant) -> String:
 			return "AMOEBA  #%d" % int(organism.id)
 		"ciliate":
 			return "CILIATE  #%d" % int(organism.id)
+		"flagellate":
+			return "FLAGELLATE  #%d" % int(organism.id)
 		"alga":
 			return "MICROALGA  #%d" % int(organism.id)
 		"yeast":
@@ -1461,6 +1585,11 @@ func _inspector_body(organism: Variant) -> String:
 				float(organism.gene_engulf),
 			]
 		"ciliate":
+			trait_line = "spd %.1f  capture %.1f" % [
+				float(organism.gene_speed),
+				float(organism.gene_capture),
+			]
+		"flagellate":
 			trait_line = "spd %.1f  capture %.1f" % [
 				float(organism.gene_speed),
 				float(organism.gene_capture),
@@ -1528,6 +1657,16 @@ func _compact_state_text(organism: Variant) -> String:
 			if float(organism.energy) < 1.8:
 				return "STARVING"
 			return "GRAZING"
+		"flagellate":
+			if int(organism.engulfed_by_id) >= 0:
+				return "PREY %.0f%%" % (float(organism.engulf_progress) * 100.0)
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if int(organism.feeding_target_id) >= 0:
+				return "BACTERIVORE %.0f%%" % (float(organism.feeding_progress) * 100.0)
+			if float(organism.energy) < 1.4:
+				return "STARVING"
+			return "HUNTING"
 		"alga":
 			if int(organism.engulfed_by_id) >= 0:
 				return "GRAZED %.0f%%" % (float(organism.engulf_progress) * 100.0)
