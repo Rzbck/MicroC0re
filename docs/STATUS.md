@@ -310,3 +310,11 @@ Based on the maintainer capture rather than code inspection alone:
 - reduced neon organism modulation, especially producers/decomposers;
 - reduced auto-focus zoom and shrank/faded the inspector;
 - simplified event accents so body state + environmental handoff remain primary.
+
+
+## Inspector / hypha readability correction
+- inspector text restored to readable 7-8 internal pixels; the previous 5px body
+  size was illegible after integer presentation scaling;
+- inspector remains compact but is slightly wider so words no longer collapse;
+- hyphal art reduced from thick orange cable-like branches to one-pixel fungal
+  filaments with distinct tip/junction clusters.

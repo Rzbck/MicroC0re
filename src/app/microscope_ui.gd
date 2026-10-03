@@ -135,8 +135,8 @@ func _build_inspector() -> void:
 	inspector_panel.anchor_bottom = 0.0
 	inspector_panel.offset_left = 3.0
 	inspector_panel.offset_top = 3.0
-	inspector_panel.offset_right = 108.0
-	inspector_panel.offset_bottom = 70.0
+	inspector_panel.offset_right = 132.0
+	inspector_panel.offset_bottom = 78.0
 	inspector_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.76))
 	inspector_panel.visible = false
@@ -154,15 +154,15 @@ func _build_inspector() -> void:
 	inspector_title.text = "ORGANISM"
 	inspector_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_title.clip_text = true
-	inspector_title.add_theme_font_size_override("font_size", 6)
+	inspector_title.add_theme_font_size_override("font_size", 8)
 	inspector_title.add_theme_color_override("font_color", Color(0.75, 0.96, 0.88))
 	header.add_child(inspector_title)
 
 	var close := Button.new()
 	close.text = "×"
-	close.custom_minimum_size = Vector2(12.0, 12.0)
+	close.custom_minimum_size = Vector2(13.0, 13.0)
 	close.focus_mode = Control.FOCUS_NONE
-	close.add_theme_font_size_override("font_size", 6)
+	close.add_theme_font_size_override("font_size", 8)
 	close.pressed.connect(_emit_inspector_close)
 	header.add_child(close)
 
@@ -171,10 +171,11 @@ func _build_inspector() -> void:
 	inspector_body.fit_content = false
 	inspector_body.scroll_active = false
 	inspector_body.selection_enabled = false
-	inspector_body.autowrap_mode = TextServer.AUTOWRAP_OFF
+	inspector_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inspector_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_body.add_theme_font_size_override("normal_font_size", 5)
-	inspector_body.add_theme_color_override("default_color", Color(0.76, 0.84, 0.82))
+	inspector_body.add_theme_font_size_override("normal_font_size", 7)
+	inspector_body.add_theme_color_override("default_color", Color(0.82, 0.88, 0.86))
+	inspector_body.add_theme_constant_override("line_separation", 0)
 	box.add_child(inspector_body)
 
 

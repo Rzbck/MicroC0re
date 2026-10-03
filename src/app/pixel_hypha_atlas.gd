@@ -1,7 +1,7 @@
 extends RefCounted
 
-const WIDTH := 9
-const HEIGHT := 7
+const WIDTH := 7
+const HEIGHT := 5
 const KIND_SEGMENT := 0
 const KIND_TIP := 1
 const KIND_JUNCTION := 2
@@ -31,33 +31,40 @@ func get_texture(kind: int, variant: int) -> Texture2D:
 
 
 func _draw(image: Image, kind: int, variant: int) -> void:
-	var outline := Color(0.19, 0.14, 0.10, 1.0)
-	var body := Color(0.78, 0.66, 0.40, 1.0)
-	var light := Color(0.98, 0.88, 0.58, 1.0)
-	var enzyme := Color(0.58, 0.84, 0.52, 0.86)
+	# Hyphae should read as fungal filaments, not orange cables. One source-pixel
+	# body thickness is intentional; tip/junction clusters provide readability.
+	var dark := Color(0.20, 0.16, 0.11, 1.0)
+	var body := Color(0.62, 0.55, 0.37, 1.0)
+	var light := Color(0.84, 0.78, 0.55, 1.0)
+	var enzyme := Color(0.45, 0.62, 0.39, 0.90)
 
 	match kind:
 		KIND_SEGMENT:
-			for x in range(1, 8):
-				_set_px(image, x, 3, body)
-				if x in [1, 7]:
-					_set_px(image, x, 2, outline)
-				if posmod(x + variant, 3) == 0:
-					_set_px(image, x, 2, light)
-		KIND_TIP:
 			for x in range(1, 6):
-				_set_px(image, x, 3, body)
-			_set_px(image, 5, 2, outline)
-			_set_px(image, 6, 3, light)
-			_set_px(image, 7, 3, enzyme)
-			_set_px(image, 6, 4, outline)
+				_set_px(image, x, 2, body)
+			_set_px(image, 1, 2, dark)
+			_set_px(image, 5, 2, dark)
+			if variant == 1:
+				_set_px(image, 3, 1, light)
+			elif variant == 2:
+				_set_px(image, 4, 3, light)
+		KIND_TIP:
+			for x in range(1, 5):
+				_set_px(image, x, 2, body)
+			_set_px(image, 1, 2, dark)
+			_set_px(image, 4, 2, light)
+			_set_px(image, 5, 2, enzyme)
+			if variant == 1:
+				_set_px(image, 4, 1, light)
+			elif variant == 2:
+				_set_px(image, 4, 3, light)
 		KIND_JUNCTION:
-			for x in range(1, 8):
-				_set_px(image, x, 3, body)
-			for y in range(1, 6):
-				_set_px(image, 4, y, body)
-			_set_px(image, 4, 3, light)
-			_set_px(image, 4 + (variant - 1), 2, enzyme)
+			for x in range(1, 6):
+				_set_px(image, x, 2, body)
+			_set_px(image, 3, 1, body)
+			_set_px(image, 3, 3, body)
+			_set_px(image, 3, 2, light)
+			_set_px(image, 3 + (variant - 1), 1, enzyme)
 
 
 func _set_px(image: Image, x: int, y: int, color: Color) -> void:
