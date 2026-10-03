@@ -1,0 +1,58 @@
+name: Godot Smoke
+
+on:
+  push:
+    branches:
+      - main
+      - rebuild/pixel-microscope-v0.2
+    paths:
+      - "project.godot"
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/headless.yml"
+  pull_request:
+    paths:
+      - "project.godot"
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/headless.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: microcore-godot-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Godot 4.7.1 smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Import project
+        run: godot --headless --path . --import --quit
+
+      - name: Check simulation parser directly
+        run: godot --headless --path . --script src/simulation/petri_simulation.gd --check-only
+
+      - name: Run deterministic smoke test
+        shell: pwsh
+        run: ./scripts/run_headless.ps1

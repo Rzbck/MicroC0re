@@ -11,7 +11,7 @@ if ([string]::IsNullOrWhiteSpace($GodotBin)) {
     }
 
     if (-not $godot) {
-        throw "Godot not found. Set GODOT_BIN to the Godot executable."
+        throw "Godot not found. Set GODOT_BIN to the Godot console executable."
     }
 
     $GodotBin = $godot.Source
@@ -19,6 +19,5 @@ if ([string]::IsNullOrWhiteSpace($GodotBin)) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-Write-Host "Launching MicroC0re..."
-& $GodotBin --rendering-method forward_plus --rendering-driver vulkan --path $repoRoot
+& $GodotBin --headless --path $repoRoot --script "res://tests/perf_benchmark.gd"
 exit $LASTEXITCODE

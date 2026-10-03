@@ -40,11 +40,51 @@ At close zoom the viewer should additionally read:
 
 Later organism classes may add cilia, pseudopodia, vacuoles, engulfment membranes, spores, extracellular matrix, and other morphology where biologically appropriate.
 
+## Locked prototype settings
+
+Current implementation choices for the rebuild branch:
+- internal render canvas: **640x360**;
+- default window: **1280x720** (2x presentation);
+- organism atlas cell: **32x20 px**;
+- atlas animation: **4 frames**;
+- visual orientation: **32 quantized directions**;
+- lineage colors: fixed **8-color palette**;
+- far LOD: constant-screen-size mark;
+- mid/near LOD: cached atlas texture;
+- background: repeating 32x32 pixel tile in screen space;
+- chemistry: 96x64 nearest-filtered field texture.
+
+These are prototype constraints, not permanent project limits. Change them only with a documented visual/performance reason.
+
+## Biome material / shader contract
+
+The rejected 4x4 full-screen motif atlas is **not** the baseline.
+
+All visible biological/environmental art shares one source-pixel scale: **0.25 world units**. Organism atlases, biome shader pixels and biological-event FX use that same grid.
+
+The environment is split into real game-art materials:
+- **water shader**: always present, dark, low contrast, spatially stable grain, only a very slow continuous luminance drift;
+- **biome material shader**: consumes slowly refreshed simulation masks and reveals sparse local producer, detritus, EPS, damage, oxygen, nutrient and waste material.
+
+Rules:
+- water remains visually dominant;
+- most biome shader pixels are transparent;
+- no global frame-swapping/tile animation;
+- patches change because simulation fields accumulate/decay;
+- producer/EPS/scavenger/death activity alters the fields that drive the art;
+- CPU reference masks refresh at 2 Hz; #57 owns the GPU-resident path;
+- biological-event FX use a compact 7x7 atlas at the same source-pixel scale.
+
+Primary implementation: #61.
+
+
 ## Pixel strategy
 
 The chemistry layer may remain a low-resolution texture, but that **does not by itself define the final pixel-art style**.
 
-The organism pipeline must move from procedural vector-like drawing to deliberate low-resolution sprite/sprite-part design:
+The organism pipeline now uses a first code-authored cached pixel atlas. It replaces per-frame procedural capsule/flagella drawing and is the baseline for further hand-authored sprite refinement.
+
+The sprite/sprite-part design rules are:
 - controlled pixel clusters;
 - limited palettes and coherent color ramps;
 - intentional outlines / selective outlines;
@@ -61,13 +101,17 @@ Reference principles:
 
 Primary tasks: #15 and #18.
 
+The first atlas is intentionally simple. Its purpose is to establish the correct pipeline: deliberate pixels, cached frames, controlled palette, quantized orientation and LOD. Future visual refinement should replace pixel patterns inside that pipeline rather than return to smooth procedural line art.
+
 ## Performance architecture
 
 Performance is now a product requirement, not a later polish step.
 
 Baseline contract:
-- target 120 FPS during normal microscope inspection;
+- target 120+ FPS during normal microscope inspection;
 - 60 FPS development floor;
+- biological simulation runs at a deterministic 60 Hz;
+- chemistry currently runs at a deterministic 30 Hz;
 - organism simulation tick and render FPS are separate;
 - explicit far/mid/near/macro LOD;
 - off-screen culling;
@@ -138,3 +182,123 @@ Useful specialist references:
 - Microscope (Schkuey): https://schkuey.itch.io/microscope
 
 These are references for process/readability and examples of low-resolution microbe presentation, not assets to copy.
+
+
+### Shader geometry requirement
+
+For shader-backed world polygons, a valid 1x1 opaque texture is intentionally assigned even when the shader does not sample `TEXTURE`. Godot's `Polygon2D` only builds/passes UV vertex data when a texture is valid. Removing this UV-driver texture collapses the biome mask sampling and is a rendering regression.
+
+
+## Visual-language rebuild contract — 2026-10-03
+
+The previous renderer violated its own source-pixel rule by scaling different
+organism atlases with unrelated floating-point factors and by alpha-crossfading
+overview markers and sprites.
+
+The renderer now follows these hard rules:
+
+- root presentation uses Godot `viewport` stretch with integer scaling;
+- one biological source pixel is always **0.25 world units** in close sprites,
+  event atlases, DNA, phages and hyphal assets;
+- organism gene/radius values do **not** continuously rescale pixel textures;
+  morphology changes belong in authored atlas classes/frames;
+- the camera remains continuously zoomable, but source sprites only enter once
+  the zoom reaches the range where their source pixels are readable;
+- overview-to-sprite handoff uses deterministic per-organism ordered dithering:
+  an organism is one representation or the other, never two translucent bodies;
+- overview silhouettes use integer screen-pixel dimensions and 8-direction
+  orientation;
+- runtime sprite orientation is limited to 8 stable directions to reduce pixel
+  shimmer until direction-specific authored atlas frames replace rotation;
+- action progress drives feeding/reproduction/death key frames where those
+  progress values exist; important actions must not merely loop unrelated FX;
+- generic effect sprites are accents at the same source-pixel scale, never
+  independently scaled pseudo-organisms.
+
+This is the baseline for #15/#18/#60. Future visual work must improve authored
+silhouettes and state frames without reintroducing fractional sprite scaling.
+
+
+## Visual hierarchy / signal budget
+
+The renderer now spends visual contrast in this order:
+
+1. **critical biological event** — active capture, lysis, phage infection;
+2. **organism silhouette/state** — identity and body pose;
+3. **persistent ecological material** — producer mat, EPS, detritus;
+4. **dissolved chemistry** — only exceptional concentrations receive subtle notation;
+5. **water** — lowest contrast base.
+
+Generic pursuit/digestion/stress icons must not orbit every organism. If an action
+has a body state and a progress value, the body frame and contact geometry carry
+the action first; a small FX asset may only accent the final stage.
+
+Biome art must use multi-pixel material clusters. Stable coarse hashes may choose
+where an entire tuft/fragment/matrix stroke exists, but may not spray isolated
+per-pixel noise across the dish.
+
+
+## Camera and color semantics
+
+- Mouse-wheel zoom remains continuous and cursor-anchored, but now eases toward a
+  target instead of jumping one notch at a time.
+- Pixel crispness is handled by the root viewport, source-pixel contract,
+  quantized directions and LOD representations; camera motion itself is not
+  forced onto staged zoom stops.
+- Bacterial **lineage owns hue**. Guild identity is carried by silhouette
+  (rod/vibrio/cocci/chain) instead of blending a second guild color into every
+  bacterium.
+- State colors are exceptional accents (infection, terminal lysis, starvation),
+  not a second identity palette.
+- Selection brackets are static/subordinate; decorative tracking wakes are
+  forbidden because selection UI must not compete with ecology.
+- Slow succession disturbances may have a short localized material-front cue so
+  the viewer can connect a sudden patch change to a cause. The cue must fade
+  quickly and never become a permanent HUD effect.
+
+
+## Video audit correction — 2026-10-03 18:09 capture
+
+The captured build exposed several failures that were not visible from CI:
+
+- water read as almost pure black, so organisms looked like stickers in a void;
+- producer material rendered as repeated green plus signs, which read as debug/UI
+  marks rather than ecology;
+- organism modulation was too saturated, especially microalgae;
+- selected close-up zoom was too aggressive for a scene that still lacked local
+  environmental context;
+- inspector remained visually dominant at 2x desktop scaling;
+- lysis/predation accents competed with the body instead of handing the eye into
+  environmental consequences.
+
+Corrections in this pass:
+
+- brighter, low-contrast teal microscope water with static large-scale material
+  variation and a soft non-black vignette;
+- producer/EPS/detritus/damage/exudate rebuilt as irregular connected clusters;
+- dissolved chemistry no longer generates separate bright symbols;
+- ecology palettes are muted and material-oriented;
+- selection focus zoom is reduced;
+- inspector footprint/opacity/font scale reduced again;
+- lysis FX are close-detail only while fragments transition into detrital tones.
+
+
+## Pixel-isometric presentation rule — 2026-10-03
+
+Isometric does **not** mean abandoning the pixel microscope art language.
+
+The canonical visible renderer is 2D pixel art projected from the living
+height-field:
+- 2:1 diamond terrain tiles;
+- integer-snapped screen positions;
+- nearest-filtered legacy organism atlases;
+- no smooth spheres, capsules or lit box primitives;
+- no arbitrary camera tilt that deforms the sprite language;
+- world rotation occurs in 90-degree steps;
+- terrain height is shown by exposed pixel side faces;
+- dig/fill state must be readable from the terrain itself, not a debug counter.
+
+Fullscreen presentation may scale fractionally to fill the actual desktop;
+world/sprite coordinates remain snapped and textures remain nearest-filtered.
+A small amount of uneven physical pixel scaling is preferable to a large black
+letterbox that makes the application look windowed.

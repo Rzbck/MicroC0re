@@ -15,3 +15,34 @@ export_credentials.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Local/editor state
+.vscode/
+.idea/
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local secrets / credentials
+.env
+.env.*
+!.env.example
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+credentials
+credentials.*
+secrets
+secrets.*
+id_rsa
+id_ed25519
+
+# Local benchmark/profiling output
+benchmarks/local/
+profiles/

@@ -128,6 +128,27 @@ The planned reaction-diffusion laboratory uses:
 
 This is a pattern-forming chemical system. It must remain conceptually separate from claims about living bacterial agents.
 
+## 8. Producer self-shading
+
+The deterministic spatial/day-night model provides an ambient light value `L0` in the range `[0, 1]`.
+
+For local producer biomass `B` (clamped to `[0, 1]`), the CPU reference uses a cheap qualitative attenuation:
+
+```text
+T(B) = 1 / (1 + kshade * B)
+Leffective = clamp(L0 * T(B), 0.025, 1)
+```
+
+with the current qualitative coefficient:
+
+```text
+kshade = 0.90
+```
+
+This creates negative density feedback: dense producer mats receive less effective light, which reduces local photosynthetic growth/energy gain and oxygen production. The rational form is deliberately inexpensive and maps cleanly to the planned GPU field pipeline.
+
+This is **not** a calibrated Beer-Lambert optical model and is not claimed to reproduce a specific algal species, pigment spectrum, water depth, or turbidity profile.
+
 ## Determinism
 
 For reproducible runs:

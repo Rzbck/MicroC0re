@@ -4,7 +4,7 @@ This file is the working contract for coding agents.
 
 ### READ FIRST — current product direction
 
-Before changing code or art, read **`docs/CURRENT_DIRECTION.md`**.
+Before changing code or art, read **`docs/HANDOFF.md`**, **`docs/CURRENT_DIRECTION.md`**, **`docs/STATUS.md`** and **`docs/BIOME.md`** when touching ecology/environment/species. For any hot-path, scaling, threading, GPU or storage change, also read **`docs/OPTIMIZATION_STRATEGY.md`**.
 
 Epic #14 is the current visual/performance gate. Until that gate passes, prioritize:
 1. #17 performance/profiling/LOD;
@@ -13,6 +13,20 @@ Epic #14 is the current visual/performance gate. Until that gate passes, priorit
 4. #18 readable animation/interactions.
 
 Do not expand deeper ecology simply because the simulation can support it. The visible experience must first become fast, intentional, and genuinely pixel-art.
+
+## Session bootstrap / GitHub handoff
+
+A fresh agent must recover state from GitHub instead of asking the maintainer to reconstruct it.
+
+At session start:
+1. read `docs/HANDOFF.md`;
+2. inspect the GitHub Project `MicroC0re` (#2) when Project access is available;
+3. inspect active PR #19 and relevant Issues;
+4. continue blocking `In Progress` / `Review` work before starting unrelated `Todo` items.
+
+For GitHub bookkeeping, use the GitHub connector/agent tools. Do not ask the maintainer to run PowerShell or `gh` merely to move cards, update Issues, labels or PR metadata.
+
+If Project V2 mutation is not exposed by the current connector, use the `status:*` compatibility labels documented in `docs/HANDOFF.md`. The default-branch Project sync workflow is responsible for translating those labels to real Project Status values.
 
 # Mission
 
@@ -82,20 +96,48 @@ If a local Godot binary is unavailable, state that tests were not executed inste
 - Add acceptance criteria to issues before expanding scope.
 - Avoid giant “rewrite everything” commits.
 
+## GPU-first desktop policy
+
+For desktop performance work, prefer the GPU for workloads with high data parallelism:
+- MultiMesh/bulk-buffer rendering;
+- chemical/reaction-diffusion fields;
+- large independent per-agent kernels;
+- future spatial binning and local interaction kernels.
+
+The project uses Forward+ on desktop. Keep a CPU/headless reference path, but do not treat CPU as the default execution target for scalable workloads.
+
+Never add a design that requires synchronous full GPU -> CPU readback every tick. Godot RenderingDevice readbacks synchronize or consume significant transfer bandwidth; keep bulk state resident whenever possible.
+
+GPU migration is tracked by #27.
+
 ## Performance policy
 
 Profile before optimizing and record measured before/after numbers.
 
 Current visible-performance contract:
-- target 120 FPS during normal microscope inspection;
+- target 120+ FPS during normal microscope inspection;
 - 60 FPS is the development floor;
+- biological simulation is currently 60 Hz and chemistry 30 Hz;
 - simulation tick rate and render FPS are separate metrics;
 - off-screen organisms must be culled;
 - use explicit far/mid/near/macro LOD;
 - distant organisms must never pay for close-up appendage/detail rendering;
-- prefer cached/batched sprite rendering over rebuilding procedural geometry every frame.
+- prefer cached/batched sprite rendering over rebuilding procedural geometry every frame;
+- no hot-loop Dictionary/temporary-array allocation when a preallocated packed structure can be used;
+- preserve stable biological IDs separately from dense simulation indices;
+- future parallel random draws must not depend on thread execution order;
+- never introduce synchronous full GPU readback in a per-tick path without measured justification.
 
 The contact broad-phase currently uses a deterministic spatial hash. Do not regress to global O(N²) contact checks without a measured reason.
+
+## UI discipline
+
+- Do not put a permanent profiler/status block over the microscope artwork.
+- Escape owns the pause/settings menu.
+- Organism details belong in the left-side inspector opened by clicking an organism.
+- Empty-world click or Escape closes the inspector.
+- Minimum camera zoom is cover-fit; never reintroduce a tiny-world zoom-out view.
+- Keep profiling in benchmarks/development tooling unless the maintainer explicitly requests an on-screen diagnostic.
 
 ## Visual non-negotiables
 
@@ -115,3 +157,21 @@ Never implement:
 - visual interpolation that feeds back into simulation state;
 - undocumented random behavior;
 - machine-specific paths inside `project.godot`.
+
+
+## Biome discipline
+
+Biome/ecology changes must preserve the distinction between:
+- **abiotic fields** (oxygen, light, flow, pH, etc.);
+- **biotic continuum structure** (producer mats, EPS, detritus);
+- **individual organisms**;
+- **qualitative ALife abstractions** vs calibrated biology.
+
+Do not call the generic aquatic damage/lysis cue "blood". Host/blood chemistry is a separate optional biome (#52).
+
+Ecological features must:
+- return dead biomass to the environment;
+- expose costs/trade-offs;
+- remain spatial/local where biologically appropriate;
+- avoid unbounded entity spawning;
+- retain a GPU migration path for continuum fields.
