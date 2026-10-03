@@ -31,7 +31,8 @@ const ANGLE_STEPS := 8.0
 const SPRITE_LOD_START_ZOOM := 3.20
 const SPRITE_LOD_END_ZOOM := 4.00
 const DETAIL_LOD_ZOOM := 7.00
-const WHEEL_ZOOM_FACTOR := 1.10
+const WHEEL_ZOOM_FACTOR := 1.12
+const FREE_ZOOM_RESPONSE := 12.0
 const FOCUS_CAMERA_RESPONSE := 9.0
 const FOCUS_ZOOM_RESPONSE := 7.0
 const FOCUS_MIN_MULTIPLIER := 2.65
@@ -69,6 +70,9 @@ var visual_time: float = 0.0
 
 var camera: Camera2D
 var dragging_camera: bool = false
+var free_zoom_target: float = -1.0
+var zoom_anchor_world := Vector2.ZERO
+var zoom_anchor_screen := Vector2.ZERO
 
 var field_refresh_accumulator: float = 0.0
 
@@ -155,6 +159,7 @@ func _start_simulation(seed_value: int) -> void:
 	selected_kind = ""
 	follow_selected = false
 	focus_zoom_target = -1.0
+	free_zoom_target = -1.0
 	if ui != null:
 		ui.hide_inspector()
 
@@ -193,6 +198,7 @@ func _process(delta: float) -> void:
 	if ui == null or not ui.is_menu_open():
 		_handle_keyboard_pan(delta)
 		_update_selection_camera(delta)
+		_update_free_zoom(delta)
 	_clamp_camera_to_world()
 
 	var sim_start: int = Time.get_ticks_usec()
@@ -252,6 +258,7 @@ func _draw() -> void:
 	# opaque world rectangle here: it would sit above the negative-z shader
 	# layers and hide the entire biome, which was visible in the 2026-10-03
 	# maintainer recording as a completely black dish.
+	_draw_disturbance_front()
 	_draw_phage_clouds()
 	_draw_bacteria()
 	_draw_protozoa()
@@ -271,6 +278,46 @@ func _draw() -> void:
 		draw_ms,
 		float(Time.get_ticks_usec() - draw_start) / 1000.0
 	)
+
+
+func _draw_disturbance_front() -> void:
+	if sim == null or camera == null:
+		return
+	if int(sim.last_disturbance_type) < 0:
+		return
+
+	var age: float = float(sim.simulation_time) - float(sim.last_disturbance_time)
+	var duration: float = 4.5
+	if age < 0.0 or age > duration:
+		return
+
+	var progress: float = clampf(age / duration, 0.0, 1.0)
+	var radius: float = lerpf(
+		2.5,
+		float(sim.disturbance_radius),
+		1.0 - pow(1.0 - progress, 2.0)
+	)
+	var alpha: float = (1.0 - progress) * 0.58
+	var color := Color(0.54, 0.80, 0.34, alpha)
+	match int(sim.last_disturbance_type):
+		PetriSimulationScript.DISTURBANCE_WASHOUT:
+			color = Color(0.32, 0.72, 0.78, alpha)
+		PetriSimulationScript.DISTURBANCE_ORGANIC_FALL:
+			color = Color(0.72, 0.46, 0.20, alpha)
+
+	var px: float = maxf(
+		SPRITE_WORLD_PIXEL,
+		1.0 / maxf(camera.zoom.x, 0.001)
+	)
+	var center: Vector2 = Vector2(sim.last_disturbance_position)
+	for i in range(12):
+		var phase: float = float(i) * TAU / 12.0
+		var q: Vector2 = center + Vector2.RIGHT.rotated(phase) * radius
+		draw_rect(
+			Rect2(q - Vector2.ONE * px * 0.5, Vector2.ONE * px),
+			color,
+			true
+		)
 
 
 func _draw_phage_clouds() -> void:
@@ -341,7 +388,6 @@ func _draw_bacteria() -> void:
 
 		visible_cells += 1
 		var color: Color = _lineage_color(float(cell.lineage_hue))
-		color = color.lerp(_guild_color(int(cell.guild)), 0.28)
 
 		if bool(cell.dying):
 			if bool(cell.phage_triggered_lysis):
@@ -905,8 +951,7 @@ func _draw_selection_focus() -> void:
 		biological_size = maxf(3.0, float(organism.radius) * 2.15)
 	var r: float = biological_size * 0.72 + px * 2.0
 	var arm: float = px * 2.4
-	var pulse: float = 0.78 + 0.22 * sin(visual_time * 4.0)
-	var c := Color(0.88, 1.0, 0.70, 0.64 * pulse)
+	var c := Color(0.88, 1.0, 0.70, 0.54)
 
 	# Four pixel-art microscope brackets: no giant debug rectangle.
 	for sx in [-1.0, 1.0]:
@@ -922,18 +967,6 @@ func _draw_selection_focus() -> void:
 				c,
 				true
 			)
-
-	# A short trailing focus wake makes motion easy to perceive while tracking.
-	var axis: Vector2 = Vector2.RIGHT.rotated(float(organism.angle))
-	for i in range(3):
-		var distance: float = r + px * (2.0 + float(i) * 2.0)
-		var q: Vector2 = p - axis * distance
-		var wake := Color(0.64, 0.92, 0.88, 0.28 - float(i) * 0.07)
-		draw_rect(
-			Rect2(q - Vector2.ONE * px * 0.38, Vector2.ONE * px * 0.76),
-			wake,
-			true
-		)
 
 
 func _sprite_lod_ratio(zoom_value: float) -> float:
@@ -1123,7 +1156,10 @@ func _draw_lysis_fragments(
 			+ float(organism_id % 11) * 0.37
 		)
 		var offset: Vector2 = Vector2.RIGHT.rotated(phase) * radius
-		var fragment_color: Color = color
+		var fragment_color: Color = color.lerp(
+			Color(0.52, 0.29, 0.12, color.a),
+			smoothstep(0.52, 1.0, progress)
+		)
 		fragment_color.a *= 0.75 * (1.0 - progress * 0.55)
 		draw_rect(
 			Rect2(
@@ -1148,6 +1184,9 @@ func _draw_lysis_fragments(
 			0.34 + progress * 0.12,
 			0.16,
 			0.42 * (1.0 - progress * 0.58)
+		).lerp(
+			Color(0.48, 0.25, 0.10, 0.30),
+			smoothstep(0.58, 1.0, progress)
 		)
 		draw_rect(
 			Rect2(
@@ -1264,6 +1303,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if mouse_button.pressed:
 				follow_selected = false
 				focus_zoom_target = -1.0
+				free_zoom_target = -1.0
 			get_viewport().set_input_as_handled()
 			return
 
@@ -1310,29 +1350,56 @@ func _unhandled_input(event: InputEvent) -> void:
 func _zoom_at_screen_position(screen_position: Vector2, factor: float) -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var viewport_center: Vector2 = viewport_size * 0.5
-	var old_zoom: float = camera.zoom.x
+	var current_zoom: float = camera.zoom.x
+	var base_zoom: float = (
+		free_zoom_target
+		if free_zoom_target > 0.0 and not follow_selected
+		else current_zoom
+	)
 	var minimum_zoom: float = _minimum_camera_zoom()
-	var new_zoom: float = clampf(old_zoom * factor, minimum_zoom, MAX_ZOOM)
-	if is_equal_approx(old_zoom, new_zoom):
+	var target_zoom: float = clampf(
+		base_zoom * factor,
+		minimum_zoom,
+		MAX_ZOOM
+	)
+	if is_equal_approx(base_zoom, target_zoom):
 		return
 
 	if follow_selected:
-		camera.zoom = Vector2(new_zoom, new_zoom)
-		focus_zoom_target = -1.0
-		var organism: Variant = _selected_organism()
-		if organism != null:
-			camera.position = Vector2(organism.position)
-	else:
-		var world_under_cursor: Vector2 = (
-			camera.position
-			+ (screen_position - viewport_center) / old_zoom
-		)
-		camera.zoom = Vector2(new_zoom, new_zoom)
+		# Tracking stays organism-centered; wheel input changes the tracking zoom
+		# target smoothly instead of jumping the camera.
+		focus_zoom_target = target_zoom
+		free_zoom_target = -1.0
+		return
+
+	zoom_anchor_screen = screen_position
+	zoom_anchor_world = (
+		camera.position
+		+ (screen_position - viewport_center) / current_zoom
+	)
+	free_zoom_target = target_zoom
+
+
+func _update_free_zoom(delta: float) -> void:
+	if follow_selected or free_zoom_target <= 0.0 or camera == null:
+		return
+
+	var viewport_center: Vector2 = get_viewport_rect().size * 0.5
+	var alpha: float = 1.0 - exp(-FREE_ZOOM_RESPONSE * delta)
+	var next_zoom: float = lerpf(camera.zoom.x, free_zoom_target, alpha)
+	camera.zoom = Vector2(next_zoom, next_zoom)
+	camera.position = (
+		zoom_anchor_world
+		- (zoom_anchor_screen - viewport_center) / next_zoom
+	)
+
+	if absf(next_zoom - free_zoom_target) < 0.002:
+		camera.zoom = Vector2(free_zoom_target, free_zoom_target)
 		camera.position = (
-			world_under_cursor
-			- (screen_position - viewport_center) / new_zoom
+			zoom_anchor_world
+			- (zoom_anchor_screen - viewport_center) / free_zoom_target
 		)
-	_clamp_camera_to_world()
+		free_zoom_target = -1.0
 
 
 func _select_nearest_organism(world_position: Vector2) -> void:
@@ -1407,6 +1474,7 @@ func _select_nearest_organism(world_position: Vector2) -> void:
 	selected_id = best_id
 	selected_kind = best_kind
 	follow_selected = true
+	free_zoom_target = -1.0
 	var minimum_zoom: float = _minimum_camera_zoom()
 	focus_zoom_target = clampf(
 		maxf(camera.zoom.x, minimum_zoom * FOCUS_MIN_MULTIPLIER),
@@ -1466,6 +1534,7 @@ func _clear_selection() -> void:
 	selected_kind = ""
 	follow_selected = false
 	focus_zoom_target = -1.0
+	free_zoom_target = -1.0
 	if ui != null:
 		ui.hide_inspector()
 
@@ -1781,6 +1850,7 @@ func _handle_keyboard_pan(delta: float) -> void:
 
 	follow_selected = false
 	focus_zoom_target = -1.0
+	free_zoom_target = -1.0
 	direction = direction.normalized()
 	var pan_speed: float = 170.0 / maxf(camera.zoom.x, 0.08)
 	camera.position += direction * pan_speed * delta
@@ -1839,6 +1909,7 @@ func _fit_camera() -> void:
 
 	follow_selected = false
 	focus_zoom_target = -1.0
+	free_zoom_target = -1.0
 	var fit_zoom: float = _minimum_camera_zoom()
 	camera.position = Vector2(sim.world_size) * 0.5
 	camera.zoom = Vector2(fit_zoom, fit_zoom)

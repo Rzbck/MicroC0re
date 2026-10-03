@@ -236,3 +236,22 @@ the action first; a small FX asset may only accent the final stage.
 Biome art must use multi-pixel material clusters. Stable coarse hashes may choose
 where an entire tuft/fragment/matrix stroke exists, but may not spray isolated
 per-pixel noise across the dish.
+
+
+## Camera and color semantics
+
+- Mouse-wheel zoom remains continuous and cursor-anchored, but now eases toward a
+  target instead of jumping one notch at a time.
+- Pixel crispness is handled by the root viewport, source-pixel contract,
+  quantized directions and LOD representations; camera motion itself is not
+  forced onto staged zoom stops.
+- Bacterial **lineage owns hue**. Guild identity is carried by silhouette
+  (rod/vibrio/cocci/chain) instead of blending a second guild color into every
+  bacterium.
+- State colors are exceptional accents (infection, terminal lysis, starvation),
+  not a second identity palette.
+- Selection brackets are static/subordinate; decorative tracking wakes are
+  forbidden because selection UI must not compete with ecology.
+- Slow succession disturbances may have a short localized material-front cue so
+  the viewer can connect a sudden patch change to a cause. The cue must fade
+  quickly and never become a permanent HUD effect.

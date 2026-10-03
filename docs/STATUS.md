@@ -286,3 +286,15 @@ Second visual-language pass:
   simulation's capture progress;
 - inspector local-biome line now explains qualitative niche/resource state
   instead of dumping six unlabeled scalar values.
+
+
+Third visual-language pass:
+- mouse-wheel zoom is now smoothly interpolated while preserving the cursor's
+  world anchor;
+- bacterial hue is reserved for lineage; guild is read from morphology instead
+  of a second color blend;
+- selection reticle no longer emits a decorative moving wake;
+- deterministic succession events receive a brief local pixel front so abrupt
+  biome changes have an observable cause;
+- late lysis fragments shift toward detrital brown, visually handing death into
+  the recycling layer.
