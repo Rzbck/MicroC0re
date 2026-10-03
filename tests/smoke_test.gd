@@ -27,9 +27,6 @@ func _init() -> void:
 	var errors := PackedStringArray()
 	_validate_preloaded_scripts(errors)
 
-	var biome_renderer_probe = BiomeMaterialRendererScript.new()
-	if biome_renderer_probe == null:
-		errors.append("render: biome material renderer failed to instantiate")
 	if WaterBackgroundShader == null or BiomeMaterialShader == null:
 		errors.append("render: biome shader resources failed to preload")
 
