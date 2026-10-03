@@ -1081,10 +1081,10 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 		flagellate.finish_feed()
 		return
 
-	var prey_eps: float = float(eps.sample_world(Vector2(prey.position)))
+	var defense_factor: float = _prey_handling_defense(prey)
 	var duration: float = (
 		flagellate_feed_duration
-		* (1.0 + clampf(prey_eps, 0.0, 1.5) * eps_grazer_protection)
+		* defense_factor
 		/ maxf(0.45, float(flagellate.gene_capture))
 	)
 	var progress: float = minf(
@@ -1093,6 +1093,24 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 	)
 	flagellate.feeding_progress = progress
 	prey.engulf_progress = progress
+
+	if _prey_escapes_handling(
+		prey,
+		float(flagellate.gene_capture),
+		defense_factor,
+		dt
+	):
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
+		var escape_axis: Vector2 = (
+			Vector2(prey.position) - Vector2(flagellate.position)
+		).normalized()
+		if escape_axis.length_squared() <= 0.000001:
+			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
+		prey.position = Vector2(prey.position) + escape_axis * 0.70
+		flagellate.finish_feed()
+		return
+
 	damage_cue.add_radial_world(
 		Vector2(prey.position),
 		2.4,
@@ -1402,10 +1420,10 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		proto.finish_engulf()
 		return
 
-	var prey_eps: float = float(eps.sample_world(Vector2(prey.position)))
+	var defense_factor: float = _prey_handling_defense(prey)
 	var duration: float = (
 		protozoan_engulf_duration
-		* (1.0 + clampf(prey_eps, 0.0, 1.5) * eps_grazer_protection)
+		* defense_factor
 		/ maxf(0.45, float(proto.gene_engulf))
 	)
 	var progress: float = minf(
@@ -1414,6 +1432,23 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 	)
 	proto.feeding_progress = progress
 	proto.deform_amount = 0.35 + sin(progress * PI) * 0.55
+
+	if _prey_escapes_handling(
+		prey,
+		float(proto.gene_engulf),
+		defense_factor,
+		dt
+	):
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
+		var escape_axis: Vector2 = (
+			Vector2(prey.position) - Vector2(proto.position)
+		).normalized()
+		if escape_axis.length_squared() <= 0.000001:
+			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
+		prey.position = Vector2(prey.position) + escape_axis * 1.2
+		proto.finish_engulf()
+		return
 
 	var prey_position: Vector2 = Vector2(prey.position)
 	var proto_position: Vector2 = Vector2(proto.position)
@@ -1719,10 +1754,10 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		ciliate.finish_feed()
 		return
 
-	var prey_eps: float = float(eps.sample_world(Vector2(prey.position)))
+	var defense_factor: float = _prey_handling_defense(prey)
 	var duration: float = (
 		ciliate_feed_duration
-		* (1.0 + clampf(prey_eps, 0.0, 1.5) * eps_grazer_protection)
+		* defense_factor
 		/ maxf(0.45, float(ciliate.gene_capture))
 	)
 	var progress: float = minf(
@@ -1731,6 +1766,24 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 	)
 	ciliate.feeding_progress = progress
 	prey.engulf_progress = progress
+
+	if _prey_escapes_handling(
+		prey,
+		float(ciliate.gene_capture),
+		defense_factor,
+		dt
+	):
+		prey.engulfed_by_id = -1
+		prey.engulf_progress = 0.0
+		var escape_axis: Vector2 = (
+			Vector2(prey.position) - Vector2(ciliate.position)
+		).normalized()
+		if escape_axis.length_squared() <= 0.000001:
+			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
+		prey.position = Vector2(prey.position) + escape_axis * 0.95
+		ciliate.finish_feed()
+		return
+
 	damage_cue.add_radial_world(
 		Vector2(prey.position),
 		3.0,
@@ -2531,6 +2584,53 @@ func _disturbance_position(event_index: int, event_type: int) -> Vector2:
 	result.x = clampf(result.x, margin, world_size.x - margin)
 	result.y = clampf(result.y, margin, world_size.y - margin)
 	return result
+
+
+func _prey_handling_defense(prey: Variant) -> float:
+	var position: Vector2 = Vector2(prey.position)
+	var matrix_defense: float = (
+		1.0
+		+ clampf(float(eps.sample_world(position)), 0.0, 1.5)
+		* eps_grazer_protection
+	)
+
+	# No invisible resistance score: the bacterial part is composed only from
+	# existing visible/costly traits.
+	var cell: Variant = find_cell_by_id(int(prey.id))
+	if cell == null or cell != prey:
+		return matrix_defense
+
+	var adhesion_defense: float = maxf(
+		0.0,
+		float(cell.gene_adhesion) - 0.78
+	) * 0.42
+	var size_defense: float = maxf(
+		0.0,
+		float(cell.gene_size) - 0.92
+	) * 0.28
+	var dormancy_defense: float = 0.14 if bool(cell.dormant) else 0.0
+	return matrix_defense + adhesion_defense + size_defense + dormancy_defense
+
+
+func _prey_escapes_handling(
+	prey: Variant,
+	predator_capture: float,
+	defense_factor: float,
+	dt: float
+) -> bool:
+	var cell: Variant = find_cell_by_id(int(prey.id))
+	if cell == null or cell != prey:
+		return false
+
+	var counter_adaptation: float = clampf(predator_capture, 0.45, 2.2)
+	var pressure: float = maxf(
+		0.0,
+		defense_factor - (0.78 + counter_adaptation * 0.62)
+	)
+	if pressure <= 0.0:
+		return false
+	var escape_rate: float = clampf(pressure * 0.38, 0.0, 0.48)
+	return rng.randf() < 1.0 - exp(-escape_rate * dt)
 
 
 func _release_dna_fragments(cell: Variant) -> void:

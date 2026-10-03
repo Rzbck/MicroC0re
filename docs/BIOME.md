@@ -472,3 +472,17 @@ Bacterial lysis now releases a **bounded pool of extracellular DNA fragments** (
 - extracellular DNA has a tiny cached pixel-art fragment asset visible only at close microscope zoom.
 
 The fragment pool is deliberately bounded and updated on the slow biome cadence so the feature does not become an unbounded particle system.
+
+
+## Predator-prey coevolution slice (#35)
+
+Predation now acts on existing visible/costly bacterial phenotypes rather than an invisible resistance stat.
+
+- higher adhesion and local EPS increase handling difficulty;
+- larger bacterial morphology increases handling difficulty;
+- dormancy gives a small handling advantage;
+- local EPS extends handling time for any prey occupying the matrix;
+- sufficiently defended bacteria can escape an active handling event;
+- amoeba engulfment, ciliate capture and flagellate capture traits counter these defences.
+
+The trade-offs already exist in the same phenotypes: matrix secretion costs energy and reduces mobility, larger cells pay drag/maintenance costs, and dormancy sacrifices growth. Predator capture/engulfment genes already mutate, creating a first explicit eco-evolutionary arms race.

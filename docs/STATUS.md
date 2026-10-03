@@ -68,7 +68,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #30 bacteriophage kill-the-winner / viral recycling
 - #33 phenotypic switching / dormancy / division of labor
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
-- #35 predator-prey coevolution / bacterial defence traits
 - #36 lineage tree / ancestry history / emergent phenotype clusters
 - #42 metabolic cross-feeding
 - #43 mature biofilm/EPS ecosystem engineering
@@ -179,6 +178,8 @@ Explicit non-bacterial guilds now also exist:
 - transformation is separate from plasmid conjugation and fragments decay/drift on the slow biome cadence.
 
 ### Predation / death
+- visible bacterial adhesion/size/EPS traits now increase predator handling difficulty and can permit escape;
+- amoeba/ciliate/flagellate capture genes counter prey handling defence, creating an explicit first coevolution loop;
 - amoebae and ciliates can bias search toward damage plumes when direct prey is absent;
 - ciliates graze bacteria, microalgae and yeast-like decomposers;
 - amoebae graze bacteria, microalgae, decomposers and suitably small ciliates;

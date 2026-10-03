@@ -144,6 +144,23 @@ func _init() -> void:
 	if transform_probe.dna_fragments.size() > 64:
 		errors.append("evolution: extracellular DNA safety ceiling exceeded")
 
+	# Predator/prey coevolution regression: handling defence must emerge from
+	# visible costly traits and local matrix, not a hidden resistance variable.
+	var defence_probe = PetriSimulationScript.new(4417)
+	defence_probe.seed_demo(2)
+	var defended = defence_probe.bacteria[0]
+	defence_probe.eps.fill(0.0)
+	defended.gene_adhesion = 0.78
+	defended.gene_size = 0.92
+	defended.dormant = false
+	var baseline_defence: float = defence_probe._prey_handling_defense(defended)
+	defended.gene_adhesion = 1.70
+	defended.gene_size = 1.35
+	defence_probe.eps.add_radial_world(Vector2(defended.position), 4.0, 0.75)
+	var evolved_defence: float = defence_probe._prey_handling_defense(defended)
+	if evolved_defence <= baseline_defence:
+		errors.append("evolution: visible prey defence traits did not increase handling cost")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
