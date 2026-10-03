@@ -177,6 +177,10 @@ Explicit non-bacterial guilds now also exist:
 - a regression test now verifies ciliate feeding remains attached to non-bacterial prey across frames.
 
 ### Shader biome / event asset rebuild
+- audit found the shader quads had no texture; Godot therefore did not build Polygon2D UV vertex data, collapsing mask sampling to one corner;
+- quads now use a 1x1 opaque UV-driver texture so the shaders receive the intended 0..1 UV coordinates;
+- producer logistic growth now requires existing biomass; empty cells can no longer spontaneously become producer mat;
+- producer material spreads slowly through a small diffusion term and can be seeded by explicit microalgae / phototrophic bacteria;
 - rejected the full-screen 4x4 animated motif atlas after maintainer video review;
 - dedicated water shader provides a stable low-contrast aqueous base;
 - dedicated biome material shader consumes producer/detritus/EPS/damage/oxygen/nutrient/waste masks;

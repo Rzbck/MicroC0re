@@ -182,3 +182,8 @@ Useful specialist references:
 - Microscope (Schkuey): https://schkuey.itch.io/microscope
 
 These are references for process/readability and examples of low-resolution microbe presentation, not assets to copy.
+
+
+### Shader geometry requirement
+
+For shader-backed world polygons, a valid 1x1 opaque texture is intentionally assigned even when the shader does not sample `TEXTURE`. Godot's `Polygon2D` only builds/passes UV vertex data when a texture is valid. Removing this UV-driver texture collapses the biome mask sampling and is a rendering regression.

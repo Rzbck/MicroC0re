@@ -155,8 +155,6 @@ func _setup_camera() -> void:
 func _setup_biome_renderer() -> void:
 	biome_renderer = BiomeMaterialRendererScript.new()
 	biome_renderer.name = "BiomeMaterialRenderer"
-	biome_renderer.z_as_relative = false
-	biome_renderer.z_index = -20
 	add_child(biome_renderer)
 	biome_renderer.initialize(sim)
 

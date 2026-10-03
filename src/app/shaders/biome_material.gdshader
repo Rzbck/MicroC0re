@@ -13,9 +13,9 @@ float hash21(vec2 p) {
 	return fract(p.x * p.y);
 }
 
-float density_hit(float value, float h, float density) {
-	float v = smoothstep(0.10, 0.88, value);
-	return step(h, v * density);
+float density_alpha(float value, float h, float density) {
+	float v = smoothstep(0.06, 0.90, value) * density;
+	return smoothstep(h - 0.025, h + 0.025, v);
 }
 
 void fragment() {
@@ -40,49 +40,62 @@ void fragment() {
 	vec3 color = vec3(0.0);
 	float alpha = 0.0;
 
-	float producer_on = density_hit(producer, h0, 0.34) * step(0.18, producer);
-	producer_on *= step(h2, 0.30 + producer * 0.62);
-	if (producer_on > 0.5) {
+	float producer_on = density_alpha(producer, h0, 0.46) * smoothstep(0.07, 0.18, producer);
+	float producer_cluster = smoothstep(
+		h2 - 0.035,
+		h2 + 0.035,
+		0.18 + producer * 0.76
+	);
+	producer_on *= producer_cluster;
+	if (producer_on > 0.01) {
 		float highlight = step(0.72, h1);
-		color = mix(vec3(0.055, 0.26, 0.10), vec3(0.26, 0.70, 0.18), highlight);
-		alpha = max(alpha, 0.38 + producer * 0.32);
+		vec3 producer_color = mix(
+			vec3(0.055, 0.26, 0.10),
+			vec3(0.26, 0.70, 0.18),
+			highlight
+		);
+		color = mix(color, producer_color, producer_on);
+		alpha = max(alpha, producer_on * (0.42 + producer * 0.40));
 	}
 
 	float line_x = step(0.80, fract((pixel.x + floor(h3 * 3.0)) / 5.0));
 	float line_y = step(0.84, fract((pixel.y + floor(h2 * 4.0)) / 6.0));
-	float lattice = max(line_x, line_y) * step(0.16, eps) * step(h1, eps * 0.68);
-	if (lattice > 0.5) {
-		color = mix(color, vec3(0.08, 0.43, 0.39), 0.82);
-		alpha = max(alpha, 0.22 + eps * 0.36);
+	float lattice = max(line_x, line_y)
+		* smoothstep(0.025, 0.10, eps)
+		* density_alpha(eps, h1, 0.82);
+	if (lattice > 0.01) {
+		color = mix(color, vec3(0.08, 0.43, 0.39), lattice * 0.86);
+		alpha = max(alpha, lattice * (0.24 + eps * 0.42));
 	}
 
-	float debris = density_hit(detritus, h1, 0.22) * step(0.12, detritus);
-	if (debris > 0.5) {
-		color = mix(color, vec3(0.50, 0.28, 0.11), 0.90);
-		alpha = max(alpha, 0.30 + detritus * 0.42);
+	float debris = density_alpha(detritus, h1, 0.38) * smoothstep(0.035, 0.12, detritus);
+	if (debris > 0.01) {
+		color = mix(color, vec3(0.50, 0.28, 0.11), debris * 0.92);
+		alpha = max(alpha, debris * (0.34 + detritus * 0.44));
 	}
 
-	float wound = density_hit(damage, h0, 0.28) * step(0.10, damage);
-	if (wound > 0.5) {
+	float wound = density_alpha(damage, h0, 0.46) * smoothstep(0.025, 0.10, damage);
+	if (wound > 0.01) {
 		float hot = step(0.70, h2);
-		color = mix(vec3(0.48, 0.08, 0.06), vec3(0.95, 0.31, 0.10), hot);
-		alpha = max(alpha, 0.38 + damage * 0.48);
+		vec3 wound_color = mix(vec3(0.48, 0.08, 0.06), vec3(0.95, 0.31, 0.10), hot);
+		color = mix(color, wound_color, wound);
+		alpha = max(alpha, wound * (0.40 + damage * 0.48));
 	}
 
-	float oxygen_glint = density_hit(max(oxygen - 0.24, 0.0), h0, 0.09);
-	if (oxygen_glint > 0.5 && alpha < 0.34) {
-		color = vec3(0.20, 0.62, 0.70);
-		alpha = max(alpha, 0.16 + oxygen * 0.12);
+	float oxygen_glint = density_alpha(oxygen, h0, 0.11) * smoothstep(0.08, 0.24, oxygen);
+	if (oxygen_glint > 0.01 && alpha < 0.34) {
+		color = mix(color, vec3(0.20, 0.62, 0.70), oxygen_glint);
+		alpha = max(alpha, oxygen_glint * 0.25);
 	}
-	float nutrient_grain = density_hit(max(nutrient - 0.20, 0.0), h1, 0.08);
-	if (nutrient_grain > 0.5 && alpha < 0.30) {
-		color = vec3(0.34, 0.42, 0.12);
-		alpha = max(alpha, 0.13 + nutrient * 0.10);
+	float nutrient_grain = density_alpha(nutrient, h1, 0.10) * smoothstep(0.08, 0.24, nutrient);
+	if (nutrient_grain > 0.01 && alpha < 0.30) {
+		color = mix(color, vec3(0.34, 0.42, 0.12), nutrient_grain);
+		alpha = max(alpha, nutrient_grain * 0.22);
 	}
-	float waste_grain = density_hit(max(waste - 0.24, 0.0), h2, 0.055);
-	if (waste_grain > 0.5 && alpha < 0.30) {
-		color = vec3(0.35, 0.19, 0.13);
-		alpha = max(alpha, 0.13 + waste * 0.10);
+	float waste_grain = density_alpha(waste, h2, 0.075) * smoothstep(0.08, 0.24, waste);
+	if (waste_grain > 0.01 && alpha < 0.30) {
+		color = mix(color, vec3(0.35, 0.19, 0.13), waste_grain);
+		alpha = max(alpha, waste_grain * 0.20);
 	}
 	float day = mix(0.78, 1.0, clamp(scene_light, 0.0, 1.0));
 	COLOR = vec4(color * day, clamp(alpha, 0.0, 0.82));

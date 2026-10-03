@@ -90,6 +90,7 @@ var eps_decay: float = 0.0012
 var damage_cue_diffusion: float = 3.8
 var damage_cue_decay: float = 0.72
 var producer_decay: float = 0.0006
+var producer_spread_diffusion: float = 0.025
 var producer_growth_rate: float = 0.014
 var producer_oxygen_rate: float = 0.018
 var producer_leak_rate: float = 0.0035
@@ -382,7 +383,7 @@ func step(dt: float) -> void:
 			)
 			eps.diffuse(eps_diffusion, SLOW_BIOME_DT, eps_decay)
 			producer_biomass.diffuse(
-				0.0,
+				producer_spread_diffusion,
 				SLOW_BIOME_DT,
 				producer_decay
 			)
@@ -1811,6 +1812,13 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			Vector2(cell.position),
 			photo_gain * 0.025
 		)
+		# Phototrophic bacteria can slowly seed local attached producer material.
+		# This is deliberately tiny: it should be an ecological footprint over
+		# tens of seconds/minutes, never a trail painted every frame.
+		producer_biomass.add_nearest_world(
+			Vector2(cell.position),
+			photo_gain * 0.018
+		)
 
 	if (consumed > 0.0 or scavenged > 0.0) and not bool(cell.dividing):
 		var growth_delta: float = (
@@ -1936,8 +1944,12 @@ func _advance_producer_mat(dt: float) -> void:
 		var biomass: float = float(producer_biomass.values[i])
 		var local_nutrient: float = float(nutrient.values[i])
 		var carrying: float = clampf(1.0 - biomass, 0.0, 1.0)
+		# Logistic mat growth requires an existing local seed. Without the
+		# biomass factor, every empty field cell spontaneously became a producer
+		# patch and the whole dish eventually turned into uniform green wallpaper.
 		var growth: float = (
 			producer_growth_rate
+			* biomass
 			* light_value
 			* (0.25 + 0.75 * clampf(local_nutrient * 2.0, 0.0, 1.0))
 			* carrying

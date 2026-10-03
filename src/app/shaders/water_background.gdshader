@@ -25,10 +25,10 @@ void fragment() {
 	vec3 cool = vec3(0.012, 0.060, 0.064);
 	vec3 color = mix(deep, mid, broad * 0.34);
 	color = mix(color, cool, wave * 0.10);
-	if (fine > 0.986) {
-		color += vec3(0.010, 0.026, 0.027);
-	} else if (fine < 0.018) {
-		color *= 0.82;
+	if (fine > 0.9975) {
+		color += vec3(0.008, 0.020, 0.021);
+	} else if (fine < 0.004) {
+		color *= 0.88;
 	}
 	float day = mix(0.70, 1.0, clamp(scene_light, 0.0, 1.0));
 	COLOR = vec4(color * day, 1.0);

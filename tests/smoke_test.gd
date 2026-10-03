@@ -52,6 +52,21 @@ func _init() -> void:
 	if shaded_light <= 0.0 or not is_finite(shaded_light):
 		errors.append("biome: producer self-shading produced invalid light")
 
+	# Regression: producer mats may grow/spread from real seeds, but an empty
+	# field must not spontaneously turn into full-screen producer wallpaper.
+	var mat_probe = PetriSimulationScript.new(77123)
+	mat_probe.producer_biomass.fill(0.0)
+	mat_probe.nutrient.fill(1.0)
+	mat_probe._advance_producer_mat(5.0)
+	if mat_probe.producer_biomass.total() > 0.000001:
+		errors.append("biome: empty producer field nucleated without a seed")
+	var mat_position := Vector2(48.0, 48.0)
+	mat_probe.producer_biomass.add_nearest_world(mat_position, 0.40)
+	var seeded_before: float = mat_probe.producer_biomass.total()
+	mat_probe._advance_producer_mat(1.0)
+	if mat_probe.producer_biomass.total() <= seeded_before:
+		errors.append("biome: seeded producer mat failed to grow")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)

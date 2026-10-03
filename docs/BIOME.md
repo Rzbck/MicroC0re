@@ -404,3 +404,13 @@ Shader coordinates are spatially stable. There is no global frame-swapping anima
 Action/reaction FX use a compact shared 7x7 atlas at the same source-pixel scale: division, adhesion, reproduction, pursuit, feeding, digestion, stress and lysis.
 
 Issue #61 owns this game-art presentation layer. Issue #57 owns migration to a GPU-resident path.
+
+
+## 2026-10-03 renderer/simulation audit
+
+Two concrete faults were found after the black/no-biome recordings:
+
+- Godot `Polygon2D` only builds its UV vertex data when a valid texture is assigned. The shader quads had custom UV arrays but no texture, so their shaders effectively sampled the same mask corner across the whole polygon. The renderer now assigns a 1x1 opaque UV-driver texture solely to make the intended 0..1 UVs reach the shaders.
+- producer-mat growth previously omitted the biomass term in its logistic growth law, allowing zero-biomass cells to create producers spontaneously. Growth now requires an existing seed, while a very small diffusion term provides slow spatial spread. Seed sources, explicit microalgae and phototrophic bacteria can establish/strengthen producer material.
+
+The visual consequence should be stable water plus slowly changing, spatially attributable ecological patches rather than either a black dish or full-screen animated wallpaper.
