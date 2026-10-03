@@ -21,7 +21,10 @@ const ANGLE_STEPS := 32.0
 const OVERVIEW_FADE_START := 1.04
 const OVERVIEW_FADE_END := 1.42
 const DETAIL_LOD_SCALE := 2.10
-const WHEEL_ZOOM_FACTOR := 1.12
+const WHEEL_ZOOM_FACTOR := 1.10
+const FOCUS_CAMERA_RESPONSE := 9.0
+const FOCUS_ZOOM_RESPONSE := 7.0
+const FOCUS_MIN_MULTIPLIER := 2.65
 
 const LINEAGE_PALETTE := [
 	Color(0.38, 0.82, 0.42, 1.0),
@@ -58,6 +61,8 @@ var field_refresh_accumulator: float = 0.0
 var inspector_refresh_accumulator: float = 0.0
 var selected_id: int = -1
 var selected_kind: String = ""
+var follow_selected: bool = false
+var focus_zoom_target: float = -1.0
 var menu_pause_previous: bool = false
 
 var sim_ms: float = 0.0
@@ -130,6 +135,8 @@ func _start_simulation(seed_value: int) -> void:
 	accumulator = 0.0
 	selected_id = -1
 	selected_kind = ""
+	follow_selected = false
+	focus_zoom_target = -1.0
 	if ui != null:
 		ui.hide_inspector()
 
@@ -164,12 +171,14 @@ func _setup_ui() -> void:
 	ui.reset_requested.connect(_menu_reset)
 	ui.new_seed_requested.connect(_menu_new_seed)
 	ui.quit_requested.connect(_menu_quit)
+	ui.inspector_close_requested.connect(_clear_selection)
 
 
 func _process(delta: float) -> void:
 	visual_time += delta
 	if ui == null or not ui.is_menu_open():
 		_handle_keyboard_pan(delta)
+		_update_selection_camera(delta)
 	_clamp_camera_to_world()
 
 	var sim_start: int = Time.get_ticks_usec()
@@ -234,8 +243,10 @@ func _draw() -> void:
 	_draw_ciliates()
 	_draw_microalgae()
 	_draw_decomposers()
+	_draw_life_state_cues()
 	_draw_active_feeding_links()
 	_draw_gene_transfers()
+	_draw_selection_focus()
 	draw_rect(world_rect, Color(0.18, 0.30, 0.27, 0.55), false, 0.28, false)
 
 	draw_ms = _smooth_metric(
@@ -333,18 +344,6 @@ func _draw_bacteria() -> void:
 		)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-		if selected_kind == "bacterium" and int(cell.id) == selected_id:
-			var marker_size: float = maxf(2.2, float(cell.length) * 0.72)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.94, 1.0, 0.72, 0.90),
-				false,
-				maxf(0.12, 0.85 / zoom_value),
-				false
-			)
 
 
 func _draw_gene_transfers() -> void:
@@ -471,18 +470,6 @@ func _draw_protozoa() -> void:
 				zoom_value
 			)
 
-		if selected_kind == "amoeba" and int(proto.id) == selected_id:
-			var marker_size: float = maxf(4.0, float(proto.radius) * 2.6)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.94, 1.0, 0.72, 0.90),
-				false,
-				maxf(0.12, 0.85 / zoom_value),
-				false
-			)
 
 
 func _draw_ciliates() -> void:
@@ -582,18 +569,6 @@ func _draw_ciliates() -> void:
 				zoom_value
 			)
 
-		if selected_kind == "ciliate" and int(ciliate.id) == selected_id:
-			var marker_size: float = maxf(3.4, float(ciliate.radius) * 2.5)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.94, 1.0, 0.72, 0.90),
-				false,
-				maxf(0.12, 0.85 / zoom_value),
-				false
-			)
 
 
 func _draw_microalgae() -> void:
@@ -683,18 +658,6 @@ func _draw_microalgae() -> void:
 				zoom_value
 			)
 
-		if selected_kind == "alga" and int(alga.id) == selected_id:
-			var marker_size: float = maxf(2.7, float(alga.radius) * 2.6)
-			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.94, 1.0, 0.72, 0.90),
-				false,
-				maxf(0.12, 0.85 / zoom_value),
-				false
-			)
 
 
 func _draw_decomposers() -> void:
@@ -778,18 +741,122 @@ func _draw_decomposers() -> void:
 				zoom_value
 			)
 
-		if selected_kind == "yeast" and int(yeast.id) == selected_id:
-			var marker_size: float = maxf(2.8, float(yeast.radius) * 2.6)
+
+
+func _draw_life_state_cues() -> void:
+	if sim == null or camera == null:
+		return
+	var visible_rect: Rect2 = _visible_world_rect().grow(6.0)
+	var zoom_value: float = camera.zoom.x
+	if zoom_value < _minimum_camera_zoom() * 1.18:
+		return
+	var px: float = maxf(0.10, 0.72 / zoom_value)
+
+	# Division becomes a visible two-pole event instead of only a changed atlas.
+	for cell in sim.bacteria:
+		if not bool(cell.dividing):
+			continue
+		var p: Vector2 = Vector2(cell.position)
+		if not visible_rect.has_point(p):
+			continue
+		var axis: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
+		var separation: float = 0.8 + float(cell.division_progress) * 2.0
+		for side in [-1.0, 1.0]:
+			var q: Vector2 = p + axis * separation * side
+			var c := Color(0.78, 1.0, 0.54, 0.76)
+			draw_rect(Rect2(q - Vector2.ONE * px * 0.5, Vector2.ONE * px), c, true)
+
+	# Adhesion/EPS builders get a sparse matrix halo. This is presentation-only:
+	# the actual adhesion state remains owned by the simulation.
+	for cell in sim.bacteria:
+		if float(cell.adhesion_timer) <= 0.0:
+			continue
+		var p: Vector2 = Vector2(cell.position)
+		if not visible_rect.has_point(p):
+			continue
+		for i in range(4):
+			var phase: float = float(i) * TAU / 4.0 + visual_time * 0.9
+			var q: Vector2 = p + Vector2.RIGHT.rotated(phase) * (1.2 + px * 1.8)
+			var c := Color(0.30, 0.94, 0.72, 0.44)
+			draw_rect(Rect2(q - Vector2.ONE * px * 0.45, Vector2.ONE * px * 0.90), c, true)
+
+	# Reproduction cues for producer/decomposer guilds.
+	for alga in sim.microalgae:
+		if not bool(alga.reproducing):
+			continue
+		var p: Vector2 = Vector2(alga.position)
+		if visible_rect.has_point(p):
+			_draw_reproduction_orbit(p, float(alga.reproduction_progress), px, Color(0.62, 1.0, 0.42, 0.65))
+	for yeast in sim.decomposers:
+		if not bool(yeast.budding):
+			continue
+		var p: Vector2 = Vector2(yeast.position)
+		if visible_rect.has_point(p):
+			_draw_reproduction_orbit(p, float(yeast.budding_progress), px, Color(1.0, 0.68, 0.30, 0.65))
+
+
+func _draw_reproduction_orbit(
+	position: Vector2,
+	progress: float,
+	px: float,
+	color: Color
+) -> void:
+	var radius: float = 1.4 + clampf(progress, 0.0, 1.0) * 1.8
+	for i in range(4):
+		var phase: float = float(i) * TAU / 4.0 + visual_time * 1.4
+		var q: Vector2 = position + Vector2.RIGHT.rotated(phase) * radius
+		draw_rect(
+			Rect2(q - Vector2.ONE * px * 0.45, Vector2.ONE * px * 0.90),
+			color,
+			true
+		)
+
+
+func _draw_selection_focus() -> void:
+	if selected_id < 0 or camera == null:
+		return
+	var organism: Variant = _selected_organism()
+	if organism == null:
+		return
+
+	var p: Vector2 = Vector2(organism.position)
+	var px: float = maxf(0.10, 0.88 / camera.zoom.x)
+	var biological_size: float = 3.0
+	if selected_kind == "bacterium":
+		biological_size = maxf(2.4, float(organism.length) * 0.72)
+	else:
+		biological_size = maxf(3.0, float(organism.radius) * 2.15)
+	var r: float = biological_size * 0.72 + px * 2.0
+	var arm: float = px * 2.4
+	var pulse: float = 0.78 + 0.22 * sin(visual_time * 4.0)
+	var c := Color(0.88, 1.0, 0.70, 0.64 * pulse)
+
+	# Four pixel-art microscope brackets: no giant debug rectangle.
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			var corner := p + Vector2(r * sx, r * sy)
 			draw_rect(
-				Rect2(
-					position - Vector2(marker_size, marker_size) * 0.5,
-					Vector2(marker_size, marker_size)
-				),
-				Color(0.94, 1.0, 0.72, 0.90),
-				false,
-				maxf(0.12, 0.85 / zoom_value),
-				false
+				Rect2(corner + Vector2(-arm if sx > 0.0 else 0.0, -px * 0.5), Vector2(arm, px)),
+				c,
+				true
 			)
+			draw_rect(
+				Rect2(corner + Vector2(-px * 0.5, -arm if sy > 0.0 else 0.0), Vector2(px, arm)),
+				c,
+				true
+			)
+
+	# A short trailing focus wake makes motion easy to perceive while tracking.
+	var axis: Vector2 = Vector2.RIGHT.rotated(float(organism.angle))
+	for i in range(3):
+		var distance: float = r + px * (2.0 + float(i) * 2.0)
+		var q: Vector2 = p - axis * distance
+		var wake := Color(0.64, 0.92, 0.88, 0.28 - float(i) * 0.07)
+		draw_rect(
+			Rect2(q - Vector2.ONE * px * 0.38, Vector2.ONE * px * 0.76),
+			wake,
+			true
+		)
 
 
 func _overview_sprite_blend(zoom_value: float) -> float:
@@ -1079,30 +1146,36 @@ func _refresh_field_texture() -> void:
 				1.0
 			)
 
-			var n: float = sqrt(nutrient_value)
-			var w: float = sqrt(waste_value)
-			var o: float = sqrt(oxygen_value)
-			var d: float = sqrt(detritus_value)
-			var e: float = sqrt(eps_value)
-			var cue: float = sqrt(cue_value)
-			var p: float = sqrt(producer_value)
+			# Avoid sqrt() here: it amplified tiny background concentrations until
+			# the entire biome became one flat green debug wash. High-value patches
+			# now dominate while low background concentrations recede.
+			var n: float = pow(nutrient_value, 1.10)
+			var w: float = pow(waste_value, 0.90)
+			var o: float = pow(oxygen_value, 1.25)
+			var d: float = pow(detritus_value, 0.72)
+			var e: float = pow(eps_value, 0.78)
+			var cue: float = pow(cue_value, 0.62)
+			var p: float = pow(producer_value, 1.08)
+			var shimmer: float = 0.94 + 0.06 * sin(
+				simulation_time * 1.15 + float(x) * 0.37 + float(y) * 0.23
+			)
 
 			field_image.set_pixel(
 				x,
 				y,
 				Color(
 					clampf(
-						0.004 + n * 0.018 + w * 0.13 + d * 0.28 + cue * 0.50,
+						0.006 + n * 0.025 + w * 0.16 + d * 0.34 + cue * 0.58,
 						0.0,
 						1.0
 					),
 					clampf(
-						0.009 + n * 0.19 + o * 0.070 + p * 0.32 + e * 0.15 + d * 0.07,
+						(0.012 + n * 0.11 + o * 0.055 + p * 0.38 + e * 0.11 + d * 0.08) * shimmer,
 						0.0,
 						1.0
 					),
 					clampf(
-						0.014 + n * 0.08 + o * 0.18 + w * 0.08 + e * 0.20 + cue * 0.08,
+						(0.020 + n * 0.13 + o * 0.20 + w * 0.10 + e * 0.24 + cue * 0.10) * shimmer,
 						0.0,
 						1.0
 					),
@@ -1167,6 +1240,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			or mouse_button.button_index == MOUSE_BUTTON_MIDDLE
 		):
 			dragging_camera = mouse_button.pressed
+			if mouse_button.pressed:
+				follow_selected = false
+				focus_zoom_target = -1.0
 			get_viewport().set_input_as_handled()
 			return
 
@@ -1219,15 +1295,22 @@ func _zoom_at_screen_position(screen_position: Vector2, factor: float) -> void:
 	if is_equal_approx(old_zoom, new_zoom):
 		return
 
-	var world_under_cursor: Vector2 = (
-		camera.position
-		+ (screen_position - viewport_center) / old_zoom
-	)
-	camera.zoom = Vector2(new_zoom, new_zoom)
-	camera.position = (
-		world_under_cursor
-		- (screen_position - viewport_center) / new_zoom
-	)
+	if follow_selected:
+		camera.zoom = Vector2(new_zoom, new_zoom)
+		focus_zoom_target = -1.0
+		var organism: Variant = _selected_organism()
+		if organism != null:
+			camera.position = Vector2(organism.position)
+	else:
+		var world_under_cursor: Vector2 = (
+			camera.position
+			+ (screen_position - viewport_center) / old_zoom
+		)
+		camera.zoom = Vector2(new_zoom, new_zoom)
+		camera.position = (
+			world_under_cursor
+			- (screen_position - viewport_center) / new_zoom
+		)
 	_clamp_camera_to_world()
 
 
@@ -1285,6 +1368,13 @@ func _select_nearest_organism(world_position: Vector2) -> void:
 
 	selected_id = best_id
 	selected_kind = best_kind
+	follow_selected = true
+	var minimum_zoom: float = _minimum_camera_zoom()
+	focus_zoom_target = clampf(
+		maxf(camera.zoom.x, minimum_zoom * FOCUS_MIN_MULTIPLIER),
+		minimum_zoom,
+		MAX_ZOOM
+	)
 	var organism: Variant = _selected_organism()
 	if organism != null and ui != null:
 		ui.show_inspector(
@@ -1326,6 +1416,8 @@ func _selected_organism() -> Variant:
 func _clear_selection() -> void:
 	selected_id = -1
 	selected_kind = ""
+	follow_selected = false
+	focus_zoom_target = -1.0
 	if ui != null:
 		ui.hide_inspector()
 
@@ -1347,221 +1439,139 @@ func _inspector_title(organism: Variant) -> String:
 
 
 func _inspector_body(organism: Variant) -> String:
-	if selected_kind == "bacterium":
-		var state: String = "motile"
-		if bool(organism.dying):
-			state = "lysis"
-		elif bool(organism.dividing):
-			state = "fission"
-		elif int(organism.engulfed_by_id) >= 0:
-			state = "engulfed"
-		elif int(organism.transfer_role) == 1:
-			state = "HGT donor"
-		elif int(organism.transfer_role) == 2:
-			state = "HGT receiver"
-		elif float(organism.adhesion_timer) > 0.0:
-			state = "adhering"
+	var state: String = _compact_state_text(organism)
+	var energy: float = float(organism.energy)
+	var generation: int = int(organism.generation)
+	var age: float = float(organism.age)
+	var lineage: int = int(organism.lineage_id)
+	var trait_line: String = ""
 
-		var text: String = (
-			"%s | %s | E %.2f | L %.2f\n"
-			+ "g%d  parent %d  lineage %d  age %.1fs\n"
-			+ "speed %.2f  chemo %.2f  uptake %.2f\n"
-			+ "growth %.2f  size %.2f  tumble %.2f\n"
-			+ "adh %.2f  mut %.3f\n"
-			+ "flag %d  pili %d\n"
-			+ "DNA %s\nHGT %d  transfer %.0f%%"
-		) % [
-			state,
-			String(organism.guild_name()),
-			float(organism.energy),
-			float(organism.length),
-			int(organism.generation),
-			int(organism.parent_id),
-			int(organism.lineage_id),
-			float(organism.age),
-			float(organism.gene_speed),
-			float(organism.gene_chemotaxis),
-			float(organism.gene_uptake),
-			float(organism.gene_growth),
-			float(organism.gene_size),
-			float(organism.gene_tumble),
-			float(organism.gene_adhesion),
-			float(organism.mutation_rate),
-			int(organism.flagella_count),
-			int(organism.pili_count),
-			String(organism.plasmid_names()),
-			int(organism.hgt_events),
-			float(organism.transfer_progress) * 100.0,
-		]
-		return text + _local_biome_text(Vector2(organism.position))
+	match selected_kind:
+		"bacterium":
+			trait_line = "%s  spd %.1f  adh %.1f" % [
+				String(organism.guild_name()),
+				float(organism.gene_speed),
+				float(organism.gene_adhesion),
+			]
+		"amoeba":
+			trait_line = "hunt %.1f  engulf %.1f" % [
+				float(organism.gene_perception),
+				float(organism.gene_engulf),
+			]
+		"ciliate":
+			trait_line = "spd %.1f  capture %.1f" % [
+				float(organism.gene_speed),
+				float(organism.gene_capture),
+			]
+		"alga":
+			trait_line = "photo %.1f  growth %.1f" % [
+				float(organism.gene_light_use),
+				float(organism.gene_growth),
+			]
+		"yeast":
+			trait_line = "det %.1f  mineral %.1f" % [
+				float(organism.gene_detritus),
+				float(organism.gene_mineralize),
+			]
 
-	if selected_kind == "amoeba":
-		var state: String = (
-			"feeding #%d" % int(organism.feeding_target_id)
-			if int(organism.feeding_target_id) >= 0
-			else "hunting"
-		)
-		if bool(organism.dying):
-			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
-		elif int(organism.feeding_target_id) < 0 and float(organism.energy) < 2.2:
-			state = "starving"
-
-		var text: String = (
-			"%s | E %.2f | R %.2f\n"
-			+ "g%d  parent %d  lineage %d  age %.1fs\n"
-			+ "feed %.0f%%  speed %.2f  sense %.2f\n"
-			+ "engulf %.2f  size %.2f  metab %.2f\n"
-			+ "mutation %.3f"
-		) % [
-			state,
-			float(organism.energy),
-			float(organism.radius),
-			int(organism.generation),
-			int(organism.parent_id),
-			int(organism.lineage_id),
-			float(organism.age),
-			float(organism.feeding_progress) * 100.0,
-			float(organism.gene_speed),
-			float(organism.gene_perception),
-			float(organism.gene_engulf),
-			float(organism.gene_size),
-			float(organism.gene_metabolism),
-			float(organism.mutation_rate),
-		]
-		return text + _local_biome_text(Vector2(organism.position))
-
-	if selected_kind == "ciliate":
-		var state: String = (
-			"feeding #%d" % int(organism.feeding_target_id)
-			if int(organism.feeding_target_id) >= 0
-			else "grazing"
-		)
-		if int(organism.engulfed_by_id) >= 0:
-			state = "being engulfed %.0f%%" % (
-				float(organism.engulf_progress) * 100.0
-			)
-		elif bool(organism.dying):
-			state = "dying %.0f%%" % (float(organism.lysis_progress) * 100.0)
-		elif int(organism.feeding_target_id) < 0 and float(organism.energy) < 1.8:
-			state = "starving"
-
-		var text: String = (
-			"%s | E %.2f | R %.2f\n"
-			+ "g%d  parent %d  lineage %d  age %.1fs\n"
-			+ "feed %.0f%%  speed %.2f  sense %.2f\n"
-			+ "capture %.2f  size %.2f  metab %.2f\n"
-			+ "mutation %.3f"
-		) % [
-			state,
-			float(organism.energy),
-			float(organism.radius),
-			int(organism.generation),
-			int(organism.parent_id),
-			int(organism.lineage_id),
-			float(organism.age),
-			float(organism.feeding_progress) * 100.0,
-			float(organism.gene_speed),
-			float(organism.gene_perception),
-			float(organism.gene_capture),
-			float(organism.gene_size),
-			float(organism.gene_metabolism),
-			float(organism.mutation_rate),
-		]
-		return text + _local_biome_text(Vector2(organism.position))
-
-	if selected_kind == "alga":
-		var state: String = "photosynthesizing"
-		if int(organism.engulfed_by_id) >= 0:
-			state = "being grazed %.0f%%" % (
-				float(organism.engulf_progress) * 100.0
-			)
-		elif bool(organism.dying):
-			state = "lysing %.0f%%" % (
-				float(organism.lysis_progress) * 100.0
-			)
-		elif bool(organism.reproducing):
-			state = "dividing %.0f%%" % (
-				float(organism.reproduction_progress) * 100.0
-			)
-
-		var text: String = (
-			"%s | E %.2f | R %.2f\n"
-			+ "g%d  parent %d  lineage %d  age %.1fs\n"
-			+ "light %.2f  growth %.2f  size %.2f\n"
-			+ "exudate %.2f  drift %.2f  mut %.3f"
-		) % [
-			state,
-			float(organism.energy),
-			float(organism.radius),
-			int(organism.generation),
-			int(organism.parent_id),
-			int(organism.lineage_id),
-			float(organism.age),
-			float(organism.gene_light_use),
-			float(organism.gene_growth),
-			float(organism.gene_size),
-			float(organism.gene_exudate),
-			float(organism.gene_drift),
-			float(organism.mutation_rate),
-		]
-		return text + _local_biome_text(Vector2(organism.position))
-
-	if selected_kind == "yeast":
-		var state: String = "decomposing"
-		if int(organism.engulfed_by_id) >= 0:
-			state = "being grazed %.0f%%" % (
-				float(organism.engulf_progress) * 100.0
-			)
-		elif bool(organism.dying):
-			state = "lysing %.0f%%" % (
-				float(organism.lysis_progress) * 100.0
-			)
-		elif bool(organism.budding):
-			state = "budding %.0f%%" % (
-				float(organism.budding_progress) * 100.0
-			)
-
-		var text: String = (
-			"%s | E %.2f | R %.2f\n"
-			+ "g%d  parent %d  lineage %d  age %.1fs\n"
-			+ "detritus %.2f  mineral %.2f  growth %.2f\n"
-			+ "size %.2f  metab %.2f  mut %.3f"
-		) % [
-			state,
-			float(organism.energy),
-			float(organism.radius),
-			int(organism.generation),
-			int(organism.parent_id),
-			int(organism.lineage_id),
-			float(organism.age),
-			float(organism.gene_detritus),
-			float(organism.gene_mineralize),
-			float(organism.gene_growth),
-			float(organism.gene_size),
-			float(organism.gene_metabolism),
-			float(organism.mutation_rate),
-		]
-		return text + _local_biome_text(Vector2(organism.position))
-
-	return ""
-
-func _local_biome_text(position: Vector2) -> String:
-	if sim == null:
-		return ""
 	return (
-		"\n\nLOCAL BIOME\n"
-		+ "light     %.3f\nnutrient  %.3f\noxygen    %.3f\n"
-		+ "detritus  %.3f\nEPS       %.3f\ndamage    %.3f\n"
-		+ "producer  %.3f"
+		"%s   E %.2f\n"
+		+ "g%d  age %.1fs  line %d\n"
+		+ "%s\n"
+		+ "%s"
 	) % [
+		state,
+		energy,
+		generation,
+		age,
+		lineage,
+		trait_line,
+		_compact_biome_text(Vector2(organism.position)),
+	]
+
+
+func _compact_state_text(organism: Variant) -> String:
+	match selected_kind:
+		"bacterium":
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if bool(organism.dividing):
+				return "FISSION %.0f%%" % (float(organism.division_progress) * 100.0)
+			if int(organism.engulfed_by_id) >= 0:
+				return "ENGULFED %.0f%%" % (float(organism.engulf_progress) * 100.0)
+			if int(organism.transfer_role) != 0:
+				return "HGT %.0f%%" % (float(organism.transfer_progress) * 100.0)
+			if float(organism.adhesion_timer) > 0.0:
+				return "ADHERING"
+			if float(organism.energy) < 0.95:
+				return "STARVING"
+			return "MOTILE"
+		"amoeba":
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if int(organism.feeding_target_id) >= 0:
+				return "ENGULF %.0f%%" % (float(organism.feeding_progress) * 100.0)
+			if float(organism.energy) < 2.2:
+				return "STARVING"
+			return "HUNTING"
+		"ciliate":
+			if int(organism.engulfed_by_id) >= 0:
+				return "PREY %.0f%%" % (float(organism.engulf_progress) * 100.0)
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if int(organism.feeding_target_id) >= 0:
+				return "FEED %.0f%%" % (float(organism.feeding_progress) * 100.0)
+			if float(organism.energy) < 1.8:
+				return "STARVING"
+			return "GRAZING"
+		"alga":
+			if int(organism.engulfed_by_id) >= 0:
+				return "GRAZED %.0f%%" % (float(organism.engulf_progress) * 100.0)
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if bool(organism.reproducing):
+				return "DIVIDE %.0f%%" % (float(organism.reproduction_progress) * 100.0)
+			return "PHOTOSYNTH"
+		"yeast":
+			if int(organism.engulfed_by_id) >= 0:
+				return "GRAZED %.0f%%" % (float(organism.engulf_progress) * 100.0)
+			if bool(organism.dying):
+				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if bool(organism.budding):
+				return "BUD %.0f%%" % (float(organism.budding_progress) * 100.0)
+			return "DECOMPOSE"
+	return "ALIVE"
+
+
+func _compact_biome_text(position: Vector2) -> String:
+	return "L %.2f N %.2f O2 %.2f\nD %.2f EPS %.2f DMG %.2f" % [
 		float(sim.sample_light(position)),
 		float(sim.nutrient.sample_world(position)),
 		float(sim.oxygen.sample_world(position)),
 		float(sim.detritus.sample_world(position)),
 		float(sim.eps.sample_world(position)),
 		float(sim.damage_cue.sample_world(position)),
-		float(sim.producer_biomass.sample_world(position)),
 	]
+
+
+func _update_selection_camera(delta: float) -> void:
+	if not follow_selected or selected_id < 0 or camera == null:
+		return
+	var organism: Variant = _selected_organism()
+	if organism == null:
+		_clear_selection()
+		return
+
+	var alpha: float = 1.0 - exp(-FOCUS_CAMERA_RESPONSE * delta)
+	camera.position = camera.position.lerp(Vector2(organism.position), alpha)
+
+	if focus_zoom_target > 0.0:
+		var zoom_alpha: float = 1.0 - exp(-FOCUS_ZOOM_RESPONSE * delta)
+		var next_zoom: float = lerpf(camera.zoom.x, focus_zoom_target, zoom_alpha)
+		camera.zoom = Vector2(next_zoom, next_zoom)
+		if absf(next_zoom - focus_zoom_target) < 0.01:
+			camera.zoom = Vector2(focus_zoom_target, focus_zoom_target)
+			focus_zoom_target = -1.0
 
 
 func _open_menu() -> void:
@@ -1628,6 +1638,8 @@ func _handle_keyboard_pan(delta: float) -> void:
 	if direction.length_squared() <= 0.0:
 		return
 
+	follow_selected = false
+	focus_zoom_target = -1.0
 	direction = direction.normalized()
 	var pan_speed: float = 170.0 / maxf(camera.zoom.x, 0.08)
 	camera.position += direction * pan_speed * delta
@@ -1684,6 +1696,8 @@ func _fit_camera() -> void:
 	if camera == null or sim == null:
 		return
 
+	follow_selected = false
+	focus_zoom_target = -1.0
 	var fit_zoom: float = _minimum_camera_zoom()
 	camera.position = Vector2(sim.world_size) * 0.5
 	camera.zoom = Vector2(fit_zoom, fit_zoom)

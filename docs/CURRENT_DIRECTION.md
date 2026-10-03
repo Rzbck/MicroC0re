@@ -119,6 +119,8 @@ Required:
 
 The simulation view should read as artwork first, not as a developer dashboard.
 
+A click is also a microscope focus action: the selected organism should be centered and followed while it moves. Manual pan or Fit exits follow mode. The compact inspector must remain a small annotation card rather than occupying a major fraction of the scene.
+
 Required:
 - no permanent FPS/debug/status block in the microscope view;
 - no F1 debug overlay as the primary interface;

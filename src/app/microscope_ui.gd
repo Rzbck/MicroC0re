@@ -5,6 +5,7 @@ signal fit_requested
 signal reset_requested
 signal new_seed_requested
 signal quit_requested
+signal inspector_close_requested
 
 var root_control: Control
 var menu_overlay: ColorRect
@@ -40,10 +41,10 @@ func _panel_style(alpha: float = 0.94) -> StyleBoxFlat:
 	style.corner_radius_top_right = 3
 	style.corner_radius_bottom_left = 3
 	style.corner_radius_bottom_right = 3
-	style.content_margin_left = 6.0
-	style.content_margin_right = 6.0
-	style.content_margin_top = 6.0
-	style.content_margin_bottom = 6.0
+	style.content_margin_left = 3.0
+	style.content_margin_right = 3.0
+	style.content_margin_top = 3.0
+	style.content_margin_bottom = 3.0
 	return style
 
 
@@ -123,52 +124,56 @@ func _build_menu() -> void:
 
 
 func _build_inspector() -> void:
+	# The viewport is authored at 640x360 and then scaled to the desktop window.
+	# Keep this card intentionally tiny in internal pixels so it stays discreet
+	# at 1280x720, 1440p and ultrawide desktop scales.
 	inspector_panel = PanelContainer.new()
 	inspector_panel.name = "OrganismInspector"
 	inspector_panel.anchor_left = 0.0
 	inspector_panel.anchor_top = 0.0
 	inspector_panel.anchor_right = 0.0
-	inspector_panel.anchor_bottom = 1.0
-	inspector_panel.offset_left = 8.0
-	inspector_panel.offset_top = 8.0
-	inspector_panel.offset_right = 226.0
 	inspector_panel.anchor_bottom = 0.0
-	inspector_panel.offset_bottom = 382.0
+	inspector_panel.offset_left = 4.0
+	inspector_panel.offset_top = 4.0
+	inspector_panel.offset_right = 148.0
+	inspector_panel.offset_bottom = 112.0
 	inspector_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.97))
+	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.90))
 	inspector_panel.visible = false
 	root_control.add_child(inspector_panel)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 3)
+	box.add_theme_constant_override("separation", 1)
 	inspector_panel.add_child(box)
 
 	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 2)
 	box.add_child(header)
 
 	inspector_title = Label.new()
 	inspector_title.text = "ORGANISM"
 	inspector_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inspector_title.add_theme_font_size_override("font_size", 10)
+	inspector_title.clip_text = true
+	inspector_title.add_theme_font_size_override("font_size", 7)
 	inspector_title.add_theme_color_override("font_color", Color(0.75, 0.96, 0.88))
 	header.add_child(inspector_title)
 
 	var close := Button.new()
 	close.text = "×"
-	close.custom_minimum_size = Vector2(22.0, 20.0)
-	close.pressed.connect(hide_inspector)
+	close.custom_minimum_size = Vector2(14.0, 14.0)
+	close.focus_mode = Control.FOCUS_NONE
+	close.add_theme_font_size_override("font_size", 8)
+	close.pressed.connect(_emit_inspector_close)
 	header.add_child(close)
-
-	var separator := HSeparator.new()
-	box.add_child(separator)
 
 	inspector_body = RichTextLabel.new()
 	inspector_body.bbcode_enabled = false
 	inspector_body.fit_content = false
-	inspector_body.scroll_active = true
-	inspector_body.selection_enabled = true
+	inspector_body.scroll_active = false
+	inspector_body.selection_enabled = false
+	inspector_body.autowrap_mode = TextServer.AUTOWRAP_OFF
 	inspector_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_body.add_theme_font_size_override("normal_font_size", 8)
+	inspector_body.add_theme_font_size_override("normal_font_size", 6)
 	inspector_body.add_theme_color_override("default_color", Color(0.76, 0.84, 0.82))
 	box.add_child(inspector_body)
 
@@ -224,3 +229,7 @@ func _emit_new_seed() -> void:
 
 func _emit_quit() -> void:
 	quit_requested.emit()
+
+
+func _emit_inspector_close() -> void:
+	inspector_close_requested.emit()

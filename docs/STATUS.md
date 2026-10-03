@@ -101,6 +101,11 @@ Local Windows / RTX 5080 validation at `58e8b0f`:
 - feeding, killing, death and recycling are technically present but not yet visually convincing.
 
 Immediate active correction:
+- selection now enters a centered camera-follow state, with manual pan/Fit as explicit escape;
+- inspector is being reduced from the rejected ~218x374 internal panel to a ~144x108 compact watch card;
+- selected organisms use a pixel microscope bracket reticle + motion wake rather than a raw rectangle;
+- biome compositing is being rebalanced away from the flat green sqrt-amplified wash toward localized niches;
+- division, adhesion, reproduction and feeding receive additional presentation-only event cues;
 - bound visible-app catch-up work so slow ticks cannot trigger a multi-step freeze spiral;
 - cross-fade overview markers into sprites rather than hard-swapping LOD;
 - use small far silhouettes instead of one-square-pixel bacteria;
