@@ -51,4 +51,5 @@ jobs:
         run: godot --headless --path . --import --quit
 
       - name: Run deterministic smoke test
-        run: godot --headless --path . --script res://tests/smoke_test.gd
+        shell: pwsh
+        run: ./scripts/run_headless.ps1

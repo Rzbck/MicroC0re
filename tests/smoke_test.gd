@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 # Compile the visible app stack during every headless smoke run so renderer
 # script parse errors cannot survive until the manual GUI test.
 const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
@@ -19,6 +20,9 @@ const DT := 1.0 / 60.0
 
 
 func _init() -> void:
+	var errors := PackedStringArray()
+	_validate_preloaded_scripts(errors)
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
@@ -27,8 +31,6 @@ func _init() -> void:
 	for _i in range(STEPS):
 		first.step(DT)
 		second.step(DT)
-
-	var errors := PackedStringArray()
 
 	# Regression: ciliate prey lookup must remain generic after capture.
 	# Otherwise algae/yeast can become permanently "engulfed" after the
@@ -217,6 +219,31 @@ func _init() -> void:
 		for message in errors:
 			push_error(message)
 		quit(1)
+
+
+func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
+	var required_scripts: Array = [
+		["petri_simulation", PetriSimulationScript],
+		["bacterium", BacteriumScript],
+		["pixel_microscope", PixelMicroscopeScript],
+		["pixel_microbe_atlas", PixelAtlasScript],
+		["far_multimesh_renderer", FarMultiMeshRendererScript],
+		["protozoan", ProtozoanScript],
+		["ciliate", CiliateScript],
+		["microalga", MicroalgaScript],
+		["decomposer_yeast", DecomposerYeastScript],
+		["pixel_protozoa_atlas", PixelProtozoaAtlasScript],
+		["pixel_ciliate_atlas", PixelCiliateAtlasScript],
+		["pixel_ecology_atlas", PixelEcologyAtlasScript],
+	]
+
+	for entry in required_scripts:
+		var script_name: String = String(entry[0])
+		var script: Variant = entry[1]
+		if script == null:
+			errors.append("preload: %s script is null" % script_name)
+		elif not script.can_instantiate():
+			errors.append("preload: %s script cannot instantiate" % script_name)
 
 
 func _finite_vector(value: Vector2) -> bool:

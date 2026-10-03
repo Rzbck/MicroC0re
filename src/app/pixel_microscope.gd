@@ -1,6 +1,7 @@
 extends Node2D
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const PixelBackgroundScript = preload("res://src/app/pixel_background.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
