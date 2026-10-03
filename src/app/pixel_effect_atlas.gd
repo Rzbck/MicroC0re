@@ -59,7 +59,7 @@ func _draw(image: Image, kind: int, frame: int) -> void:
 				_px(image,p.x,p.y,Color(1.0,0.70,0.30,0.92) if i == posmod(frame+1,ring.size()) else Color(0.82,0.38,0.22,0.60))
 			_px(image,3,3,Color(1.0,0.70,0.30,0.92))
 		EFFECT_LYSIS:
-			var spread: int = 1 + frame / 2
+			var spread: int = 1 + floori(float(frame) / 2.0)
 			_px(image,3,3,Color(0.60,0.11,0.08,0.58))
 			_px(image,3-spread,2,Color(1.0,0.34,0.14,0.90))
 			_px(image,3+spread,4,Color(1.0,0.34,0.14,0.90))

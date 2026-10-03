@@ -1608,15 +1608,15 @@ func _menu_quit() -> void:
 
 func _reset_same_seed() -> void:
 	_start_simulation(current_seed)
-	_setup_field_texture()
-	_refresh_field_texture()
+	if biome_renderer != null:
+		biome_renderer.refresh_from_sim(sim)
 	_fit_camera()
 
 
 func _new_seed() -> void:
 	_start_simulation(current_seed + 1)
-	_setup_field_texture()
-	_refresh_field_texture()
+	if biome_renderer != null:
+		biome_renderer.refresh_from_sim(sim)
 	_fit_camera()
 
 
