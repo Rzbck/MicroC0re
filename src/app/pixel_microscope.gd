@@ -12,6 +12,7 @@ const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
+const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
@@ -50,6 +51,7 @@ var ecology_atlas: Variant
 var biome_renderer: Node2D
 var effect_atlas: Variant
 var dna_atlas: Variant
+var hypha_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
 var current_seed: int = 1337
@@ -96,6 +98,7 @@ func _ready() -> void:
 	ecology_atlas = PixelEcologyAtlasScript.new()
 	effect_atlas = PixelEffectAtlasScript.new()
 	dna_atlas = PixelDNAAtlasScript.new()
+	hypha_atlas = PixelHyphaAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -248,6 +251,7 @@ func _draw() -> void:
 	_draw_flagellates()
 	_draw_microalgae()
 	_draw_decomposers()
+	_draw_hyphae()
 	_draw_extracellular_dna()
 	_draw_life_state_cues()
 	_draw_active_feeding_links()
@@ -823,6 +827,94 @@ func _draw_decomposers() -> void:
 				zoom_value
 			)
 
+
+
+func _draw_hyphae() -> void:
+	if sim == null or hypha_atlas == null or camera == null:
+		return
+	var visible_rect: Rect2 = _visible_world_rect().grow(5.0)
+	var sprite_blend: float = _overview_sprite_blend(camera.zoom.x)
+
+	for colony in sim.hyphae:
+		if colony.nodes.is_empty():
+			continue
+		if not visible_rect.has_point(Vector2(colony.position)):
+			var any_visible: bool = false
+			for node in colony.nodes:
+				if visible_rect.has_point(Vector2(node)):
+					any_visible = true
+					break
+			if not any_visible:
+				continue
+
+		if sprite_blend < 0.999:
+			_draw_overview_marker(
+				Vector2(colony.position),
+				3.0 + sqrt(float(colony.nodes.size())),
+				1.4,
+				Color(0.86, 0.72, 0.42, 0.88),
+				1.0 - sprite_blend
+			)
+		if sprite_blend <= 0.001:
+			continue
+
+		var child_counts: Array[int] = []
+		child_counts.resize(colony.nodes.size())
+		child_counts.fill(0)
+		for node_index in range(1, colony.nodes.size()):
+			var parent_index: int = int(colony.parents[node_index])
+			if parent_index >= 0 and parent_index < child_counts.size():
+				child_counts[parent_index] += 1
+
+		var colony_color := Color(0.92, 0.78, 0.48, sprite_blend)
+		if bool(colony.dying):
+			var death: float = clampf(float(colony.lysis_progress), 0.0, 1.0)
+			colony_color = Color(0.72, 0.36, 0.20, (1.0 - death * 0.78) * sprite_blend)
+
+		for node_index in range(1, colony.nodes.size()):
+			var parent_index: int = int(colony.parents[node_index])
+			if parent_index < 0 or parent_index >= colony.nodes.size():
+				continue
+			var a: Vector2 = colony.nodes[parent_index]
+			var b: Vector2 = colony.nodes[node_index]
+			var delta: Vector2 = b - a
+			if delta.length_squared() <= 0.000001:
+				continue
+			var texture: Texture2D = hypha_atlas.get_texture(
+				PixelHyphaAtlasScript.KIND_SEGMENT,
+				node_index
+			)
+			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
+			size.x = maxf(size.x, delta.length() + SPRITE_WORLD_PIXEL)
+			var angle_step: float = TAU / 24.0
+			var angle: float = roundf(delta.angle() / angle_step) * angle_step
+			draw_set_transform(a.lerp(b, 0.5), angle, Vector2.ONE)
+			draw_texture_rect(
+				texture,
+				Rect2(-size * 0.5, size),
+				false,
+				colony_color
+			)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		for node_index in range(colony.nodes.size()):
+			var is_tip: bool = colony.tips.has(node_index)
+			var is_junction: bool = child_counts[node_index] > 1
+			if not is_tip and not is_junction:
+				continue
+			var kind: int = (
+				PixelHyphaAtlasScript.KIND_TIP
+				if is_tip
+				else PixelHyphaAtlasScript.KIND_JUNCTION
+			)
+			var texture: Texture2D = hypha_atlas.get_texture(kind, node_index)
+			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
+			draw_texture_rect(
+				texture,
+				Rect2(Vector2(colony.nodes[node_index]) - size * 0.5, size),
+				false,
+				colony_color
+			)
 
 
 func _draw_extracellular_dna() -> void:
@@ -1512,6 +1604,15 @@ func _select_nearest_organism(world_position: Vector2) -> void:
 			best_id = int(yeast.id)
 			best_kind = "yeast"
 
+	for colony in sim.hyphae:
+		for node in colony.nodes:
+			var distance: float = Vector2(node).distance_to(world_position)
+			var radius: float = maxf(base_radius, 1.35)
+			if distance <= radius and distance < best_distance:
+				best_distance = distance
+				best_id = int(colony.id)
+				best_kind = "hypha"
+
 	if best_id < 0:
 		_clear_selection()
 		return
@@ -1565,6 +1666,11 @@ func _selected_organism() -> Variant:
 			if int(yeast.id) == selected_id:
 				return yeast
 
+	if selected_kind == "hypha":
+		for colony in sim.hyphae:
+			if int(colony.id) == selected_id:
+				return colony
+
 	return null
 
 
@@ -1591,6 +1697,8 @@ func _inspector_title(organism: Variant) -> String:
 			return "MICROALGA  #%d" % int(organism.id)
 		"yeast":
 			return "DECOMPOSER  #%d" % int(organism.id)
+		"hypha":
+			return "HYPHA  #%d" % int(organism.id)
 		_:
 			return "ORGANISM"
 
@@ -1635,6 +1743,12 @@ func _inspector_body(organism: Variant) -> String:
 			trait_line = "det %.1f  mineral %.1f" % [
 				float(organism.gene_detritus),
 				float(organism.gene_mineralize),
+			]
+		"hypha":
+			trait_line = "nodes %d enz %.1f br %.1f" % [
+				organism.nodes.size(),
+				float(organism.gene_enzyme),
+				float(organism.gene_branch),
 			]
 
 	return (
@@ -1709,6 +1823,12 @@ func _compact_state_text(organism: Variant) -> String:
 			if bool(organism.reproducing):
 				return "DIVIDE %.0f%%" % (float(organism.reproduction_progress) * 100.0)
 			return "PHOTOSYNTH"
+		"hypha":
+			if bool(organism.dying):
+				return "DECAY %.0f%%" % (float(organism.lysis_progress) * 100.0)
+			if float(organism.energy) < 1.0:
+				return "STARVING"
+			return "BRANCHING"
 		"yeast":
 			if int(organism.engulfed_by_id) >= 0:
 				return "GRAZED %.0f%%" % (float(organism.engulf_progress) * 100.0)

@@ -486,3 +486,20 @@ Predation now acts on existing visible/costly bacterial phenotypes rather than a
 - amoeba engulfment, ciliate capture and flagellate capture traits counter these defences.
 
 The trade-offs already exist in the same phenotypes: matrix secretion costs energy and reduces mobility, larger cells pay drag/maintenance costs, and dormancy sacrifices growth. Predator capture/engulfment genes already mutate, creating a first explicit eco-evolutionary arms race.
+
+
+## Filamentous hyphal decomposer slice (#54)
+
+The decomposer guild now includes true bounded branching hyphal colonies in addition to budding yeast-like cells.
+
+- each colony is a resource-driven node graph, capped at 24 nodes;
+- tips sample/consume local detritus and bias growth toward detrital gradients;
+- branching only occurs when substrate/energy support it;
+- tips secrete an extracellular fungal-enzyme field;
+- enzyme converts part of particulate detritus into dissolved nutrient and labile exudate, feeding bacteria and producers;
+- colony maintenance scales with network size;
+- starved colonies decay and recycle their network back into detritus/damage;
+- mature energetic colonies can sporulate into a new bounded colony;
+- yeast and hyphae therefore compete for detritus while creating different cross-feeding structures.
+
+Rendering uses cached segment/tip/junction pixel assets at the same 0.25-world-unit source-pixel scale; the visible branching pattern comes from the real growth graph, not decorative procedural lines.

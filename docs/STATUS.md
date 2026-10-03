@@ -131,6 +131,7 @@ Previous 2026-10-02 observations:
 - inspector remains scrollable and now exposes local biome values.
 
 ### Living biome
+- fungal enzyme field converts detrital substrate into dissolved nutrient/exudate around real hyphal tips;
 - new exudate field links microalgae, phototrophic bacteria, decomposers and heterotrophic uptake;
 - deterministic succession cycle now alternates local resource pulses, washout and organic-fall events;
 - disturbances act on biome fields, creating bloom/recolonization/scavenger opportunities without scripted species replacement;

@@ -13,6 +13,7 @@ const CiliateScript = preload("res://src/simulation/ciliate.gd")
 const FlagellateScript = preload("res://src/simulation/flagellate.gd")
 const MicroalgaScript = preload("res://src/simulation/microalga.gd")
 const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
+const HyphalColonyScript = preload("res://src/simulation/hyphal_colony.gd")
 const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
 const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
@@ -22,6 +23,7 @@ const WaterBackgroundShader = preload("res://src/app/shaders/water_background.gd
 const BiomeMaterialShader = preload("res://src/app/shaders/biome_material.gdshader")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
+const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
@@ -210,6 +212,8 @@ func _init() -> void:
 		errors.append("ecology: explicit microalgae guild disappeared during smoke")
 	if first.decomposers.is_empty():
 		errors.append("ecology: decomposer guild disappeared during smoke")
+	if first.hyphae.is_empty():
+		errors.append("ecology: hyphal decomposer guild disappeared during smoke")
 	if first.bacteria.size() > 420:
 		errors.append("population guard: bacterial hard ceiling exceeded")
 	if first.protozoa.size() > 18:
@@ -222,6 +226,8 @@ func _init() -> void:
 		errors.append("population guard: microalgae hard ceiling exceeded")
 	if first.decomposers.size() > 48:
 		errors.append("population guard: decomposer hard ceiling exceeded")
+	if first.hyphae.size() > 6:
+		errors.append("population guard: hyphal colony ceiling exceeded")
 
 	if first.nutrient.min_value() < -0.000001:
 		errors.append("nutrient: negative concentration detected")
@@ -242,12 +248,27 @@ func _init() -> void:
 		errors.append("biome: negative exudate detected")
 	if first.quorum_signal.min_value() < -0.000001:
 		errors.append("biome: negative quorum signal detected")
+	if first.fungal_enzyme.min_value() < -0.000001:
+		errors.append("biome: negative fungal enzyme detected")
 	if first.producer_biomass.total() <= 0.0:
 		errors.append("biome: producer mat disappeared")
 	if first.exudate.total() <= 0.0:
 		errors.append("ecology: cross-feeding exudate field remained empty")
 	if first.quorum_signal.total() <= 0.0:
 		errors.append("ecology: quorum signal field remained empty")
+	if first.fungal_enzyme.total() <= 0.0:
+		errors.append("ecology: fungal enzyme field remained empty")
+
+	for colony in first.hyphae:
+		if not _finite_vector(colony.position) or not is_finite(float(colony.energy)):
+			errors.append("ecology: invalid hyphal colony state %d" % colony.id)
+		if colony.nodes.size() > 24:
+			errors.append("population guard: hyphal node ceiling exceeded")
+		if colony.nodes.size() != colony.parents.size():
+			errors.append("ecology: malformed hyphal graph %d" % colony.id)
+		for node in colony.nodes:
+			if not _finite_vector(Vector2(node)):
+				errors.append("ecology: non-finite hyphal node %d" % colony.id)
 
 	var ids := {}
 	var saw_genotype_variation: bool = false
@@ -369,7 +390,7 @@ func _init() -> void:
 
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d hyphae=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
@@ -378,6 +399,7 @@ func _init() -> void:
 				first.flagellates.size(),
 				first.microalgae.size(),
 				first.decomposers.size(),
+				first.hyphae.size(),
 				first.nutrient.total(),
 				first.oxygen.total(),
 				first.detritus.total(),
@@ -406,6 +428,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["flagellate", FlagellateScript],
 		["microalga", MicroalgaScript],
 		["decomposer_yeast", DecomposerYeastScript],
+		["hyphal_colony", HyphalColonyScript],
 		["pixel_protozoa_atlas", PixelProtozoaAtlasScript],
 		["pixel_ciliate_atlas", PixelCiliateAtlasScript],
 		["pixel_flagellate_atlas", PixelFlagellateAtlasScript],
@@ -413,6 +436,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["biome_material_renderer", BiomeMaterialRendererScript],
 		["pixel_effect_atlas", PixelEffectAtlasScript],
 		["pixel_dna_atlas", PixelDNAAtlasScript],
+		["pixel_hypha_atlas", PixelHyphaAtlasScript],
 	]
 
 	for entry in required_scripts:

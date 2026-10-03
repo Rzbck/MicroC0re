@@ -9,6 +9,7 @@ const CiliateScript = preload("res://src/simulation/ciliate.gd")
 const FlagellateScript = preload("res://src/simulation/flagellate.gd")
 const MicroalgaScript = preload("res://src/simulation/microalga.gd")
 const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
+const HyphalColonyScript = preload("res://src/simulation/hyphal_colony.gd")
 
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
@@ -29,6 +30,8 @@ const CILIATE_SAFETY_LIMIT := 16
 const FLAGELLATE_SAFETY_LIMIT := 28
 const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
+const HYPHAL_COLONY_SAFETY_LIMIT := 6
+const HYPHAL_NODE_SAFETY_LIMIT := 24
 const DNA_FRAGMENT_SAFETY_LIMIT := 64
 
 const DISTURBANCE_RESOURCE_PULSE := 0
@@ -52,12 +55,14 @@ var damage_cue: Variant
 var producer_biomass: Variant
 var exudate: Variant
 var quorum_signal: Variant
+var fungal_enzyme: Variant
 var bacteria: Array = []
 var protozoa: Array = []
 var ciliates: Array = []
 var flagellates: Array = []
 var microalgae: Array = []
 var decomposers: Array = []
+var hyphae: Array = []
 var dna_fragments: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
@@ -234,6 +239,18 @@ var decomposer_maintenance: float = 0.032
 var decomposer_budding_energy: float = 5.2
 var decomposer_budding_duration: float = 0.85
 
+# True bounded hyphal decomposers. Colonies grow a small branching node graph
+# toward detrital substrate and secrete a local extracellular enzyme field.
+var fungal_enzyme_diffusion: float = 0.42
+var fungal_enzyme_decay: float = 0.16
+var fungal_enzyme_release_rate: float = 0.035
+var fungal_polymer_conversion_rate: float = 0.22
+var hypha_growth_interval: float = 0.65
+var hypha_growth_step: float = 1.65
+var hypha_tip_detritus_rate: float = 0.050
+var hypha_maintenance_per_node: float = 0.0017
+var hypha_sporulation_energy: float = 9.2
+
 
 func _init(seed_value: int = 1) -> void:
 	fixed_seed = seed_value
@@ -247,6 +264,7 @@ func _init(seed_value: int = 1) -> void:
 	producer_biomass = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	exudate = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	quorum_signal = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
+	fungal_enzyme = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	_grid_head.resize(GRID_CELL_COUNT)
 	_grid_head.fill(-1)
 	_build_sources()
@@ -259,6 +277,7 @@ func seed_demo(count: int = 36) -> void:
 	flagellates.clear()
 	microalgae.clear()
 	decomposers.clear()
+	hyphae.clear()
 	dna_fragments.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
@@ -283,6 +302,7 @@ func seed_demo(count: int = 36) -> void:
 	producer_biomass.fill(0.0)
 	exudate.fill(0.0)
 	quorum_signal.fill(0.0)
+	fungal_enzyme.fill(0.0)
 	_prime_environment()
 
 	for _i in range(maxi(0, count)):
@@ -401,6 +421,21 @@ func seed_demo(count: int = 36) -> void:
 		flagellate.energy = rng.randf_range(3.8, 4.8)
 		flagellates.append(flagellate)
 
+	# Two bounded filamentous decomposers start on particulate patches. Their
+	# visible network only expands if local substrate can pay its growth cost.
+	for hypha_index in range(2):
+		var hypha_root: Vector2 = nutrient_sources[
+			(hypha_index * 3 + 1) % nutrient_sources.size()
+		]
+		var colony: Variant = HyphalColonyScript.new(
+			_allocate_id(),
+			hypha_root,
+			rng.randf_range(0.0, TAU)
+		)
+		colony.configure_founder(rng)
+		colony.energy = rng.randf_range(4.4, 5.4)
+		hyphae.append(colony)
+
 	# Explicit producer cells complement the continuum producer mat. They are
 	# slow drifting microalgae-like cells that oxygenate the local water and
 	# can be grazed by protists.
@@ -475,6 +510,13 @@ func step(dt: float) -> void:
 			)
 			eps.diffuse(eps_diffusion, SLOW_BIOME_DT, eps_decay)
 			exudate.diffuse(exudate_diffusion, SLOW_BIOME_DT, exudate_decay)
+			fungal_enzyme.diffuse(
+				fungal_enzyme_diffusion,
+				SLOW_BIOME_DT,
+				fungal_enzyme_decay
+			)
+			_advance_fungal_decomposition(SLOW_BIOME_DT)
+			_advance_hyphae(SLOW_BIOME_DT)
 			quorum_signal.diffuse(
 				quorum_diffusion,
 				SLOW_BIOME_DT,
@@ -925,6 +967,212 @@ func _constrain_small_organism(organism: Variant) -> void:
 	position.x = clampf(position.x, margin, world_size.x - margin)
 	position.y = clampf(position.y, margin, world_size.y - margin)
 	organism.position = position
+
+
+func _advance_hyphae(dt: float) -> void:
+	var next_hyphae: Array = []
+	var available_colonies: int = maxi(
+		0,
+		HYPHAL_COLONY_SAFETY_LIMIT - hyphae.size()
+	)
+
+	for colony in hyphae:
+		if bool(colony.dying):
+			colony.lysis_progress = minf(
+				1.0,
+				float(colony.lysis_progress) + dt / 2.4
+			)
+			if float(colony.lysis_progress) >= 1.0:
+				for node in colony.nodes:
+					detritus.add_radial_world(Vector2(node), 2.2, 0.020)
+					damage_cue.add_radial_world(Vector2(node), 2.6, 0.010)
+			else:
+				next_hyphae.append(colony)
+			continue
+
+		colony.age = float(colony.age) + dt
+		colony.cooldown = maxf(0.0, float(colony.cooldown) - dt)
+		colony.visual_phase = wrapf(float(colony.visual_phase) + dt * 0.45, 0.0, TAU)
+		colony.growth_accumulator = float(colony.growth_accumulator) + dt
+
+		var total_consumed: float = 0.0
+		for tip_index in colony.tips:
+			if int(tip_index) < 0 or int(tip_index) >= colony.nodes.size():
+				continue
+			var tip_position: Vector2 = colony.nodes[int(tip_index)]
+			fungal_enzyme.add_radial_world(
+				tip_position,
+				2.8,
+				fungal_enzyme_release_rate
+				* float(colony.gene_enzyme)
+				* dt
+			)
+			total_consumed += float(
+				detritus.take_nearest_world(
+					tip_position,
+					hypha_tip_detritus_rate
+					* float(colony.gene_efficiency)
+					* dt
+				)
+			)
+
+		if total_consumed > 0.0:
+			colony.energy = (
+				float(colony.energy)
+				+ total_consumed * 4.5 * float(colony.gene_efficiency)
+			)
+			exudate.add_radial_world(
+				Vector2(colony.position),
+				4.0,
+				total_consumed * 0.12
+			)
+
+		colony.energy = (
+			float(colony.energy)
+			- hypha_maintenance_per_node
+			* float(colony.nodes.size())
+			* dt
+		)
+
+		if float(colony.energy) <= 0.0:
+			colony.energy = 0.0
+			colony.begin_lysis()
+			next_hyphae.append(colony)
+			continue
+
+		if (
+			float(colony.growth_accumulator)
+			>= hypha_growth_interval / maxf(0.55, float(colony.gene_growth))
+			and colony.nodes.size() < HYPHAL_NODE_SAFETY_LIMIT
+			and float(colony.energy) > 0.75
+		):
+			colony.growth_accumulator = 0.0
+			_grow_hyphal_colony(colony)
+
+		if (
+			available_colonies > 0
+			and colony.nodes.size() >= 12
+			and float(colony.energy) >= hypha_sporulation_energy
+			and float(colony.age) >= 24.0
+			and float(colony.cooldown) <= 0.0
+		):
+			var daughter: Variant = _sporulate_hypha(colony)
+			if daughter != null:
+				next_hyphae.append(daughter)
+				available_colonies -= 1
+
+		next_hyphae.append(colony)
+
+	hyphae = next_hyphae
+
+
+func _grow_hyphal_colony(colony: Variant) -> void:
+	if colony.tips.is_empty():
+		return
+
+	var best_tip_index: int = int(colony.tips[0])
+	var best_signal: float = -INF
+	for tip_index in colony.tips:
+		var tip_position: Vector2 = colony.nodes[int(tip_index)]
+		var signal: float = float(detritus.sample_world(tip_position))
+		if signal > best_signal:
+			best_signal = signal
+			best_tip_index = int(tip_index)
+
+	var origin: Vector2 = colony.nodes[best_tip_index]
+	var gradient: Vector2 = Vector2(detritus.gradient_world(origin))
+	var direction: Vector2
+	if gradient.length_squared() > 0.000001:
+		direction = gradient.normalized()
+	else:
+		var phase: float = (
+			float(colony.id) * 0.73
+			+ float(colony.nodes.size()) * 2.17
+			+ float(colony.generation) * 0.41
+		)
+		direction = Vector2(cos(phase), sin(phase))
+
+	var jitter_phase: float = (
+		float(colony.id + colony.nodes.size() * 19) * 0.31
+	)
+	direction = direction.rotated(sin(jitter_phase) * 0.34)
+	var step: float = hypha_growth_step * (0.86 + 0.14 * float(colony.gene_growth))
+	var new_position: Vector2 = origin + direction * step
+	new_position.x = clampf(new_position.x, 1.0, world_size.x - 1.0)
+	new_position.y = clampf(new_position.y, 1.0, world_size.y - 1.0)
+	var new_index: int = colony.add_node(best_tip_index, new_position)
+	if new_index < 0:
+		return
+
+	colony.energy = maxf(0.0, float(colony.energy) - 0.075 * step)
+	fungal_enzyme.add_radial_world(new_position, 2.6, 0.018 * float(colony.gene_enzyme))
+
+	# Branching is deterministic from colony/node identity and only occurs when
+	# energy/substrate support it; this is a resource rule, not a cosmetic fork.
+	var branch_gate: float = (
+		0.17
+		* float(colony.gene_branch)
+		* clampf(best_signal * 4.0 + float(colony.energy) / 8.0, 0.0, 1.0)
+	)
+	var branch_roll: float = _stable_event_roll(
+		int(colony.id),
+		colony.nodes.size() * 37,
+		floori(simulation_time * 10.0)
+	)
+	if (
+		branch_roll < branch_gate
+		and colony.nodes.size() < HYPHAL_NODE_SAFETY_LIMIT
+		and float(colony.energy) > 1.2
+	):
+		var branch_direction: Vector2 = direction.rotated(
+			(0.72 if branch_roll < branch_gate * 0.5 else -0.72)
+		)
+		var branch_position: Vector2 = origin + branch_direction * step * 0.92
+		branch_position.x = clampf(branch_position.x, 1.0, world_size.x - 1.0)
+		branch_position.y = clampf(branch_position.y, 1.0, world_size.y - 1.0)
+		colony.add_branch(best_tip_index, branch_position)
+		colony.energy = maxf(0.0, float(colony.energy) - 0.065 * step)
+
+
+func _advance_fungal_decomposition(dt: float) -> void:
+	for i in range(detritus.values.size()):
+		var substrate: float = float(detritus.values[i])
+		var enzyme_value: float = float(fungal_enzyme.values[i])
+		if substrate <= 0.000001 or enzyme_value <= 0.000001:
+			continue
+		var converted: float = minf(
+			substrate,
+			fungal_polymer_conversion_rate
+			* substrate
+			* clampf(enzyme_value, 0.0, 1.5)
+			* dt
+		)
+		if converted <= 0.0:
+			continue
+		detritus.values[i] = maxf(0.0, substrate - converted)
+		nutrient.values[i] = maxf(0.0, float(nutrient.values[i]) + converted * 0.34)
+		exudate.values[i] = maxf(0.0, float(exudate.values[i]) + converted * 0.22)
+
+
+func _sporulate_hypha(parent: Variant) -> Variant:
+	if parent.tips.is_empty():
+		return null
+	var tip_index: int = int(parent.tips[posmod(parent.id + parent.generation, parent.tips.size())])
+	var root: Vector2 = parent.nodes[tip_index]
+	var phase: float = float(parent.id * 17 + parent.generation * 31) * 0.21
+	root += Vector2(cos(phase), sin(phase)) * 4.5
+	root.x = clampf(root.x, 2.0, world_size.x - 2.0)
+	root.y = clampf(root.y, 2.0, world_size.y - 2.0)
+	var daughter: Variant = HyphalColonyScript.new(
+		_allocate_id(),
+		root,
+		wrapf(float(parent.visual_phase) + 1.7, 0.0, TAU)
+	)
+	daughter.inherit_and_mutate(parent, rng)
+	daughter.energy = float(parent.energy) * 0.28
+	parent.energy = float(parent.energy) * 0.62
+	parent.cooldown = 8.0
+	return daughter
 
 
 func _advance_flagellates(dt: float) -> void:
@@ -2891,6 +3139,12 @@ func _prime_environment() -> void:
 		producer_biomass.add_radial_world(source, 12.0, 0.72)
 		oxygen.add_radial_world(source, 14.0, 0.55)
 
+	# Small initial particulate patches give decomposers a real substrate before
+	# the first mortality event; they are resources, not permanent source nodes.
+	for i in range(2):
+		var detrital_source: Vector2 = nutrient_sources[(i * 3 + 1) % nutrient_sources.size()]
+		detritus.add_radial_world(detrital_source, 8.0, 0.22)
+
 
 func _build_sources() -> void:
 	nutrient_sources = [
@@ -3356,6 +3610,7 @@ func state_signature() -> String:
 	parts.append("prod:%.5f" % producer_biomass.total())
 	parts.append("exu:%.5f" % exudate.total())
 	parts.append("sig:%.5f" % quorum_signal.total())
+	parts.append("enz:%.5f" % fungal_enzyme.total())
 	parts.append("dna:%d" % dna_fragments.size())
 	parts.append(
 		"dist:%d:%.3f:%d:%.3f:%.3f"
@@ -3372,6 +3627,7 @@ func state_signature() -> String:
 	parts.append("f:%d" % flagellates.size())
 	parts.append("a:%d" % microalgae.size())
 	parts.append("y:%d" % decomposers.size())
+	parts.append("h:%d" % hyphae.size())
 
 	for cell in bacteria:
 		parts.append(
@@ -3506,6 +3762,33 @@ func state_signature() -> String:
 				1 if bool(yeast.consumed) else 0,
 			]
 		)
+
+	for colony in hyphae:
+		parts.append(
+			"h%d:g%d:%.4f:%.4f:n%d:t%d:d%d:lp%.3f"
+			% [
+				int(colony.id),
+				int(colony.generation),
+				float(colony.energy),
+				float(colony.gene_enzyme),
+				colony.nodes.size(),
+				colony.tips.size(),
+				1 if bool(colony.dying) else 0,
+				float(colony.lysis_progress),
+			]
+		)
+		for node_index in range(colony.nodes.size()):
+			var node: Vector2 = colony.nodes[node_index]
+			parts.append(
+				"hn%d:%d:%.4f:%.4f:p%d"
+				% [
+					int(colony.id),
+					node_index,
+					node.x,
+					node.y,
+					int(colony.parents[node_index]),
+				]
+			)
 
 	for fragment in dna_fragments:
 		parts.append(
