@@ -101,6 +101,7 @@ var eps_secretion_rate: float = 0.0045
 var water_flow_strength: float = 0.42
 var diel_cycle_seconds: float = 180.0
 var night_light_floor: float = 0.12
+var producer_self_shading_strength: float = 0.90
 
 # Motility / chemotaxis.
 var run_speed: float = 11.0
@@ -1983,7 +1984,16 @@ func _build_sources() -> void:
 	]
 
 
+func sample_light(position: Vector2) -> float:
+	return _sample_light(position)
+
+
 func _sample_light(position: Vector2) -> float:
+	var biomass: float = float(producer_biomass.sample_world(position))
+	return _apply_producer_shading(_ambient_light(position), biomass)
+
+
+func _ambient_light(position: Vector2) -> float:
 	var normalized_y: float = clampf(position.y / world_size.y, 0.0, 1.0)
 	var vertical: float = lerpf(1.0, 0.38, normalized_y)
 	var daylight: float = (
@@ -2001,6 +2011,16 @@ func _sample_light(position: Vector2) -> float:
 	return clampf(vertical * daylight + ripple, 0.04, 1.0)
 
 
+func _apply_producer_shading(light_value: float, biomass: float) -> float:
+	# Qualitative self-shading: dense producer mats attenuate the light seen by
+	# producers living in the same patch. A rational attenuation keeps the CPU
+	# reference cheap and leaves a direct GPU-friendly equivalent for #57.
+	var transmittance: float = 1.0 / (
+		1.0 + producer_self_shading_strength * clampf(biomass, 0.0, 1.0)
+	)
+	return clampf(light_value * transmittance, 0.025, 1.0)
+
+
 func _light_value_for_index(index: int) -> float:
 	var x: int = index % FIELD_WIDTH
 	var y: int = floori(float(index) / float(FIELD_WIDTH))
@@ -2008,8 +2028,10 @@ func _light_value_for_index(index: int) -> float:
 		(float(x) + 0.5) * FIELD_CELL_SIZE,
 		(float(y) + 0.5) * FIELD_CELL_SIZE
 	)
-	return _sample_light(position)
-
+	return _apply_producer_shading(
+		_ambient_light(position),
+		float(producer_biomass.values[index])
+	)
 
 func _water_flow(position: Vector2) -> Vector2:
 	# Small deterministic aqueous current. It gives the biome a water phase

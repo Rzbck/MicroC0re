@@ -23,6 +23,19 @@ func _init() -> void:
 	var errors := PackedStringArray()
 	_validate_preloaded_scripts(errors)
 
+	# Regression: dense producer biomass must reduce local effective light.
+	# This is a biome feedback, not a renderer-only tint.
+	var shade_probe = PetriSimulationScript.new(99173)
+	var shade_position := Vector2(21.0, 21.0)
+	shade_probe.producer_biomass.fill(0.0)
+	var open_light: float = float(shade_probe.sample_light(shade_position))
+	shade_probe.producer_biomass.add_nearest_world(shade_position, 1.0)
+	var shaded_light: float = float(shade_probe.sample_light(shade_position))
+	if shaded_light >= open_light * 0.80:
+		errors.append("biome: producer self-shading did not attenuate local light")
+	if shaded_light <= 0.0 or not is_finite(shaded_light):
+		errors.append("biome: producer self-shading produced invalid light")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)

@@ -609,7 +609,13 @@ func _draw_microalgae() -> void:
 		var texture_size: Vector2 = texture.get_size() * (
 			0.26 + float(alga.radius) * 0.018
 		)
-		var color := Color(0.52, 1.0, 0.46, 1.0)
+		var local_light: float = float(sim.sample_light(position))
+		var color := Color(
+			0.34 + local_light * 0.18,
+			0.62 + local_light * 0.38,
+			0.28 + local_light * 0.18,
+			1.0
+		)
 
 		if float(alga.engulf_progress) > 0.0:
 			var p: float = clampf(float(alga.engulf_progress), 0.0, 1.0)
@@ -1350,9 +1356,11 @@ func _local_biome_text(position: Vector2) -> String:
 		return ""
 	return (
 		"\n\nLOCAL BIOME\n"
-		+ "nutrient  %.3f\noxygen    %.3f\ndetritus  %.3f\n"
-		+ "EPS       %.3f\ndamage    %.3f\nproducer  %.3f"
+		+ "light     %.3f\nnutrient  %.3f\noxygen    %.3f\n"
+		+ "detritus  %.3f\nEPS       %.3f\ndamage    %.3f\n"
+		+ "producer  %.3f"
 	) % [
+		float(sim.sample_light(position)),
 		float(sim.nutrient.sample_world(position)),
 		float(sim.oxygen.sample_world(position)),
 		float(sim.detritus.sample_world(position)),

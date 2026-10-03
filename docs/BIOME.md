@@ -125,12 +125,16 @@ A deterministic spatial light gradient currently drives producer activity and ph
 
 Current:
 - deterministic 180 s day/night light cycle;
-- producer activity and phototroph energy gain follow the cycle.
+- producer activity and phototroph energy gain follow the cycle;
+- dense producer biomass attenuates local effective light, creating self-shading;
+- explicit microalgae visibly dim as local light falls.
+
+The self-shading law is a qualitative ALife attenuation model, documented in `docs/MATH.md`; it is not presented as a calibrated optical model for a specific taxon or water column.
 
 Future #56:
-- self-shading;
 - oxygen/redox oscillation;
-- diel migration/dormancy.
+- diel migration/dormancy;
+- richer depth/colony optics if later measurements justify them.
 
 ## Current bacterial ecotypes
 

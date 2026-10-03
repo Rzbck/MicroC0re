@@ -119,6 +119,7 @@ Observed:
 - scavenger ecotypes/plasmid carriers chemotax toward detritus/damage plumes;
 - water-current advection affects all current mobile organism classes;
 - a deterministic 180 s diel light cycle drives producer activity and oxygenation;
+- producer mats now self-shade, reducing effective light for dense producer patches; explicit microalgae visibly respond to local light;
 - renderer composites nutrient, waste, oxygen, producers, EPS, detritus and damage plumes.
 
 ### Functional diversity
