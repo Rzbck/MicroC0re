@@ -43,6 +43,7 @@ var physical_burrow: float = 0.0
 var physical_climb: float = 0.0
 var physical_oviposit: float = 0.0
 var physical_armor: float = 0.0
+var capability_mix_events: int = 0
 
 func _init(p_id: int, root: Vector2, p_phase: float = 0.0) -> void:
 	id = p_id

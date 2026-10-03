@@ -346,3 +346,12 @@ Based on the maintainer capture rather than code inspection alone:
 - visible 3D morphology exposes digging, oviposition potential, armor and
   below-surface burrow depth;
 - legacy 2D microscope remains in-tree but is no longer the main scene.
+
+
+## Cross-family physical recombination
+- disappearing organisms can leave one bounded mobile capability cassette;
+- cassettes are visible in the 3D world and decay after a short lifetime;
+- every organism family can evolve an assimilation module;
+- successful uptake merges the donor physical module into the recipient's
+  variable-length capability genome;
+- transfer is capped, local, deterministic and energetically costly.

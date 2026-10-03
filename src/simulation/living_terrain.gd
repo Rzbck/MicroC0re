@@ -20,6 +20,16 @@ var revision: int = 0
 var excavated_total: float = 0.0
 var deposited_total: float = 0.0
 
+# Bounded mobile physical cassettes. When an organism disappears, one sampled
+# capability module can remain in the environment for a short time. Any current
+# family with enough evolved assimilation expression can acquire it.
+const CAPABILITY_FRAGMENT_LIMIT := 64
+const CAPABILITY_FRAGMENT_LIFETIME := 22.0
+var capability_fragments: Array = []
+var _known_agents: Dictionary = {}
+var _fragment_scan_accumulator: float = 0.0
+var _next_fragment_id: int = 1
+
 
 func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -> void:
 	fixed_seed = seed_value
@@ -124,11 +134,194 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 	_advance_group(sim, sim.decomposers, dt, true)
 	_advance_group(sim, sim.hyphae, dt, false)
 
+	_advance_capability_fragments(sim, dt)
+
 	_relax_accumulator += dt
 	if _relax_accumulator >= 0.10:
 		var relax_dt: float = _relax_accumulator
 		_relax_accumulator = 0.0
 		_relax_slopes(relax_dt)
+
+
+
+func _advance_capability_fragments(sim: Variant, dt: float) -> void:
+	_fragment_scan_accumulator += dt
+	for fragment in capability_fragments:
+		fragment["age"] = float(fragment["age"]) + dt
+
+	var survivors: Array = []
+	for fragment in capability_fragments:
+		if float(fragment["age"]) < CAPABILITY_FRAGMENT_LIFETIME:
+			survivors.append(fragment)
+	capability_fragments = survivors
+
+	if _fragment_scan_accumulator < 0.20:
+		return
+	var scan_dt: float = _fragment_scan_accumulator
+	_fragment_scan_accumulator = 0.0
+
+	var agents: Array = _all_agents(sim)
+	var current: Dictionary = {}
+	for agent in agents:
+		if agent == null or bool(agent.dying) or agent.physical_genome == null:
+			continue
+		var agent_id: int = int(agent.id)
+		current[agent_id] = {
+			"position": Vector2(agent.position),
+			"module": agent.physical_genome.module_for_transfer(
+				agent_id + _terrain_tick
+			),
+		}
+
+	for old_id in _known_agents.keys():
+		if current.has(old_id):
+			continue
+		var record: Dictionary = _known_agents[old_id]
+		var module_data: Dictionary = (
+			record.get("module", {}) as Dictionary
+		)
+		if module_data.is_empty():
+			continue
+		if capability_fragments.size() >= CAPABILITY_FRAGMENT_LIMIT:
+			capability_fragments.pop_front()
+		capability_fragments.append({
+			"id": _next_fragment_id,
+			"source_id": int(old_id),
+			"position": Vector2(record["position"]),
+			"module": module_data.duplicate(true),
+			"age": 0.0,
+		})
+		_next_fragment_id += 1
+
+	_known_agents = current
+	if capability_fragments.is_empty():
+		return
+
+	var remaining: Array = []
+	for fragment in capability_fragments:
+		var recipient: Variant = _nearest_capability_recipient(
+			agents,
+			Vector2(fragment["position"]),
+			int(fragment["source_id"])
+		)
+		if recipient == null:
+			remaining.append(fragment)
+			continue
+
+		var signals: Array = [
+			1.0,
+			0.15,
+			0.0,
+			clampf(float(recipient.energy) / 4.0, 0.0, 1.0),
+			clampf(
+				float(sim.detritus.sample_world(
+					Vector2(recipient.position)
+				)) * 4.0,
+				0.0,
+				1.0
+			),
+			clampf(
+				float(sim.sample_light(Vector2(recipient.position))),
+				0.0,
+				1.0
+			),
+			0.30,
+		]
+		var assimilation: float = float(
+			recipient.physical_genome.expression(
+				PhysicalCapabilityGenomeScript.CAP_ASSIMILATE,
+				signals
+			)
+		)
+		var probability: float = clampf(
+			assimilation * 0.045 * scan_dt,
+			0.0,
+			0.16
+		)
+		var roll: float = _stable_roll(
+			int(fragment["id"]),
+			int(recipient.id),
+			_terrain_tick
+		)
+		if roll >= probability:
+			remaining.append(fragment)
+			continue
+
+		if recipient.physical_genome.integrate_module(
+			fragment["module"],
+			_seeded_event_rng(
+				int(fragment["id"]),
+				int(recipient.id)
+			)
+		):
+			recipient.capability_mix_events = (
+				int(recipient.capability_mix_events) + 1
+			)
+			recipient.energy = maxf(
+				0.0,
+				float(recipient.energy) - 0.08
+			)
+		else:
+			remaining.append(fragment)
+
+	capability_fragments = remaining
+
+
+func _nearest_capability_recipient(
+	agents: Array,
+	position: Vector2,
+	source_id: int
+) -> Variant:
+	var best: Variant = null
+	var best_distance_sq: float = 2.8 * 2.8
+	for agent in agents:
+		if (
+			agent == null
+			or bool(agent.dying)
+			or int(agent.id) == source_id
+			or agent.physical_genome == null
+		):
+			continue
+		var distance_sq: float = position.distance_squared_to(
+			Vector2(agent.position)
+		)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = agent
+	return best
+
+
+func _all_agents(sim: Variant) -> Array:
+	var agents: Array = []
+	agents.append_array(sim.bacteria)
+	agents.append_array(sim.protozoa)
+	agents.append_array(sim.ciliates)
+	agents.append_array(sim.flagellates)
+	agents.append_array(sim.microalgae)
+	agents.append_array(sim.decomposers)
+	agents.append_array(sim.hyphae)
+	return agents
+
+
+func _stable_roll(a: int, b: int, tick: int) -> float:
+	var value: int = a * 73856093
+	value ^= b * 19349663
+	value ^= tick * 83492791
+	value &= 0x7fffffff
+	return float(value % 1000003) / 1000003.0
+
+
+func _seeded_event_rng(a: int, b: int) -> RandomNumberGenerator:
+	var event_rng := RandomNumberGenerator.new()
+	event_rng.seed = (
+		int(fixed_seed) * 92821
+		+ a * 68917
+		+ b * 31337
+		+ _terrain_tick * 17
+	)
+	return event_rng
+
+
 
 
 func _advance_group(

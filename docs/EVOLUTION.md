@@ -252,3 +252,20 @@ potential and below-surface depth also alter visible 3D morphology.
 
 Explicit egg entities and true tunnel occupancy are phase 2 of #65; the
 evolvable capability representation is already in place for them.
+
+
+### Cross-family capability mixing
+
+#65 now includes a bounded environmental physical-cassette path. When an
+organism disappears, one sampled physical capability module may persist briefly
+as a local fragment. Any current organism family can assimilate that module if
+its own evolvable `CAP_ASSIMILATE` expression is high enough.
+
+This is an explicit artificial-life abstraction, not a claim that arbitrary
+real taxa horizontally transfer complete organs. Its game-design purpose is to
+let a physical innovation escape its original hard-coded family: a digging,
+armor, carrying or future construction module can become part of another
+lineage's variable-length capability program.
+
+Fragments are short-lived and capped at 64, assimilation costs energy, and the
+same deterministic seed/timestep determines the same transfer events.

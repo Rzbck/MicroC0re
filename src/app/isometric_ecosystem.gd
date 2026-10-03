@@ -32,6 +32,7 @@ var renderers: Dictionary = {}
 var dig_renderer: MultiMeshInstance3D
 var egg_renderer: MultiMeshInstance3D
 var armor_renderer: MultiMeshInstance3D
+var fragment_renderer: MultiMeshInstance3D
 var hud: Label
 
 var orbiting: bool = false
@@ -189,6 +190,11 @@ func _setup_agent_renderers() -> void:
 		"ArmorMorphology",
 		_sphere_mesh(0.68),
 		768
+	)
+	fragment_renderer = _make_renderer(
+		"CapabilityFragments",
+		_box_mesh(Vector3(0.26, 0.26, 0.26)),
+		64
 	)
 
 
@@ -517,6 +523,7 @@ func _update_agent_renderers() -> void:
 		6
 	)
 	_update_capability_morphology()
+	_update_capability_fragments()
 
 
 func _update_group(
@@ -718,6 +725,39 @@ func _update_capability_morphology() -> void:
 	dig_mm.visible_instance_count = dig_count
 	egg_mm.visible_instance_count = egg_count
 	armor_mm.visible_instance_count = armor_count
+
+
+func _update_capability_fragments() -> void:
+	var mm: MultiMesh = fragment_renderer.multimesh
+	var count: int = mini(
+		terrain.capability_fragments.size(),
+		mm.instance_count
+	)
+	mm.visible_instance_count = count
+	for i in range(count):
+		var fragment: Dictionary = terrain.capability_fragments[i]
+		var p: Vector2 = Vector2(fragment["position"])
+		var h: float = terrain.sample_height(p)
+		var pulse: float = 0.78 + 0.14 * sin(
+			float(int(fragment["id"]) * 11) + float(fragment["age"]) * 2.2
+		)
+		var scale := Vector3.ONE * pulse
+		var origin := Vector3(
+			p.x - float(sim.world_size.x) * 0.5,
+			h + 0.24,
+			p.y - float(sim.world_size.y) * 0.5
+		)
+		mm.set_instance_transform(
+			i,
+			Transform3D(
+				Basis.IDENTITY.scaled(scale),
+				origin
+			)
+		)
+		mm.set_instance_color(
+			i,
+			Color(0.62, 0.86, 0.78, 0.82)
+		)
 
 
 func _make_renderer(

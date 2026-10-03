@@ -8,7 +8,8 @@ const CAP_BURROW := 3
 const CAP_CLIMB := 4
 const CAP_OVIPOSIT := 5
 const CAP_ARMOR := 6
-const CAP_COUNT := 7
+const CAP_ASSIMILATE := 7
+const CAP_COUNT := 8
 
 const SENSOR_ALWAYS := 0
 const SENSOR_SLOPE := 1
@@ -116,6 +117,14 @@ func configure_founder(
 		p_rng.randf_range(0.01, egg_bias + 0.08),
 		SENSOR_ENERGY,
 		p_rng.randf_range(0.52, 0.84),
+		1,
+		_innovation(p_rng)
+	)
+	_add_module(
+		CAP_ASSIMILATE,
+		p_rng.randf_range(0.05, 0.24),
+		SENSOR_DETRITUS,
+		p_rng.randf_range(0.10, 0.62),
 		1,
 		_innovation(p_rng)
 	)

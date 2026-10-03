@@ -107,6 +107,28 @@ func _init() -> void:
 	if not saw_physical_structure:
 		errors.append("evolution: physical capability structural mutation absent")
 
+	var recipient_physical = PhysicalCapabilityGenomeScript.new()
+	recipient_physical.configure_founder(
+		physical_rng,
+		PhysicalCapabilityGenomeScript.PROFILE_PRODUCER
+	)
+	var donor_module := {
+		"kind": PhysicalCapabilityGenomeScript.CAP_DIG,
+		"strength": 1.7,
+		"sensor": PhysicalCapabilityGenomeScript.SENSOR_ALWAYS,
+		"threshold": 0.2,
+		"polarity": 1,
+		"innovation": 909090,
+	}
+	var module_count_before: int = recipient_physical.modules.size()
+	if not recipient_physical.integrate_module(
+		donor_module,
+		physical_rng
+	):
+		errors.append("evolution: cross-lineage physical module merge failed")
+	if recipient_physical.modules.size() < module_count_before:
+		errors.append("evolution: capability merge unexpectedly lost structure")
+
 		# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)
