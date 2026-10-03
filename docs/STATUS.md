@@ -35,6 +35,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #54 yeast / fungal decomposer guild
 - #56 day/night / diel oxygen cycle
 - #57 fused GPU multi-field biome compute
+- #60 living microscope watchability / cinematic observation
 
 ## REVIEW
 
@@ -51,6 +52,7 @@ When an agent cannot mutate Project V2 directly, use the connector-writable `sta
 - #46 compact organism inspector
 - #47 overview LOD consistency fix
 - #59 smooth LOD transitions / readable overview silhouettes — first cross-fade pass awaiting live review
+
 These Review items have passed GitHub Actions parse/smoke validation where applicable but still need maintainer live visual/behavior review.
 
 ## TODO
