@@ -50,6 +50,9 @@ jobs:
       - name: Import project
         run: godot --headless --path . --import --quit
 
+      - name: Check simulation parser directly
+        run: godot --headless --path . --script src/simulation/petri_simulation.gd --check-only
+
       - name: Run deterministic smoke test
         shell: pwsh
         run: ./scripts/run_headless.ps1
