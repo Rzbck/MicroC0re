@@ -455,3 +455,20 @@ The CPU-reference ecosystem now has a deterministic slow disturbance cycle, star
 - **organic fall**: a particulate detritus pulse favors decomposers/scavengers, then cross-feeders through mineralization/exudation.
 
 Event positions are derived from seed + event index without consuming the main simulation RNG, preserving deterministic mutation/predation streams. This creates colonization fronts, dormancy/wake cycles, producer recovery and changing trophic hotspots using the existing ecological mechanisms instead of scripted species replacement.
+
+
+## Natural transformation / extracellular DNA (#32)
+
+Bacterial lysis now releases a **bounded pool of extracellular DNA fragments** (hard ceiling 64). Each fragment carries one chromosomal trait sample plus donor-lineage similarity metadata.
+
+- competence is a heritable bacterial trait with a metabolic cost;
+- competence is induced by moderate starvation/damage stress, and is distinct from dormancy;
+- competent nearby cells can take up fragments;
+- lineage/color similarity modulates homologous recombination likelihood;
+- successful recombination partially pulls one recipient trait toward the donor value;
+- incompatible uptake is still worth a small nutrient return;
+- fragments drift slowly with water flow and decay after a bounded lifetime;
+- no plasmid module is transferred by this path, keeping natural transformation distinct from #31 conjugation;
+- extracellular DNA has a tiny cached pixel-art fragment asset visible only at close microscope zoom.
+
+The fragment pool is deliberately bounded and updated on the slow biome cadence so the feature does not become an unbounded particle system.

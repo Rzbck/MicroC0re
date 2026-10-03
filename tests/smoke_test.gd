@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 # Compile the visible app stack during every headless smoke run so renderer
 # script parse errors cannot survive until the manual GUI test.
@@ -20,6 +21,7 @@ const BiomeMaterialRendererScript = preload("res://src/app/biome_material_render
 const WaterBackgroundShader = preload("res://src/app/shaders/water_background.gdshader")
 const BiomeMaterialShader = preload("res://src/app/shaders/biome_material.gdshader")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
+const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
@@ -114,6 +116,33 @@ func _init() -> void:
 		errors.append("biome: washout failed to reduce EPS")
 	if succession_probe.detritus.total() <= 0.0:
 		errors.append("biome: washout failed to create detrital opportunity")
+
+	# Natural transformation regression: lysis DNA is bounded and recombination
+	# changes a compatible trait without using plasmid-conjugation state.
+	var transform_probe = PetriSimulationScript.new(9301)
+	transform_probe.seed_demo(2)
+	var donor = transform_probe.bacteria[0]
+	var recipient = transform_probe.bacteria[1]
+	donor.gene_speed = 1.62
+	recipient.gene_speed = 0.72
+	recipient.gene_competence = 1.5
+	var dna = DNAFragmentScript.new(
+		1,
+		Vector2(recipient.position),
+		int(donor.lineage_id),
+		float(recipient.lineage_hue),
+		DNAFragmentScript.TRAIT_SPEED,
+		float(donor.gene_speed)
+	)
+	var speed_before: float = float(recipient.gene_speed)
+	transform_probe._integrate_dna_fragment(recipient, dna)
+	if float(recipient.gene_speed) <= speed_before:
+		errors.append("evolution: transformation failed to recombine trait")
+	transform_probe.dna_fragments.clear()
+	for i in range(90):
+		transform_probe._release_dna_fragments(donor)
+	if transform_probe.dna_fragments.size() > 64:
+		errors.append("evolution: extracellular DNA safety ceiling exceeded")
 
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
@@ -237,6 +266,8 @@ func _init() -> void:
 			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
 		if not is_finite(float(cell.gene_dormancy)):
 			errors.append("ecology: invalid dormancy trait for cell %d" % cell.id)
+		if not is_finite(float(cell.gene_competence)):
+			errors.append("evolution: invalid competence trait for cell %d" % cell.id)
 		if float(cell.dormant_time) < 0.0 or not is_finite(float(cell.dormant_time)):
 			errors.append("ecology: invalid dormant timer for cell %d" % cell.id)
 		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
@@ -348,6 +379,7 @@ func _init() -> void:
 func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 	var required_scripts: Array = [
 		["petri_simulation", PetriSimulationScript],
+		["dna_fragment", DNAFragmentScript],
 		["bacterium", BacteriumScript],
 		["pixel_microscope", PixelMicroscopeScript],
 		["pixel_microbe_atlas", PixelAtlasScript],
@@ -363,6 +395,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["pixel_ecology_atlas", PixelEcologyAtlasScript],
 		["biome_material_renderer", BiomeMaterialRendererScript],
 		["pixel_effect_atlas", PixelEffectAtlasScript],
+		["pixel_dna_atlas", PixelDNAAtlasScript],
 	]
 
 	for entry in required_scripts:

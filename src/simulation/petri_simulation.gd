@@ -2,6 +2,7 @@ class_name PetriSimulation
 extends RefCounted
 
 const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
+const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
@@ -28,6 +29,7 @@ const CILIATE_SAFETY_LIMIT := 16
 const FLAGELLATE_SAFETY_LIMIT := 28
 const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
+const DNA_FRAGMENT_SAFETY_LIMIT := 64
 
 const DISTURBANCE_RESOURCE_PULSE := 0
 const DISTURBANCE_WASHOUT := 1
@@ -56,6 +58,7 @@ var ciliates: Array = []
 var flagellates: Array = []
 var microalgae: Array = []
 var decomposers: Array = []
+var dna_fragments: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 var producer_sources: Array[Vector2] = []
@@ -65,6 +68,8 @@ var _chemistry_accumulator: float = 0.0
 var _slow_biome_accumulator: float = 0.0
 var _mechanics_accumulator: float = 0.0
 var _next_id: int = 1
+var _next_dna_id: int = 1
+var _transformation_tick: int = 0
 var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
@@ -254,6 +259,7 @@ func seed_demo(count: int = 36) -> void:
 	flagellates.clear()
 	microalgae.clear()
 	decomposers.clear()
+	dna_fragments.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
@@ -265,6 +271,8 @@ func seed_demo(count: int = 36) -> void:
 	last_disturbance_position = Vector2.ZERO
 	last_disturbance_time = -1.0
 	_next_id = 1
+	_next_dna_id = 1
+	_transformation_tick = 0
 	rng.seed = fixed_seed
 	nutrient.fill(0.012)
 	waste.fill(0.0)
@@ -472,6 +480,7 @@ func step(dt: float) -> void:
 				SLOW_BIOME_DT,
 				quorum_decay
 			)
+			_advance_dna_fragments(SLOW_BIOME_DT)
 			producer_biomass.diffuse(
 				producer_spread_diffusion,
 				SLOW_BIOME_DT,
@@ -2130,7 +2139,18 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 	var local_eps: float = float(eps.sample_world(cell_position))
 	var local_quorum: float = float(quorum_signal.sample_world(cell_position))
+	var local_damage: float = float(damage_cue.sample_world(cell_position))
 	var quorum_response: float = clampf(local_quorum * 8.0, 0.0, 1.0)
+	var competence_drive: float = clampf(
+		(1.55 - float(cell.energy)) * 0.72 + local_damage * 0.65,
+		0.0,
+		1.0
+	)
+	cell.competent = (
+		not bool(cell.dividing)
+		and int(cell.transfer_role) == int(BacteriumScript.TRANSFER_NONE)
+		and competence_drive * float(cell.gene_competence) >= 0.52
+	)
 	var speed: float = (
 		run_speed
 		* float(cell.gene_speed)
@@ -2230,6 +2250,8 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		+ _plasmid_burden(cell)
 	)
 	morphology_cost *= _plasmid_maintenance_factor(cell)
+	if bool(cell.competent):
+		morphology_cost += competence_cost * float(cell.gene_competence)
 	cell.energy = float(cell.energy) - (locomotion_cost + morphology_cost) * dt
 
 	# Every active cell contributes a small density signal. Biofilm builders
@@ -2376,6 +2398,7 @@ func _divide(parent: Variant) -> Array:
 
 
 func _recycle_dead_cell(cell: Variant) -> void:
+	_release_dna_fragments(cell)
 	var recycled: float = maxf(0.05, float(cell.length) * 0.04)
 	var position: Vector2 = Vector2(cell.position)
 	waste.add_radial_world(position, 3.0, recycled * 0.16)
@@ -2508,6 +2531,200 @@ func _disturbance_position(event_index: int, event_type: int) -> Vector2:
 	result.x = clampf(result.x, margin, world_size.x - margin)
 	result.y = clampf(result.y, margin, world_size.y - margin)
 	return result
+
+
+func _release_dna_fragments(cell: Variant) -> void:
+	var release_count: int = 2 if float(cell.length) >= 4.0 else 1
+	for fragment_index in range(release_count):
+		if dna_fragments.size() >= DNA_FRAGMENT_SAFETY_LIMIT:
+			dna_fragments.pop_front()
+
+		var trait_kind: int = posmod(
+			int(cell.id) + int(cell.generation) * 3 + fragment_index * 5,
+			DNAFragmentScript.TRAIT_COUNT
+		)
+		var trait_value: float = _bacterium_trait_value(cell, trait_kind)
+		var phase: float = (
+			float(posmod(int(cell.id) * 13 + fragment_index * 17, 360))
+			* PI / 180.0
+		)
+		var fragment: Variant = DNAFragmentScript.new(
+			_next_dna_id,
+			Vector2(cell.position) + Vector2.RIGHT.rotated(phase) * 0.8,
+			int(cell.lineage_id),
+			float(cell.lineage_hue),
+			trait_kind,
+			trait_value
+		)
+		fragment.lifetime = dna_fragment_lifetime
+		dna_fragments.append(fragment)
+		_next_dna_id += 1
+
+
+func _advance_dna_fragments(dt: float) -> void:
+	if dna_fragments.is_empty():
+		return
+
+	_transformation_tick += 1
+	var survivors: Array = []
+
+	for fragment in dna_fragments:
+		fragment.age = float(fragment.age) + dt
+		if float(fragment.age) >= float(fragment.lifetime):
+			continue
+
+		var position: Vector2 = Vector2(fragment.position)
+		position += _water_flow(position) * dt * 0.58
+		position.x = clampf(position.x, 0.5, world_size.x - 0.5)
+		position.y = clampf(position.y, 0.5, world_size.y - 0.5)
+		fragment.position = position
+
+		var recipient: Variant = _nearest_competent_cell(
+			position,
+			competence_capture_radius
+		)
+		if recipient == null:
+			survivors.append(fragment)
+			continue
+
+		var competence: float = clampf(
+			float(recipient.gene_competence),
+			0.30,
+			1.90
+		)
+		var uptake_probability: float = 1.0 - exp(
+			-transformation_uptake_rate * competence * dt
+		)
+		var uptake_roll: float = _stable_event_roll(
+			int(fragment.id),
+			int(recipient.id),
+			_transformation_tick
+		)
+		if uptake_roll >= uptake_probability:
+			survivors.append(fragment)
+			continue
+
+		var compatibility: float = _lineage_compatibility(
+			float(recipient.lineage_hue),
+			float(fragment.source_hue)
+		)
+		var recombine_roll: float = _stable_event_roll(
+			int(fragment.id) * 17,
+			int(recipient.id) * 31,
+			_transformation_tick + 97
+		)
+		if recombine_roll < compatibility * 0.78:
+			_integrate_dna_fragment(recipient, fragment)
+			recipient.transformation_events = (
+				int(recipient.transformation_events) + 1
+			)
+		else:
+			# Failed/foreign DNA still has a small nutrient value.
+			recipient.energy = minf(
+				12.0,
+				float(recipient.energy) + float(fragment.biomass) * 1.8
+			)
+
+	dna_fragments = survivors
+
+
+func _nearest_competent_cell(position: Vector2, radius: float) -> Variant:
+	var best: Variant = null
+	var best_distance_sq: float = radius * radius
+	for cell in bacteria:
+		if (
+			not bool(cell.competent)
+			or bool(cell.dying)
+			or bool(cell.dormant)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+		var distance_sq: float = position.distance_squared_to(
+			Vector2(cell.position)
+		)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best = cell
+	return best
+
+
+func _integrate_dna_fragment(cell: Variant, fragment: Variant) -> void:
+	var strength: float = transformation_recombination_strength
+	match int(fragment.trait_kind):
+		DNAFragmentScript.TRAIT_SPEED:
+			cell.gene_speed = lerpf(
+				float(cell.gene_speed), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_CHEMOTAXIS:
+			cell.gene_chemotaxis = lerpf(
+				float(cell.gene_chemotaxis), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_UPTAKE:
+			cell.gene_uptake = lerpf(
+				float(cell.gene_uptake), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_GROWTH:
+			cell.gene_growth = lerpf(
+				float(cell.gene_growth), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_SIZE:
+			cell.gene_size = lerpf(
+				float(cell.gene_size), float(fragment.trait_value), strength
+			)
+			cell.radius = clampf(
+				0.34 + 0.16 * float(cell.gene_size),
+				0.42,
+				0.63
+			)
+		DNAFragmentScript.TRAIT_TUMBLE:
+			cell.gene_tumble = lerpf(
+				float(cell.gene_tumble), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_ADHESION:
+			cell.gene_adhesion = lerpf(
+				float(cell.gene_adhesion), float(fragment.trait_value), strength
+			)
+		DNAFragmentScript.TRAIT_DORMANCY:
+			cell.gene_dormancy = lerpf(
+				float(cell.gene_dormancy), float(fragment.trait_value), strength
+			)
+
+
+func _bacterium_trait_value(cell: Variant, trait_kind: int) -> float:
+	match trait_kind:
+		DNAFragmentScript.TRAIT_SPEED:
+			return float(cell.gene_speed)
+		DNAFragmentScript.TRAIT_CHEMOTAXIS:
+			return float(cell.gene_chemotaxis)
+		DNAFragmentScript.TRAIT_UPTAKE:
+			return float(cell.gene_uptake)
+		DNAFragmentScript.TRAIT_GROWTH:
+			return float(cell.gene_growth)
+		DNAFragmentScript.TRAIT_SIZE:
+			return float(cell.gene_size)
+		DNAFragmentScript.TRAIT_TUMBLE:
+			return float(cell.gene_tumble)
+		DNAFragmentScript.TRAIT_ADHESION:
+			return float(cell.gene_adhesion)
+		DNAFragmentScript.TRAIT_DORMANCY:
+			return float(cell.gene_dormancy)
+	return 1.0
+
+
+func _lineage_compatibility(recipient_hue: float, donor_hue: float) -> float:
+	var delta: float = absf(
+		wrapf(recipient_hue - donor_hue + 0.5, 0.0, 1.0) - 0.5
+	)
+	return clampf(1.0 - delta * 1.35, 0.28, 1.0)
+
+
+func _stable_event_roll(a: int, b: int, tick: int) -> float:
+	var value: int = a * 73856093
+	value ^= b * 19349663
+	value ^= tick * 83492791
+	value = value & 0x7fffffff
+	return float(value % 1000003) / 1000003.0
 
 
 func _feed_environment(dt: float) -> void:
@@ -3039,6 +3256,7 @@ func state_signature() -> String:
 	parts.append("prod:%.5f" % producer_biomass.total())
 	parts.append("exu:%.5f" % exudate.total())
 	parts.append("sig:%.5f" % quorum_signal.total())
+	parts.append("dna:%d" % dna_fragments.size())
 	parts.append(
 		"dist:%d:%.3f:%d:%.3f:%.3f"
 		% [
@@ -3057,7 +3275,7 @@ func state_signature() -> String:
 
 	for cell in bacteria:
 		parts.append(
-			"%d:%d:gld%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%.4f:do%d:dt%.3f:%d:%.3f:%d:%.3f:pm%d:tr%d:tp%.3f:h%d"
+			"%d:%d:gld%d:%.5f:%.5f:%.5f:%.5f:%.5f:%.4f:%.4f:%.4f:%.4f:%.4f:do%d:dt%.3f:%d:%.3f:%d:%.3f:pm%d:tr%d:tp%.3f:h%d:tf%d"
 			% [
 				int(cell.id),
 				int(cell.generation),
@@ -3071,6 +3289,7 @@ func state_signature() -> String:
 				float(cell.gene_uptake),
 				float(cell.gene_chemotaxis),
 				float(cell.gene_dormancy),
+				float(cell.gene_competence),
 				1 if bool(cell.dormant) else 0,
 				float(cell.dormant_time),
 				1 if bool(cell.dividing) else 0,
@@ -3081,6 +3300,7 @@ func state_signature() -> String:
 				int(cell.transfer_role),
 				float(cell.transfer_progress),
 				int(cell.hgt_events),
+				int(cell.transformation_events),
 			]
 		)
 
@@ -3184,6 +3404,20 @@ func state_signature() -> String:
 				int(yeast.engulfed_by_id),
 				float(yeast.engulf_progress),
 				1 if bool(yeast.consumed) else 0,
+			]
+		)
+
+	for fragment in dna_fragments:
+		parts.append(
+			"dna%d:l%d:k%d:%.5f:%.5f:%.4f:%.3f"
+			% [
+				int(fragment.id),
+				int(fragment.source_lineage_id),
+				int(fragment.trait_kind),
+				float(fragment.position.x),
+				float(fragment.position.y),
+				float(fragment.trait_value),
+				float(fragment.age),
 			]
 		)
 

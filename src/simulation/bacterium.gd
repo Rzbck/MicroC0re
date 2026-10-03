@@ -42,6 +42,7 @@ var adhesion_timer: float = 0.0
 # dormant/persister-like state without changing genotype.
 var dormant: bool = false
 var dormant_time: float = 0.0
+var competent: bool = false
 
 # Engulfment is used by the amoeboid/protist class. The bacterium remains
 # visible while it is being pulled inside the predator; completion removes it
@@ -62,6 +63,7 @@ var gene_size: float = 1.0
 var gene_tumble: float = 1.0
 var gene_adhesion: float = 1.0
 var gene_dormancy: float = 1.0
+var gene_competence: float = 1.0
 var mutation_rate: float = 0.08
 
 # Heritable visual / mechanical appendages.
@@ -77,6 +79,7 @@ var transfer_role: int = TRANSFER_NONE
 var transfer_partner_id: int = -1
 var transfer_progress: float = 0.0
 var hgt_events: int = 0
+var transformation_events: int = 0
 
 # Deterministic visual animation phase. Rendering may read this value but
 # simulation behavior never depends on it.
@@ -107,6 +110,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_tumble = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.60, 1.45)
 	gene_adhesion = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.45, 1.70)
 	gene_dormancy = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.55, 1.60)
+	gene_competence = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.40, 1.70)
 	mutation_rate = clampf(0.08 + p_rng.randfn(0.0, 0.012), 0.025, 0.16)
 
 	flagella_count = clampi(2 + p_rng.randi_range(-1, 1), 1, 4)
@@ -141,6 +145,8 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	transfer_partner_id = -1
 	transfer_progress = 0.0
 	hgt_events = 0
+	transformation_events = 0
+	competent = false
 
 	var inherited_rate: float = float(parent.mutation_rate)
 	mutation_rate = clampf(
@@ -172,6 +178,9 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	)
 	gene_dormancy = _mutate_float(
 		float(parent.gene_dormancy), 0.060, 0.45, 1.80, mutation_rate, p_rng
+	)
+	gene_competence = _mutate_float(
+		float(parent.gene_competence), 0.065, 0.30, 1.90, mutation_rate, p_rng
 	)
 	flagella_length = _mutate_float(
 		float(parent.flagella_length), 0.060, 0.55, 1.80, mutation_rate, p_rng
@@ -245,6 +254,7 @@ func begin_lysis() -> void:
 	alive = false
 	dormant = false
 	dormant_time = 0.0
+	competent = false
 	clear_transfer_state()
 	dividing = false
 	division_progress = 0.0

@@ -66,7 +66,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #22 counter-based deterministic RNG
 - #24 parallel CPU pipeline
 - #30 bacteriophage kill-the-winner / viral recycling
-- #32 natural transformation / extracellular DNA / competence
 - #33 phenotypic switching / dormancy / division of labor
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
 - #35 predator-prey coevolution / bacterial defence traits
@@ -173,6 +172,11 @@ Explicit non-bacterial guilds now also exist:
 - small flagellate-like bacterivores, forming an intermediate prey/predator tier between bacteria and larger ciliates/amoebae;
 - evolving microalgae-like producers with light-driven oxygenation, exudates, division and lysis;
 - evolving yeast-like decomposers with detritus consumption, mineralization, budding and lysis.
+
+### Environmental evolution
+- bacterial lysis releases bounded extracellular DNA fragments;
+- heritable competence can trigger under stress, costs energy, and enables lineage-weighted trait recombination;
+- transformation is separate from plasmid conjugation and fragments decay/drift on the slow biome cadence.
 
 ### Predation / death
 - amoebae and ciliates can bias search toward damage plumes when direct prey is absent;

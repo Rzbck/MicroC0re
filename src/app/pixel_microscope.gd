@@ -11,6 +11,7 @@ const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
+const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
@@ -48,6 +49,7 @@ var flagellate_atlas: Variant
 var ecology_atlas: Variant
 var biome_renderer: Node2D
 var effect_atlas: Variant
+var dna_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
 var current_seed: int = 1337
@@ -93,6 +95,7 @@ func _ready() -> void:
 	flagellate_atlas = PixelFlagellateAtlasScript.new()
 	ecology_atlas = PixelEcologyAtlasScript.new()
 	effect_atlas = PixelEffectAtlasScript.new()
+	dna_atlas = PixelDNAAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -245,6 +248,7 @@ func _draw() -> void:
 	_draw_flagellates()
 	_draw_microalgae()
 	_draw_decomposers()
+	_draw_extracellular_dna()
 	_draw_life_state_cues()
 	_draw_active_feeding_links()
 	_draw_gene_transfers()
@@ -298,6 +302,8 @@ func _draw_bacteria() -> void:
 		elif bool(cell.dormant):
 			color = color.lerp(Color(0.32, 0.46, 0.48, color.a), 0.72)
 			color.a *= 0.78
+		elif bool(cell.competent):
+			color = color.lerp(Color(0.48, 0.92, 0.96, color.a), 0.28)
 		elif float(cell.adhesion_timer) > 0.0:
 			color = color.lightened(0.12)
 		else:
@@ -817,6 +823,32 @@ func _draw_decomposers() -> void:
 				zoom_value
 			)
 
+
+
+func _draw_extracellular_dna() -> void:
+	if sim == null or dna_atlas == null or camera == null:
+		return
+	if camera.zoom.x < _minimum_camera_zoom() * 1.34:
+		return
+	var visible_rect: Rect2 = _visible_world_rect().grow(2.0)
+	for fragment in sim.dna_fragments:
+		var position: Vector2 = Vector2(fragment.position)
+		if not visible_rect.has_point(position):
+			continue
+		var texture: Texture2D = dna_atlas.get_texture(int(fragment.id))
+		var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
+		var age_alpha: float = clampf(
+			1.0 - float(fragment.age) / maxf(0.001, float(fragment.lifetime)),
+			0.10,
+			1.0
+		)
+		var color := Color(0.74, 0.96, 1.0, 0.34 + age_alpha * 0.46)
+		draw_texture_rect(
+			texture,
+			Rect2(position - size * 0.5, size),
+			false,
+			color
+		)
 
 
 func _draw_life_state_cues() -> void:
@@ -1573,11 +1605,11 @@ func _inspector_body(organism: Variant) -> String:
 
 	match selected_kind:
 		"bacterium":
-			trait_line = "%s spd %.1f adh %.1f dor %.1f" % [
+			trait_line = "%s adh %.1f dor %.1f cmp %.1f" % [
 				String(organism.guild_name()),
-				float(organism.gene_speed),
 				float(organism.gene_adhesion),
 				float(organism.gene_dormancy),
+				float(organism.gene_competence),
 			]
 		"amoeba":
 			trait_line = "hunt %.1f  engulf %.1f" % [
@@ -1634,6 +1666,8 @@ func _compact_state_text(organism: Variant) -> String:
 				return "ENGULFED %.0f%%" % (float(organism.engulf_progress) * 100.0)
 			if int(organism.transfer_role) != 0:
 				return "HGT %.0f%%" % (float(organism.transfer_progress) * 100.0)
+			if bool(organism.competent):
+				return "COMPETENT  T%d" % int(organism.transformation_events)
 			if float(organism.adhesion_timer) > 0.0:
 				return "ADHERING"
 			if float(organism.energy) < 0.95:
