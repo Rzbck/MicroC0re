@@ -234,8 +234,10 @@ func _draw() -> void:
 	sprite_cells = 0
 
 	var world_rect := Rect2(Vector2.ZERO, Vector2(sim.world_size))
-	draw_rect(world_rect, Color(0.005, 0.012, 0.014, 1.0), true)
-
+	# The water/biome shader renderer owns the dish background. Do not paint an
+	# opaque world rectangle here: it would sit above the negative-z shader
+	# layers and hide the entire biome, which was visible in the 2026-10-03
+	# maintainer recording as a completely black dish.
 	_draw_bacteria()
 	_draw_protozoa()
 	_draw_ciliates()
