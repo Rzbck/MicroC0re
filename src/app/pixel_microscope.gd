@@ -874,6 +874,45 @@ func _draw_life_state_cues() -> void:
 			)
 
 
+	for proto in sim.protozoa:
+		var p: Vector2 = Vector2(proto.position)
+		if not visible_rect.has_point(p) or bool(proto.dying):
+			continue
+		if int(proto.feeding_target_id) >= 0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_PURSUIT,
+				frame,
+				1.08
+			)
+		elif float(proto.cooldown) > 0.0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_DIGESTION,
+				frame,
+				1.04
+			)
+
+	for ciliate in sim.ciliates:
+		var p: Vector2 = Vector2(ciliate.position)
+		if not visible_rect.has_point(p) or bool(ciliate.dying):
+			continue
+		if int(ciliate.feeding_target_id) >= 0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_PURSUIT,
+				frame,
+				0.96
+			)
+		elif float(ciliate.cooldown) > 0.0:
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_DIGESTION,
+				frame,
+				0.92
+			)
+
+
 func _draw_effect_asset(
 	position: Vector2,
 	kind: int,

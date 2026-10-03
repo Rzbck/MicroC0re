@@ -361,6 +361,7 @@ References:
 - #55 rotifer/nematode microfauna
 - #56 day/night/diel cycle
 - #57 fused GPU multi-field biome compute
+- #61 generative pixel biome atlas / biological event FX
 
 Evolution continues through #13, #30–#36.
 
@@ -386,14 +387,29 @@ Agent populations should remain bounded until GPU-resident agent mechanics is va
 
 ## Visual contract
 
-The biome must remain readable pixel art.
+The biome must remain readable **generative pixel art**, never primarily a scalar-field heatmap.
+
+Current presentation pipeline:
+- each 96x64 simulation field cell selects a cached 4x4 pixel motif;
+- water, producer mats, detritus, EPS, damage, oxygen and nutrient-rich zones have different pixel structures and palettes;
+- deterministic seed/coordinate variants prevent obvious repeated blocks;
+- motif density communicates field strength;
+- a secondary field can add a small accent so mixed niches remain layered;
+- event FX use cached assets for division, adhesion, reproduction, pursuit, feeding, digestion, stress and lysis;
+- the simulation owns state; the renderer only chooses assets from that state.
 
 At overview:
-- large environmental structures are visible;
+- large environmental structures are visible as clustered material, not flat color slabs;
 - organisms use consistent LOD markers;
 - no single stale LOD path may produce a giant sprite.
 
 At close zoom:
-- producer mats, EPS, damage plumes and detrital zones become visually distinguishable;
-- feeding and death states are animated;
+- producer mats should read as clustered/vegetation-like microbial material;
+- detritus should read as particulate debris;
+- EPS should read as matrix/web material;
+- damage/lysis should read as warm fragmented residue;
+- oxygen/nutrient-rich patches should use distinct micro-grain/glint languages;
+- feeding, digestion, reproduction and death states are animated;
 - organism morphology remains more important than debug overlays.
+
+Issue #61 owns this asset/presentation grammar; #57 owns its later GPU-resident composition.

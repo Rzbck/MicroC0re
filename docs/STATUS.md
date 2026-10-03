@@ -180,7 +180,7 @@ Explicit non-bacterial guilds now also exist:
 - new cached `pixel_biome_atlas.gd` generates deterministic 4x4 water, producer, detritus, EPS, damage, oxygen and nutrient motifs;
 - simulation fields select motif family + density; a secondary field contributes a small accent for mixed niches;
 - the composed biome texture is now 384x256 for the current 96x64 field, retaining crisp world-scale pixel clusters;
-- new cached `pixel_effect_atlas.gd` defines division, adhesion, reproduction, feeding, lysis and stress FX;
+- new cached `pixel_effect_atlas.gd` defines division, adhesion, reproduction, pursuit, feeding, digestion, lysis and stress FX;
 - field-art refresh is limited to 10 Hz to control CPU-reference presentation cost; #57 remains the GPU path.
 
 ### Interaction / microscope readability pass

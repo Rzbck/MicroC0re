@@ -2,7 +2,7 @@ extends RefCounted
 
 const SIZE := 11
 const FRAMES := 4
-const KINDS := 6
+const KINDS := 8
 
 const EFFECT_DIVISION := 0
 const EFFECT_ADHESION := 1
@@ -10,6 +10,8 @@ const EFFECT_REPRODUCTION := 2
 const EFFECT_FEEDING := 3
 const EFFECT_LYSIS := 4
 const EFFECT_STRESS := 5
+const EFFECT_PURSUIT := 6
+const EFFECT_DIGESTION := 7
 
 var _textures: Array = []
 
@@ -46,6 +48,10 @@ func _build() -> void:
 					_draw_lysis(image, frame)
 				EFFECT_STRESS:
 					_draw_stress(image, frame)
+				EFFECT_PURSUIT:
+					_draw_pursuit(image, frame)
+				EFFECT_DIGESTION:
+					_draw_digestion(image, frame)
 			frames.append(ImageTexture.create_from_image(image))
 		_textures.append(frames)
 
@@ -121,6 +127,41 @@ func _draw_stress(image: Image, frame: int) -> void:
 	_set_px(image, 8 - inward, 5, hot)
 	_set_px(image, 5, 2 + inward, dim)
 	_set_px(image, 5, 8 - inward, dim)
+
+
+func _draw_pursuit(image: Image, frame: int) -> void:
+	var dim := Color(0.36, 0.72, 0.78, 0.48)
+	var hot := Color(0.66, 0.96, 0.92, 0.88)
+	var head_x: int = 7 + frame % 2
+	_set_px(image, head_x, 5, hot)
+	_set_px(image, head_x - 1, 4, hot)
+	_set_px(image, head_x - 1, 6, hot)
+	for i in range(4):
+		_set_px(image, 5 - i, 5, dim)
+		if i % 2 == frame % 2:
+			_set_px(image, 5 - i, 6, Color(0.28, 0.58, 0.64, 0.34))
+
+
+func _draw_digestion(image: Image, frame: int) -> void:
+	var body := Color(0.74, 0.46, 0.24, 0.54)
+	var hot := Color(1.0, 0.70, 0.30, 0.88)
+	var inner := Color(0.90, 0.34, 0.18, 0.62)
+	var ring := [
+		Vector2i(-2, -1), Vector2i(-1, -2), Vector2i(1, -2),
+		Vector2i(2, -1), Vector2i(2, 1), Vector2i(1, 2),
+		Vector2i(-1, 2), Vector2i(-2, 1),
+	]
+	for i in range(ring.size()):
+		var o: Vector2i = ring[i]
+		var index: int = posmod(i + frame * 2, ring.size())
+		_set_px(
+			image,
+			5 + o.x,
+			5 + o.y,
+			hot if index == 0 or index == 4 else body
+		)
+	_set_px(image, 5, 5, inner)
+	_set_px(image, 5 + (frame % 2), 4, hot)
 
 
 func _set_px(image: Image, x: int, y: int, color: Color) -> void:
