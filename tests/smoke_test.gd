@@ -323,7 +323,7 @@ func _init() -> void:
 				errors.append("evolution: founder missing shared physical genome")
 				break
 
-		var first = PetriSimulationScript.new(424242)
+	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
 	second.seed_demo(24)

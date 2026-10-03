@@ -39,13 +39,13 @@ func sample_height(position: Vector2) -> float:
 	var y1: int = mini(y0 + 1, height - 1)
 	var tx: float = gx - float(x0)
 	var ty: float = gy - float(y0)
-	var a: float = lerpf(_get(x0, y0), _get(x1, y0), tx)
-	var b: float = lerpf(_get(x0, y1), _get(x1, y1), tx)
+	var a: float = lerpf(_height_value(x0, y0), _height_value(x1, y0), tx)
+	var b: float = lerpf(_height_value(x0, y1), _height_value(x1, y1), tx)
 	return lerpf(a, b, ty)
 
 
 func height_at_grid(x: int, y: int) -> float:
-	return _get(clampi(x, 0, width - 1), clampi(y, 0, height - 1))
+	return _height_value(clampi(x, 0, width - 1), clampi(y, 0, height - 1))
 
 
 func world_position_for_grid(x: int, y: int) -> Vector2:
@@ -438,5 +438,5 @@ func _index(x: int, y: int) -> int:
 	return y * width + x
 
 
-func _get(x: int, y: int) -> float:
+func _height_value(x: int, y: int) -> float:
 	return float(heights[_index(x, y)])
