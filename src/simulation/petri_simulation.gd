@@ -150,6 +150,15 @@ var dormancy_wake_threshold: float = 0.105
 var dormancy_maintenance_factor: float = 0.11
 var dormancy_uptake_factor: float = 0.16
 
+# Natural transformation: bounded extracellular DNA released by lysis.
+# Competence is a costly stress phenotype and remains separate from plasmid
+# conjugation.
+var competence_cost: float = 0.0045
+var competence_capture_radius: float = 2.8
+var transformation_uptake_rate: float = 1.4
+var transformation_recombination_strength: float = 0.26
+var dna_fragment_lifetime: float = 18.0
+
 # Slow deterministic succession/disturbance cycle. These are local ecological
 # events, not random screen effects: they directly alter resource/matrix fields
 # and let dormancy, scavenging, producer recovery and grazing reshape the patch.
@@ -1574,6 +1583,7 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 	var perception: float = protozoan_perception * float(proto.gene_perception)
 	var best_distance_sq: float = perception * perception
 	var origin: Vector2 = Vector2(proto.position)
+	var max_prey_biomass: float = float(proto.radius) * 2.10
 
 	for cell in bacteria:
 		if (
@@ -1606,7 +1616,6 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 	# A sufficiently large amoeba can also handle a smaller ciliate. This
 	# establishes a real second trophic edge instead of hard-coding every
 	# predator to bacteria only.
-	var max_prey_biomass: float = float(proto.radius) * 2.10
 	for grazer in ciliates:
 		if (
 			bool(grazer.dying)
