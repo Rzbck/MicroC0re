@@ -44,6 +44,14 @@ var dormant: bool = false
 var dormant_time: float = 0.0
 var competent: bool = false
 
+# Bounded bacteriophage infection state. Viral particles are represented by
+# cloud packets in the simulation, while the host keeps only its latent state.
+var phage_infected: bool = false
+var phage_progress: float = 0.0
+var phage_host_hue: float = 0.0
+var phage_source_id: int = -1
+var phage_triggered_lysis: bool = false
+
 # Engulfment is used by the amoeboid/protist class. The bacterium remains
 # visible while it is being pulled inside the predator; completion removes it
 # without pretending that ordinary bacteria "fuse" together.
@@ -147,6 +155,11 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	hgt_events = 0
 	transformation_events = 0
 	competent = false
+	phage_infected = false
+	phage_progress = 0.0
+	phage_host_hue = 0.0
+	phage_source_id = -1
+	phage_triggered_lysis = false
 
 	var inherited_rate: float = float(parent.mutation_rate)
 	mutation_rate = clampf(
@@ -241,7 +254,13 @@ func clear_transfer_state() -> void:
 
 
 func begin_division() -> void:
-	if dying or dividing or dormant or transfer_role != TRANSFER_NONE:
+	if (
+		dying
+		or dividing
+		or dormant
+		or phage_infected
+		or transfer_role != TRANSFER_NONE
+	):
 		return
 	dividing = true
 	division_progress = 0.0

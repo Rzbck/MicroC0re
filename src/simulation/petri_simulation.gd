@@ -10,6 +10,7 @@ const FlagellateScript = preload("res://src/simulation/flagellate.gd")
 const MicroalgaScript = preload("res://src/simulation/microalga.gd")
 const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
 const HyphalColonyScript = preload("res://src/simulation/hyphal_colony.gd")
+const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
 
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
@@ -32,6 +33,7 @@ const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
 const HYPHAL_COLONY_SAFETY_LIMIT := 6
 const HYPHAL_NODE_SAFETY_LIMIT := 24
+const PHAGE_CLOUD_SAFETY_LIMIT := 24
 const DNA_FRAGMENT_SAFETY_LIMIT := 64
 
 const DISTURBANCE_RESOURCE_PULSE := 0
@@ -63,6 +65,7 @@ var flagellates: Array = []
 var microalgae: Array = []
 var decomposers: Array = []
 var hyphae: Array = []
+var phage_clouds: Array = []
 var dna_fragments: Array = []
 var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
@@ -74,7 +77,9 @@ var _slow_biome_accumulator: float = 0.0
 var _mechanics_accumulator: float = 0.0
 var _next_id: int = 1
 var _next_dna_id: int = 1
+var _next_phage_id: int = 1
 var _transformation_tick: int = 0
+var _phage_tick: int = 0
 var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
@@ -158,6 +163,19 @@ var competence_capture_radius: float = 2.8
 var transformation_uptake_rate: float = 1.4
 var transformation_recombination_strength: float = 0.26
 var dna_fragment_lifetime: float = 18.0
+
+# Bacteriophage kill-the-winner loop. Virions are represented as bounded
+# cloud packets rather than literal particles. Clouds amplify only when
+# compatible hosts lyse, so abundant clonal lineages sustain stronger pressure.
+var phage_cloud_decay: float = 0.045
+var phage_cloud_diffusion: float = 0.34
+var phage_cloud_max_radius: float = 10.5
+var phage_specificity_width: float = 0.16
+var phage_adsorption_rate: float = 0.42
+var phage_latent_period: float = 4.8
+var phage_infection_cost: float = 0.010
+var phage_burst_strength: float = 0.92
+var phage_eps_protection: float = 0.72
 
 # Slow deterministic succession/disturbance cycle. These are local ecological
 # events, not random screen effects: they directly alter resource/matrix fields
@@ -287,6 +305,7 @@ func seed_demo(count: int = 36) -> void:
 	microalgae.clear()
 	decomposers.clear()
 	hyphae.clear()
+	phage_clouds.clear()
 	dna_fragments.clear()
 	_population_buffer.clear()
 	simulation_time = 0.0
@@ -300,7 +319,9 @@ func seed_demo(count: int = 36) -> void:
 	last_disturbance_time = -1.0
 	_next_id = 1
 	_next_dna_id = 1
+	_next_phage_id = 1
 	_transformation_tick = 0
+	_phage_tick = 0
 	rng.seed = fixed_seed
 	nutrient.fill(0.012)
 	waste.fill(0.0)
@@ -343,6 +364,22 @@ func seed_demo(count: int = 36) -> void:
 		cell.length = minimum_length * float(cell.gene_size) * rng.randf_range(0.96, 1.08)
 		cell.sensed_memory = nutrient.sample_world(position)
 		bacteria.append(cell)
+
+	# A few low-concentration phage packets start near bacterial founders.
+	# They are host-lineage specific and only amplify through successful lysis.
+	if not bacteria.is_empty():
+		for phage_index in range(mini(3, bacteria.size())):
+			var host: Variant = bacteria[(phage_index * 7) % bacteria.size()]
+			var phase: float = (
+				float(posmod(fixed_seed + phage_index * 97, 360)) * PI / 180.0
+			)
+			_spawn_phage_cloud(
+				Vector2(host.position) + Vector2.RIGHT.rotated(phase) * 3.5,
+				float(host.lineage_hue),
+				0.34,
+				5.2,
+				0
+			)
 
 	# A few large amoeboid predators make the ecology observable immediately:
 	# they chase nearby bacteria and engulf them with a staged deformation.
@@ -532,6 +569,7 @@ func step(dt: float) -> void:
 				quorum_decay
 			)
 			_advance_dna_fragments(SLOW_BIOME_DT)
+			_advance_phage_clouds(SLOW_BIOME_DT)
 			producer_biomass.diffuse(
 				producer_spread_diffusion,
 				SLOW_BIOME_DT,
@@ -2343,6 +2381,21 @@ func _plasmid_burden(cell: Variant) -> float:
 func _advance_cell(cell: Variant, dt: float) -> void:
 	cell.age = float(cell.age) + dt
 
+	if bool(cell.phage_infected):
+		cell.phage_progress = minf(
+			1.0,
+			float(cell.phage_progress) + dt / maxf(0.001, phage_latent_period)
+		)
+		cell.energy = maxf(
+			0.0,
+			float(cell.energy) - phage_infection_cost * dt
+		)
+		cell.competent = false
+		if float(cell.phage_progress) >= 1.0:
+			cell.phage_triggered_lysis = true
+			cell.begin_lysis()
+			return
+
 	var cell_position: Vector2 = Vector2(cell.position)
 	var local_nutrient_before: float = float(nutrient.sample_world(cell_position))
 	var local_exudate_before: float = float(exudate.sample_world(cell_position))
@@ -2667,6 +2720,7 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		bacteria.size() < SAFETY_POPULATION_LIMIT - 1
 		and not bool(cell.dividing)
 		and not bool(cell.dying)
+		and not bool(cell.phage_infected)
 		and float(cell.length) >= required_length
 		and float(cell.energy) >= required_energy
 		and bool(cell.alive)
@@ -2708,9 +2762,23 @@ func _divide(parent: Variant) -> Array:
 
 
 func _recycle_dead_cell(cell: Variant) -> void:
-	_release_dna_fragments(cell)
 	var recycled: float = maxf(0.05, float(cell.length) * 0.04)
 	var position: Vector2 = Vector2(cell.position)
+
+	if bool(cell.phage_triggered_lysis):
+		# Viral shunt: a larger share returns directly to dissolved resources,
+		# while a compatible packet carries the local host lineage forward.
+		nutrient.add_radial_world(position, 3.4, recycled * 0.48)
+		exudate.add_radial_world(position, 3.0, recycled * 0.22)
+		_spawn_phage_cloud(
+			position,
+			float(cell.lineage_hue),
+			phage_burst_strength * (0.75 + recycled * 1.8),
+			5.0 + float(cell.gene_size),
+			1
+		)
+
+	_release_dna_fragments(cell)
 	waste.add_radial_world(position, 3.0, recycled * 0.16)
 	detritus.add_radial_world(position, 4.2, recycled * 0.85)
 	damage_cue.add_radial_world(position, 5.0, recycled * 0.75)
@@ -2841,6 +2909,167 @@ func _disturbance_position(event_index: int, event_type: int) -> Vector2:
 	result.x = clampf(result.x, margin, world_size.x - margin)
 	result.y = clampf(result.y, margin, world_size.y - margin)
 	return result
+
+
+func _spawn_phage_cloud(
+	position: Vector2,
+	host_hue: float,
+	concentration: float,
+	radius: float,
+	generation: int = 0
+) -> void:
+	if concentration <= 0.0:
+		return
+
+	# Merge nearby compatible packets first. This keeps the representation
+	# bounded while preserving local amplification around successful hosts.
+	for cloud in phage_clouds:
+		var compatibility: float = _phage_compatibility(
+			float(cloud.host_hue),
+			host_hue
+		)
+		if (
+			compatibility >= 0.72
+			and Vector2(cloud.position).distance_to(position) <= maxf(radius, float(cloud.radius))
+		):
+			cloud.concentration = minf(
+				3.0,
+				float(cloud.concentration) + concentration
+			)
+			cloud.radius = minf(
+				phage_cloud_max_radius,
+				maxf(float(cloud.radius), radius)
+			)
+			cloud.age = minf(float(cloud.age), 2.0)
+			cloud.burst_generation = maxi(int(cloud.burst_generation), generation)
+			return
+
+	if phage_clouds.size() >= PHAGE_CLOUD_SAFETY_LIMIT:
+		phage_clouds.pop_front()
+
+	var cloud: Variant = PhageCloudScript.new(
+		_next_phage_id,
+		position,
+		host_hue,
+		concentration,
+		radius,
+		generation
+	)
+	phage_clouds.append(cloud)
+	_next_phage_id += 1
+
+
+func _advance_phage_clouds(dt: float) -> void:
+	if phage_clouds.is_empty():
+		return
+
+	_phage_tick += 1
+	var survivors: Array = []
+	for cloud in phage_clouds:
+		cloud.age = float(cloud.age) + dt
+		cloud.concentration = (
+			float(cloud.concentration) * exp(-phage_cloud_decay * dt)
+		)
+		cloud.radius = minf(
+			phage_cloud_max_radius,
+			float(cloud.radius) + phage_cloud_diffusion * dt
+		)
+		var position: Vector2 = (
+			Vector2(cloud.position)
+			+ _water_flow(Vector2(cloud.position)) * dt * 0.92
+		)
+		position.x = clampf(position.x, 0.5, world_size.x - 0.5)
+		position.y = clampf(position.y, 0.5, world_size.y - 0.5)
+		cloud.position = position
+
+		if (
+			float(cloud.age) >= float(cloud.lifetime)
+			or float(cloud.concentration) <= 0.018
+		):
+			continue
+
+		var infections_this_tick: int = 0
+		var radius_sq: float = float(cloud.radius) * float(cloud.radius)
+		for cell in bacteria:
+			if (
+				bool(cell.dying)
+				or bool(cell.consumed)
+				or bool(cell.phage_infected)
+				or int(cell.engulfed_by_id) >= 0
+			):
+				continue
+			if position.distance_squared_to(Vector2(cell.position)) > radius_sq:
+				continue
+
+			var compatibility: float = _phage_compatibility(
+				float(cell.lineage_hue),
+				float(cloud.host_hue)
+			)
+			if compatibility <= 0.02:
+				continue
+
+			var local_eps: float = float(eps.sample_world(Vector2(cell.position)))
+			var matrix_factor: float = 1.0 / (
+				1.0 + clampf(local_eps, 0.0, 1.5) * phage_eps_protection
+			)
+			var dormancy_factor: float = 0.28 if bool(cell.dormant) else 1.0
+			var probability: float = 1.0 - exp(
+				-phage_adsorption_rate
+				* float(cloud.concentration)
+				* compatibility
+				* matrix_factor
+				* dormancy_factor
+				* dt
+			)
+			var roll: float = _stable_event_roll(
+				int(cloud.id),
+				int(cell.id),
+				_phage_tick
+			)
+			if roll >= probability:
+				continue
+
+			_infect_cell_with_phage(cell, cloud)
+			cloud.concentration = maxf(
+				0.0,
+				float(cloud.concentration) - 0.035
+			)
+			infections_this_tick += 1
+			if infections_this_tick >= 3:
+				break
+
+		survivors.append(cloud)
+
+	phage_clouds = survivors
+
+
+func _infect_cell_with_phage(cell: Variant, cloud: Variant) -> void:
+	if (
+		bool(cell.dying)
+		or bool(cell.consumed)
+		or bool(cell.phage_infected)
+	):
+		return
+	cell.phage_infected = true
+	cell.phage_progress = 0.0
+	cell.phage_host_hue = float(cloud.host_hue)
+	cell.phage_source_id = int(cloud.id)
+	cell.phage_triggered_lysis = false
+	cell.dividing = false
+	cell.division_progress = 0.0
+	cell.competent = false
+	cell.clear_transfer_state()
+
+
+func _phage_compatibility(host_hue: float, cloud_hue: float) -> float:
+	var delta: float = absf(
+		wrapf(host_hue - cloud_hue + 0.5, 0.0, 1.0) - 0.5
+	)
+	return clampf(
+		1.0 - delta / maxf(0.001, phage_specificity_width),
+		0.0,
+		1.0
+	)
 
 
 func _prey_handling_defense(prey: Variant) -> float:
@@ -3621,6 +3850,7 @@ func state_signature() -> String:
 	parts.append("sig:%.5f" % quorum_signal.total())
 	parts.append("enz:%.5f" % fungal_enzyme.total())
 	parts.append("dna:%d" % dna_fragments.size())
+	parts.append("phg:%d" % phage_clouds.size())
 	parts.append(
 		"dist:%d:%.3f:%d:%.3f:%.3f"
 		% [
@@ -3667,6 +3897,14 @@ func state_signature() -> String:
 				int(cell.hgt_events),
 				int(cell.transformation_events),
 			]
+		parts.append(
+			"vi%d:vp%.3f:vl%d"
+			% [
+				1 if bool(cell.phage_infected) else 0,
+				float(cell.phage_progress),
+				1 if bool(cell.phage_triggered_lysis) else 0,
+			]
+		)
 		)
 
 	for proto in protozoa:
@@ -3798,6 +4036,20 @@ func state_signature() -> String:
 					int(colony.parents[node_index]),
 				]
 			)
+
+	for cloud in phage_clouds:
+		parts.append(
+			"v%d:%.4f:%.4f:%.4f:%.3f:%.3f:g%d"
+			% [
+				int(cloud.id),
+				float(cloud.position.x),
+				float(cloud.position.y),
+				float(cloud.host_hue),
+				float(cloud.concentration),
+				float(cloud.radius),
+				int(cloud.burst_generation),
+			]
+		)
 
 	for fragment in dna_fragments:
 		parts.append(

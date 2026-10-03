@@ -503,3 +503,19 @@ The decomposer guild now includes true bounded branching hyphal colonies in addi
 - yeast and hyphae therefore compete for detritus while creating different cross-feeding structures.
 
 Rendering uses cached segment/tip/junction pixel assets at the same 0.25-world-unit source-pixel scale; the visible branching pattern comes from the real growth graph, not decorative procedural lines.
+
+
+## Bacteriophage kill-the-winner slice (#30)
+
+A bounded lytic bacteriophage loop now adds another top-down control mechanism.
+
+- phages are represented as **cloud packets**, not literal virions;
+- each packet carries a host-lineage hue/specifity target, local radius and concentration;
+- adsorption probability depends on host compatibility, packet concentration, local EPS protection and bacterial dormancy;
+- infection is a visible latent state on the bacterium and blocks fission/HGT while progressing;
+- completed infection triggers staged bacterial lysis;
+- viral lysis releases a new compatible packet and returns an extra share of biomass to dissolved nutrient/exudate (viral shunt);
+- packets drift with water, diffuse in radius, decay, merge with nearby compatible packets and are hard-capped at 24;
+- because packets only amplify after compatible host lysis, locally successful/common clonal lineages sustain stronger phage pressure without a scripted “winner” table.
+
+EPS and dormancy therefore act as ecological viral refuges as well as grazing/resource traits. The representation is intentionally fixed-size/GPU-friendly for later #57 work.

@@ -2,6 +2,7 @@ extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
 const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
+const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 # Compile the visible app stack during every headless smoke run so renderer
 # script parse errors cannot survive until the manual GUI test.
@@ -24,6 +25,7 @@ const BiomeMaterialShader = preload("res://src/app/shaders/biome_material.gdshad
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
 const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
+const PixelPhageAtlasScript = preload("res://src/app/pixel_phage_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
@@ -163,6 +165,45 @@ func _init() -> void:
 	if evolved_defence <= baseline_defence:
 		errors.append("evolution: visible prey defence traits did not increase handling cost")
 
+	# Bacteriophage regression: infection is staged, lysis creates a viral
+	# burst/shunt, and the cloud representation remains hard bounded.
+	var phage_probe = PetriSimulationScript.new(64021)
+	phage_probe.seed_demo(1)
+	phage_probe.phage_clouds.clear()
+	var phage_host = phage_probe.bacteria[0]
+	var phage_packet = PhageCloudScript.new(
+		1,
+		Vector2(phage_host.position),
+		float(phage_host.lineage_hue),
+		1.0,
+		5.0,
+		0
+	)
+	phage_probe._infect_cell_with_phage(phage_host, phage_packet)
+	if not bool(phage_host.phage_infected):
+		errors.append("ecology: phage failed to infect compatible bacterium")
+	phage_host.phage_progress = 0.995
+	phage_probe._advance_cell(phage_host, phage_probe.phage_latent_period * 0.01)
+	if not bool(phage_host.dying) or not bool(phage_host.phage_triggered_lysis):
+		errors.append("ecology: latent phage infection failed to trigger lysis")
+	var viral_nutrient_before: float = phage_probe.nutrient.total()
+	phage_probe._recycle_dead_cell(phage_host)
+	if phage_probe.phage_clouds.is_empty():
+		errors.append("ecology: viral lysis failed to release a phage cloud")
+	if phage_probe.nutrient.total() <= viral_nutrient_before:
+		errors.append("ecology: viral shunt failed to return dissolved nutrient")
+	phage_probe.phage_clouds.clear()
+	for i in range(40):
+		phage_probe._spawn_phage_cloud(
+			Vector2(2.0 + float(i % 10) * 18.0, 4.0 + float(i / 10) * 24.0),
+			float(i) / 40.0,
+			0.20,
+			2.0,
+			0
+		)
+	if phage_probe.phage_clouds.size() > 24:
+		errors.append("population guard: phage cloud hard ceiling exceeded")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)
@@ -228,6 +269,8 @@ func _init() -> void:
 		errors.append("population guard: decomposer hard ceiling exceeded")
 	if first.hyphae.size() > 6:
 		errors.append("population guard: hyphal colony ceiling exceeded")
+	if first.phage_clouds.size() > 24:
+		errors.append("population guard: phage cloud ceiling exceeded")
 
 	if first.nutrient.min_value() < -0.000001:
 		errors.append("nutrient: negative concentration detected")
@@ -258,6 +301,15 @@ func _init() -> void:
 		errors.append("ecology: quorum signal field remained empty")
 	if first.fungal_enzyme.total() <= 0.0:
 		errors.append("ecology: fungal enzyme field remained empty")
+
+	for cloud in first.phage_clouds:
+		if not _finite_vector(cloud.position):
+			errors.append("ecology: non-finite phage cloud position %d" % cloud.id)
+		if (
+			not is_finite(float(cloud.concentration))
+			or float(cloud.concentration) < 0.0
+		):
+			errors.append("ecology: invalid phage cloud concentration %d" % cloud.id)
 
 	for colony in first.hyphae:
 		if not _finite_vector(colony.position) or not is_finite(float(colony.energy)):
@@ -306,6 +358,11 @@ func _init() -> void:
 			errors.append("ecology: invalid dormancy trait for cell %d" % cell.id)
 		if not is_finite(float(cell.gene_competence)):
 			errors.append("evolution: invalid competence trait for cell %d" % cell.id)
+		if (
+			float(cell.phage_progress) < 0.0
+			or float(cell.phage_progress) > 1.000001
+		):
+			errors.append("ecology: invalid phage infection progress for cell %d" % cell.id)
 		if float(cell.dormant_time) < 0.0 or not is_finite(float(cell.dormant_time)):
 			errors.append("ecology: invalid dormant timer for cell %d" % cell.id)
 		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
@@ -390,7 +447,7 @@ func _init() -> void:
 
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d hyphae=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d hyphae=%d phage=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
@@ -400,6 +457,7 @@ func _init() -> void:
 				first.microalgae.size(),
 				first.decomposers.size(),
 				first.hyphae.size(),
+				first.phage_clouds.size(),
 				first.nutrient.total(),
 				first.oxygen.total(),
 				first.detritus.total(),
@@ -419,6 +477,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 	var required_scripts: Array = [
 		["petri_simulation", PetriSimulationScript],
 		["dna_fragment", DNAFragmentScript],
+		["phage_cloud", PhageCloudScript],
 		["bacterium", BacteriumScript],
 		["pixel_microscope", PixelMicroscopeScript],
 		["pixel_microbe_atlas", PixelAtlasScript],
@@ -437,6 +496,7 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["pixel_effect_atlas", PixelEffectAtlasScript],
 		["pixel_dna_atlas", PixelDNAAtlasScript],
 		["pixel_hypha_atlas", PixelHyphaAtlasScript],
+		["pixel_phage_atlas", PixelPhageAtlasScript],
 	]
 
 	for entry in required_scripts:

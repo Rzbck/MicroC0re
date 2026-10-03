@@ -13,6 +13,7 @@ const BiomeMaterialRendererScript = preload("res://src/app/biome_material_render
 const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
 const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
+const PixelPhageAtlasScript = preload("res://src/app/pixel_phage_atlas.gd")
 const MicroscopeUIScript = preload("res://src/app/microscope_ui.gd")
 
 const FIXED_DT := 1.0 / 60.0
@@ -52,6 +53,7 @@ var biome_renderer: Node2D
 var effect_atlas: Variant
 var dna_atlas: Variant
 var hypha_atlas: Variant
+var phage_atlas: Variant
 var far_renderer: Node2D
 var ui: Variant
 var current_seed: int = 1337
@@ -99,6 +101,7 @@ func _ready() -> void:
 	effect_atlas = PixelEffectAtlasScript.new()
 	dna_atlas = PixelDNAAtlasScript.new()
 	hypha_atlas = PixelHyphaAtlasScript.new()
+	phage_atlas = PixelPhageAtlasScript.new()
 	_setup_infinite_background()
 	_setup_gpu_renderers()
 	_start_simulation(current_seed)
@@ -245,6 +248,7 @@ func _draw() -> void:
 	# opaque world rectangle here: it would sit above the negative-z shader
 	# layers and hide the entire biome, which was visible in the 2026-10-03
 	# maintainer recording as a completely black dish.
+	_draw_phage_clouds()
 	_draw_bacteria()
 	_draw_protozoa()
 	_draw_ciliates()
@@ -263,6 +267,45 @@ func _draw() -> void:
 		draw_ms,
 		float(Time.get_ticks_usec() - draw_start) / 1000.0
 	)
+
+
+func _draw_phage_clouds() -> void:
+	if sim == null or phage_atlas == null or camera == null:
+		return
+	var zoom_value: float = camera.zoom.x
+	if zoom_value < _minimum_camera_zoom() * 1.10:
+		return
+	var visible_rect: Rect2 = _visible_world_rect().grow(12.0)
+
+	for cloud in sim.phage_clouds:
+		var center: Vector2 = Vector2(cloud.position)
+		if not visible_rect.has_point(center):
+			continue
+		var alpha: float = clampf(
+			0.22 + float(cloud.concentration) * 0.32,
+			0.18,
+			0.82
+		)
+		var spread: float = minf(float(cloud.radius) * 0.42, 4.0)
+		for packet_index in range(3):
+			var phase: float = (
+				float(cloud.visual_phase)
+				+ float(packet_index) * TAU / 3.0
+				+ visual_time * (0.12 + float(packet_index) * 0.025)
+			)
+			var position: Vector2 = center + Vector2.RIGHT.rotated(phase) * (
+				spread * (0.30 + float(packet_index) * 0.22)
+			)
+			var texture: Texture2D = phage_atlas.get_texture(
+				int(cloud.id) + packet_index
+			)
+			var size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL * 0.86
+			draw_texture_rect(
+				texture,
+				Rect2(position - size * 0.5, size),
+				false,
+				Color(0.88, 0.54, 1.0, alpha)
+			)
 
 
 func _draw_bacteria() -> void:
@@ -302,7 +345,11 @@ func _draw_bacteria() -> void:
 		color = color.lerp(_guild_color(int(cell.guild)), 0.28)
 
 		if bool(cell.dying):
+			if bool(cell.phage_triggered_lysis):
+				color = color.lerp(Color(0.92, 0.32, 0.96, color.a), 0.52)
 			color.a = clampf(1.0 - float(cell.lysis_progress) * 0.72, 0.20, 1.0)
+		elif bool(cell.phage_infected):
+			color = color.lerp(Color(0.78, 0.36, 0.96, color.a), 0.55)
 		elif bool(cell.dormant):
 			color = color.lerp(Color(0.32, 0.46, 0.48, color.a), 0.72)
 			color.a *= 0.78
@@ -956,7 +1003,14 @@ func _draw_life_state_cues() -> void:
 		var p: Vector2 = Vector2(cell.position)
 		if not visible_rect.has_point(p):
 			continue
-		if bool(cell.dividing):
+		if bool(cell.phage_infected) and not bool(cell.dying):
+			_draw_effect_asset(
+				p,
+				PixelEffectAtlasScript.EFFECT_STRESS,
+				frame,
+				1.02 + float(cell.phage_progress) * 0.18
+			)
+		elif bool(cell.dividing):
 			_draw_effect_asset(
 				p,
 				PixelEffectAtlasScript.EFFECT_DIVISION,
@@ -1774,6 +1828,8 @@ func _compact_state_text(organism: Variant) -> String:
 				return "LYSIS %.0f%%" % (float(organism.lysis_progress) * 100.0)
 			if bool(organism.dividing):
 				return "FISSION %.0f%%" % (float(organism.division_progress) * 100.0)
+			if bool(organism.phage_infected):
+				return "PHAGE %.0f%%" % (float(organism.phage_progress) * 100.0)
 			if bool(organism.dormant):
 				return "DORMANT %.1fs" % float(organism.dormant_time)
 			if int(organism.engulfed_by_id) >= 0:

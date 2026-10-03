@@ -65,7 +65,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #21 Verlet half-neighbor lists + skin / stencil
 - #22 counter-based deterministic RNG
 - #24 parallel CPU pipeline
-- #30 bacteriophage kill-the-winner / viral recycling
 - #33 phenotypic switching / dormancy / division of labor
 - #34 quorum sensing / EPS biofilm / cooperative-cheater evolution
 - #36 lineage tree / ancestry history / emergent phenotype clusters
@@ -179,6 +178,8 @@ Explicit non-bacterial guilds now also exist:
 - transformation is separate from plasmid conjugation and fragments decay/drift on the slow biome cadence.
 
 ### Predation / death
+- bounded lineage-specific phage cloud packets create staged infection, lysis and viral nutrient shunting;
+- phage amplification is host-driven, adding kill-the-winner pressure while EPS/dormancy provide partial refuges;
 - visible bacterial adhesion/size/EPS traits now increase predator handling difficulty and can permit escape;
 - amoeba/ciliate/flagellate capture genes counter prey handling defence, creating an explicit first coevolution loop;
 - amoebae and ciliates can bias search toward damage plumes when direct prey is absent;
