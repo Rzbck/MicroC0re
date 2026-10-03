@@ -61,11 +61,11 @@ func _build() -> void:
 
 
 func _draw_alga(image: Image, state: int, frame: int) -> void:
-	var outline := Color(0.10, 0.24, 0.17, 1.0)
-	var body := Color(0.38, 0.88, 0.38, 1.0)
-	var light := Color(0.70, 1.0, 0.52, 1.0)
-	var chloroplast := Color(0.16, 0.52, 0.28, 1.0)
-	var core := Color(0.25, 0.68, 0.48, 1.0)
+	var outline := Color(0.08, 0.18, 0.14, 1.0)
+	var body := Color(0.24, 0.58, 0.30, 1.0)
+	var light := Color(0.56, 0.78, 0.38, 1.0)
+	var chloroplast := Color(0.10, 0.34, 0.20, 1.0)
+	var core := Color(0.22, 0.48, 0.34, 1.0)
 
 	var cx: int = 12
 	var cy: int = 10
@@ -88,9 +88,13 @@ func _draw_alga(image: Image, state: int, frame: int) -> void:
 
 	_hline(image, cx - 2, cx + 2, cy - 3, light)
 	_set_px(image, cx - 3, cy - 2, light)
+	_set_px(image, cx - 3, cy + 1, chloroplast)
 	_set_px(image, cx - 2, cy + 1, chloroplast)
-	_set_px(image, cx + 2, cy - 1, chloroplast)
+	_set_px(image, cx - 2, cy + 2, chloroplast)
+	_set_px(image, cx + 2, cy - 2, chloroplast)
+	_set_px(image, cx + 3, cy - 1, chloroplast)
 	_set_px(image, cx + 3, cy + 2, chloroplast)
+	_set_px(image, cx + 2, cy + 2, core)
 	_set_px(image, cx, cy + 2, core)
 
 	# Tiny frame-authored flagellar pair / drift cue.
@@ -111,11 +115,11 @@ func _draw_alga(image: Image, state: int, frame: int) -> void:
 
 
 func _draw_yeast(image: Image, state: int, frame: int) -> void:
-	var outline := Color(0.24, 0.16, 0.10, 1.0)
-	var body := Color(0.94, 0.68, 0.34, 1.0)
-	var light := Color(1.0, 0.88, 0.58, 1.0)
-	var dark := Color(0.55, 0.31, 0.17, 1.0)
-	var vacuole := Color(0.78, 0.48, 0.26, 1.0)
+	var outline := Color(0.20, 0.14, 0.09, 1.0)
+	var body := Color(0.68, 0.50, 0.28, 1.0)
+	var light := Color(0.88, 0.72, 0.43, 1.0)
+	var dark := Color(0.43, 0.27, 0.16, 1.0)
+	var vacuole := Color(0.58, 0.38, 0.22, 1.0)
 
 	var cx: int = 11
 	var cy: int = 10

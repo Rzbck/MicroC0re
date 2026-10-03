@@ -35,17 +35,17 @@ const WHEEL_ZOOM_FACTOR := 1.12
 const FREE_ZOOM_RESPONSE := 12.0
 const FOCUS_CAMERA_RESPONSE := 9.0
 const FOCUS_ZOOM_RESPONSE := 7.0
-const FOCUS_MIN_MULTIPLIER := 2.65
+const FOCUS_MIN_MULTIPLIER := 2.18
 
 const LINEAGE_PALETTE := [
-	Color(0.38, 0.82, 0.42, 1.0),
-	Color(0.66, 0.84, 0.32, 1.0),
-	Color(0.92, 0.72, 0.30, 1.0),
-	Color(0.93, 0.47, 0.30, 1.0),
-	Color(0.86, 0.34, 0.58, 1.0),
-	Color(0.62, 0.38, 0.86, 1.0),
-	Color(0.34, 0.52, 0.88, 1.0),
-	Color(0.28, 0.74, 0.84, 1.0),
+	Color(0.42, 0.70, 0.46, 1.0),
+	Color(0.61, 0.70, 0.36, 1.0),
+	Color(0.78, 0.62, 0.32, 1.0),
+	Color(0.76, 0.44, 0.31, 1.0),
+	Color(0.70, 0.39, 0.55, 1.0),
+	Color(0.54, 0.43, 0.70, 1.0),
+	Color(0.36, 0.53, 0.72, 1.0),
+	Color(0.34, 0.66, 0.70, 1.0),
 ]
 
 var sim: Variant
@@ -495,7 +495,7 @@ func _draw_protozoa() -> void:
 				position,
 				4.0,
 				3.0,
-				Color(0.34, 0.82, 0.78, 0.96),
+				Color(0.38, 0.66, 0.63, 0.82),
 				1.0
 			)
 			continue
@@ -511,9 +511,9 @@ func _draw_protozoa() -> void:
 		)
 		var texture: Texture2D = protozoa_atlas.get_texture(frame, state)
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
-		var color := Color(0.38, 0.88, 0.78, 1.0)
+		var color := Color(0.72, 0.88, 0.84, 1.0)
 		if state == 1:
-			color = Color(0.55, 0.96, 0.73, 1.0)
+			color = Color(0.78, 0.92, 0.80, 1.0)
 		elif not bool(proto.dying):
 			var starvation: float = clampf(1.0 - float(proto.energy) / 2.2, 0.0, 1.0)
 			if starvation > 0.0:
@@ -547,7 +547,7 @@ func _draw_ciliates() -> void:
 				position,
 				4.2,
 				2.0,
-				Color(0.60, 0.66, 0.98, 0.96),
+				Color(0.52, 0.58, 0.78, 0.82),
 				1.0
 			)
 			continue
@@ -563,9 +563,9 @@ func _draw_ciliates() -> void:
 		)
 		var texture: Texture2D = ciliate_atlas.get_texture(frame, state)
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
-		var color := Color(0.68, 0.72, 1.0, 1.0)
+		var color := Color(0.80, 0.82, 0.94, 1.0)
 		if state == 1:
-			color = Color(0.86, 0.72, 1.0, 1.0)
+			color = Color(0.90, 0.82, 0.94, 1.0)
 		elif not bool(ciliate.dying):
 			var starvation: float = clampf(1.0 - float(ciliate.energy) / 1.8, 0.0, 1.0)
 			if starvation > 0.0:
@@ -601,7 +601,7 @@ func _draw_flagellates() -> void:
 				position,
 				3.0,
 				1.5,
-				Color(0.96, 0.78, 0.30, 0.96),
+				Color(0.74, 0.62, 0.31, 0.82),
 				1.0
 			)
 			continue
@@ -617,7 +617,7 @@ func _draw_flagellates() -> void:
 		)
 		var texture: Texture2D = flagellate_atlas.get_texture(frame, state)
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
-		var color := Color(1.0, 0.84, 0.38, 1.0)
+		var color := Color(0.90, 0.82, 0.58, 1.0)
 		if float(flagellate.energy) < 1.4 and not bool(flagellate.dying):
 			var starvation: float = clampf(1.0 - float(flagellate.energy) / 1.4, 0.0, 1.0)
 			color = color.lerp(Color(0.52, 0.43, 0.28, 1.0), starvation * 0.70)
@@ -652,7 +652,7 @@ func _draw_microalgae() -> void:
 				position,
 				3.0,
 				3.0,
-				Color(0.42, 1.0, 0.38, 0.95),
+				Color(0.39, 0.68, 0.34, 0.84),
 				1.0
 			)
 			continue
@@ -676,9 +676,9 @@ func _draw_microalgae() -> void:
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
 		var local_light: float = float(sim.sample_light(position))
 		var color := Color(
-			0.34 + local_light * 0.18,
-			0.62 + local_light * 0.38,
-			0.28 + local_light * 0.18,
+			0.78 + local_light * 0.10,
+			0.82 + local_light * 0.12,
+			0.74 + local_light * 0.08,
 			1.0
 		)
 		if not bool(alga.dying):
@@ -717,7 +717,7 @@ func _draw_decomposers() -> void:
 				position,
 				3.0,
 				2.5,
-				Color(0.96, 0.64, 0.27, 0.96),
+				Color(0.72, 0.52, 0.30, 0.84),
 				1.0
 			)
 			continue
@@ -739,7 +739,7 @@ func _draw_decomposers() -> void:
 		)
 		var texture: Texture2D = ecology_atlas.get_texture(1, state, frame)
 		var texture_size: Vector2 = texture.get_size() * SPRITE_WORLD_PIXEL
-		var color := Color(1.0, 0.70, 0.34, 1.0)
+		var color := Color(0.90, 0.84, 0.72, 1.0)
 		if not bool(yeast.dying):
 			var starvation: float = clampf(1.0 - float(yeast.energy) / 1.20, 0.0, 1.0)
 			if starvation > 0.0:
@@ -1088,15 +1088,17 @@ func _draw_feeding_link(
 		return
 
 	var p: float = clampf(progress, 0.0, 1.0)
+	if p < 0.06:
+		return
 	var pixel_size: float = maxf(
 		SPRITE_WORLD_PIXEL,
 		1.0 / maxf(camera.zoom.x, 0.001)
 	)
-	var bead_count: int = 2
-	if p >= 0.25:
-		bead_count = 3
-	if p >= 0.72:
+	var bead_count: int = 3
+	if p >= 0.60:
 		bead_count = 4
+	if p >= 0.84:
+		bead_count = 5
 
 	# PREPARE -> HOLD -> INGEST. Progress, not wall-clock animation, chooses
 	# which contact clusters are emphasized.
@@ -1142,12 +1144,13 @@ func _draw_lysis_fragments(
 ) -> void:
 	if progress <= 0.05:
 		return
-	_draw_effect_asset(
-		position,
-		PixelEffectAtlasScript.EFFECT_LYSIS,
-		clampi(floori(clampf(progress, 0.0, 0.999) * 4.0), 0, 3),
-		1.0 + progress * 0.30
-	)
+	if camera.zoom.x >= DETAIL_LOD_ZOOM:
+		_draw_effect_asset(
+			position,
+			PixelEffectAtlasScript.EFFECT_LYSIS,
+			clampi(floori(clampf(progress, 0.0, 0.999) * 4.0), 0, 3),
+			1.0
+		)
 	var pixel_size: float = SPRITE_WORLD_PIXEL
 	var radius: float = 0.7 + progress * 3.2
 	for i in range(6):

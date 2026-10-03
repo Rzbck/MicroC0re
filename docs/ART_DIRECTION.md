@@ -255,3 +255,29 @@ per-pixel noise across the dish.
 - Slow succession disturbances may have a short localized material-front cue so
   the viewer can connect a sudden patch change to a cause. The cue must fade
   quickly and never become a permanent HUD effect.
+
+
+## Video audit correction — 2026-10-03 18:09 capture
+
+The captured build exposed several failures that were not visible from CI:
+
+- water read as almost pure black, so organisms looked like stickers in a void;
+- producer material rendered as repeated green plus signs, which read as debug/UI
+  marks rather than ecology;
+- organism modulation was too saturated, especially microalgae;
+- selected close-up zoom was too aggressive for a scene that still lacked local
+  environmental context;
+- inspector remained visually dominant at 2x desktop scaling;
+- lysis/predation accents competed with the body instead of handing the eye into
+  environmental consequences.
+
+Corrections in this pass:
+
+- brighter, low-contrast teal microscope water with static large-scale material
+  variation and a soft non-black vignette;
+- producer/EPS/detritus/damage/exudate rebuilt as irregular connected clusters;
+- dissolved chemistry no longer generates separate bright symbols;
+- ecology palettes are muted and material-oriented;
+- selection focus zoom is reduced;
+- inspector footprint/opacity/font scale reduced again;
+- lysis FX are close-detail only while fragments transition into detrital tones.

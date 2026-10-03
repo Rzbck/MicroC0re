@@ -29,10 +29,10 @@ func _build_root() -> void:
 	add_child(root_control)
 
 
-func _panel_style(alpha: float = 0.94) -> StyleBoxFlat:
+func _panel_style(alpha: float = 0.86) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.012, 0.020, 0.024, alpha)
-	style.border_color = Color(0.18, 0.36, 0.34, 0.90)
+	style.border_color = Color(0.18, 0.34, 0.32, 0.70)
 	style.border_width_left = 1
 	style.border_width_top = 1
 	style.border_width_right = 1
@@ -41,10 +41,10 @@ func _panel_style(alpha: float = 0.94) -> StyleBoxFlat:
 	style.corner_radius_top_right = 3
 	style.corner_radius_bottom_left = 3
 	style.corner_radius_bottom_right = 3
-	style.content_margin_left = 3.0
-	style.content_margin_right = 3.0
-	style.content_margin_top = 3.0
-	style.content_margin_bottom = 3.0
+	style.content_margin_left = 2.0
+	style.content_margin_right = 2.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
 	return style
 
 
@@ -133,12 +133,12 @@ func _build_inspector() -> void:
 	inspector_panel.anchor_top = 0.0
 	inspector_panel.anchor_right = 0.0
 	inspector_panel.anchor_bottom = 0.0
-	inspector_panel.offset_left = 4.0
-	inspector_panel.offset_top = 4.0
-	inspector_panel.offset_right = 136.0
-	inspector_panel.offset_bottom = 94.0
+	inspector_panel.offset_left = 3.0
+	inspector_panel.offset_top = 3.0
+	inspector_panel.offset_right = 108.0
+	inspector_panel.offset_bottom = 70.0
 	inspector_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.90))
+	inspector_panel.add_theme_stylebox_override("panel", _panel_style(0.76))
 	inspector_panel.visible = false
 	root_control.add_child(inspector_panel)
 
@@ -154,15 +154,15 @@ func _build_inspector() -> void:
 	inspector_title.text = "ORGANISM"
 	inspector_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_title.clip_text = true
-	inspector_title.add_theme_font_size_override("font_size", 7)
+	inspector_title.add_theme_font_size_override("font_size", 6)
 	inspector_title.add_theme_color_override("font_color", Color(0.75, 0.96, 0.88))
 	header.add_child(inspector_title)
 
 	var close := Button.new()
 	close.text = "×"
-	close.custom_minimum_size = Vector2(14.0, 14.0)
+	close.custom_minimum_size = Vector2(12.0, 12.0)
 	close.focus_mode = Control.FOCUS_NONE
-	close.add_theme_font_size_override("font_size", 8)
+	close.add_theme_font_size_override("font_size", 6)
 	close.pressed.connect(_emit_inspector_close)
 	header.add_child(close)
 
@@ -173,7 +173,7 @@ func _build_inspector() -> void:
 	inspector_body.selection_enabled = false
 	inspector_body.autowrap_mode = TextServer.AUTOWRAP_OFF
 	inspector_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_body.add_theme_font_size_override("normal_font_size", 6)
+	inspector_body.add_theme_font_size_override("normal_font_size", 5)
 	inspector_body.add_theme_color_override("default_color", Color(0.76, 0.84, 0.82))
 	box.add_child(inspector_body)
 

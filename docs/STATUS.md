@@ -298,3 +298,15 @@ Third visual-language pass:
   biome changes have an observable cause;
 - late lysis fragments shift toward detrital brown, visually handing death into
   the recycling layer.
+
+
+## Video-driven visual correction — 2026-10-03 18:09
+
+Based on the maintainer capture rather than code inspection alone:
+- replaced near-black water with readable microscope water;
+- removed plus-sign biome language and replaced it with irregular connected
+  producer/EPS/detritus/damage/exudate patches;
+- strengthened biome-mask presentation without changing ecology rules;
+- reduced neon organism modulation, especially producers/decomposers;
+- reduced auto-focus zoom and shrank/faded the inspector;
+- simplified event accents so body state + environmental handoff remain primary.

@@ -61,10 +61,10 @@ func refresh_from_sim(sim: Variant) -> void:
 		return
 	for y in range(_mask_a_image.get_height()):
 		for x in range(_mask_a_image.get_width()):
-			var producer := clampf(float(sim.producer_biomass.get_cell(x, y)) * 1.35, 0.0, 1.0)
-			var detritus := clampf(float(sim.detritus.get_cell(x, y)) * 4.2, 0.0, 1.0)
-			var eps := clampf(float(sim.eps.get_cell(x, y)) * 4.0, 0.0, 1.0)
-			var damage := clampf(float(sim.damage_cue.get_cell(x, y)) * 7.5, 0.0, 1.0)
+			var producer := clampf(float(sim.producer_biomass.get_cell(x, y)) * 1.85, 0.0, 1.0)
+			var detritus := clampf(float(sim.detritus.get_cell(x, y)) * 5.4, 0.0, 1.0)
+			var eps := clampf(float(sim.eps.get_cell(x, y)) * 5.0, 0.0, 1.0)
+			var damage := clampf(float(sim.damage_cue.get_cell(x, y)) * 8.5, 0.0, 1.0)
 			# Oxygen has a 0.42 baseline in the simulation. Only oxygen enrichment
 			# should become artwork; otherwise the whole dish becomes cyan noise.
 			var oxygen := clampf(
@@ -79,7 +79,7 @@ func refresh_from_sim(sim: Variant) -> void:
 			)
 			var waste := clampf(float(sim.waste.get_cell(x, y)) * 1.55, 0.0, 1.0)
 			var exudate_value := clampf(
-				float(sim.exudate.get_cell(x, y)) * 3.2,
+				float(sim.exudate.get_cell(x, y)) * 4.0,
 				0.0,
 				1.0
 			)
