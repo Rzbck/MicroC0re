@@ -3897,6 +3897,7 @@ func state_signature() -> String:
 				int(cell.hgt_events),
 				int(cell.transformation_events),
 			]
+		)
 		parts.append(
 			"vi%d:vp%.3f:vl%d"
 			% [
@@ -3904,7 +3905,6 @@ func state_signature() -> String:
 				float(cell.phage_progress),
 				1 if bool(cell.phage_triggered_lysis) else 0,
 			]
-		)
 		)
 
 	for proto in protozoa:
