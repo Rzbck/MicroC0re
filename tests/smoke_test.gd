@@ -91,6 +91,30 @@ func _init() -> void:
 	if interaction_probe.exudate.total() >= exudate_before:
 		errors.append("ecology: bacterium failed to consume cross-feeding exudate")
 
+	# Succession/disturbance regression: pulses must alter local fields while
+	# washout removes attached material instead of creating/deleting organisms.
+	var succession_probe = PetriSimulationScript.new(7319)
+	succession_probe.seed_demo(0)
+	var nutrient_before_pulse: float = succession_probe.nutrient.total()
+	succession_probe._trigger_disturbance(
+		PetriSimulationScript.DISTURBANCE_RESOURCE_PULSE
+	)
+	if succession_probe.nutrient.total() <= nutrient_before_pulse:
+		errors.append("biome: resource disturbance failed to enrich nutrient")
+	succession_probe.producer_biomass.fill(0.60)
+	succession_probe.eps.fill(0.35)
+	var producer_before_washout: float = succession_probe.producer_biomass.total()
+	var eps_before_washout: float = succession_probe.eps.total()
+	succession_probe._trigger_disturbance(
+		PetriSimulationScript.DISTURBANCE_WASHOUT
+	)
+	if succession_probe.producer_biomass.total() >= producer_before_washout:
+		errors.append("biome: washout failed to reduce producer material")
+	if succession_probe.eps.total() >= eps_before_washout:
+		errors.append("biome: washout failed to reduce EPS")
+	if succession_probe.detritus.total() <= 0.0:
+		errors.append("biome: washout failed to create detrital opportunity")
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
 	first.seed_demo(24)

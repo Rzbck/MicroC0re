@@ -29,6 +29,10 @@ const FLAGELLATE_SAFETY_LIMIT := 28
 const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
 
+const DISTURBANCE_RESOURCE_PULSE := 0
+const DISTURBANCE_WASHOUT := 1
+const DISTURBANCE_ORGANIC_FALL := 2
+
 var world_size := Vector2(
 	FIELD_WIDTH * FIELD_CELL_SIZE,
 	FIELD_HEIGHT * FIELD_CELL_SIZE
@@ -64,6 +68,11 @@ var _next_id: int = 1
 var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
+var disturbance_index: int = 0
+var next_disturbance_time: float = 24.0
+var last_disturbance_type: int = -1
+var last_disturbance_position := Vector2.ZERO
+var last_disturbance_time: float = -1.0
 
 # Latest mechanics metrics (aggregated across solver iterations for one
 # mechanics update). Used by benchmark/HUD, never by simulation decisions.
@@ -130,6 +139,12 @@ var dormancy_resource_threshold: float = 0.050
 var dormancy_wake_threshold: float = 0.105
 var dormancy_maintenance_factor: float = 0.11
 var dormancy_uptake_factor: float = 0.16
+
+# Slow deterministic succession/disturbance cycle. These are local ecological
+# events, not random screen effects: they directly alter resource/matrix fields
+# and let dormancy, scavenging, producer recovery and grazing reshape the patch.
+var disturbance_interval: float = 38.0
+var disturbance_radius: float = 15.0
 
 # Motility / chemotaxis.
 var run_speed: float = 11.0
@@ -244,6 +259,11 @@ func seed_demo(count: int = 36) -> void:
 	_chemistry_accumulator = 0.0
 	_slow_biome_accumulator = 0.0
 	_mechanics_accumulator = 0.0
+	disturbance_index = 0
+	next_disturbance_time = 24.0
+	last_disturbance_type = -1
+	last_disturbance_position = Vector2.ZERO
+	last_disturbance_time = -1.0
 	_next_id = 1
 	rng.seed = fixed_seed
 	nutrient.fill(0.012)
@@ -541,6 +561,7 @@ func step(dt: float) -> void:
 	_advance_ciliates(dt)
 
 	simulation_time += dt
+	_advance_disturbance_schedule()
 
 
 func _advance_microalgae(dt: float) -> void:
@@ -2362,6 +2383,133 @@ func _recycle_dead_cell(cell: Variant) -> void:
 	damage_cue.add_radial_world(position, 5.0, recycled * 0.75)
 
 
+func _advance_disturbance_schedule() -> void:
+	while simulation_time >= next_disturbance_time:
+		_trigger_disturbance(disturbance_index)
+		disturbance_index += 1
+		next_disturbance_time += disturbance_interval
+
+
+func _trigger_disturbance(event_index: int) -> void:
+	var event_type: int = posmod(event_index, 3)
+	var position: Vector2 = _disturbance_position(event_index, event_type)
+	last_disturbance_type = event_type
+	last_disturbance_position = position
+	last_disturbance_time = simulation_time
+
+	match event_type:
+		DISTURBANCE_RESOURCE_PULSE:
+			# A local dissolved-resource pulse creates a bloom opportunity.
+			nutrient.add_radial_world(
+				position,
+				disturbance_radius,
+				0.92
+			)
+			oxygen.add_radial_world(
+				position,
+				disturbance_radius * 0.78,
+				0.10
+			)
+			exudate.add_radial_world(
+				position,
+				disturbance_radius * 0.55,
+				0.055
+			)
+
+		DISTURBANCE_WASHOUT:
+			# Local shear/fresh-water turnover removes attached material rather
+			# than deleting organisms. Detached biomass becomes detrital resource,
+			# creating a scavenger/decomposer opportunity after the disturbance.
+			producer_biomass.attenuate_radial_world(
+				position,
+				disturbance_radius,
+				0.62
+			)
+			eps.attenuate_radial_world(
+				position,
+				disturbance_radius,
+				0.76
+			)
+			quorum_signal.attenuate_radial_world(
+				position,
+				disturbance_radius,
+				0.88
+			)
+			exudate.attenuate_radial_world(
+				position,
+				disturbance_radius,
+				0.48
+			)
+			detritus.add_radial_world(
+				position,
+				disturbance_radius * 0.72,
+				0.16
+			)
+			damage_cue.add_radial_world(
+				position,
+				disturbance_radius * 0.72,
+				0.075
+			)
+			oxygen.add_radial_world(
+				position,
+				disturbance_radius * 0.86,
+				0.14
+			)
+
+		DISTURBANCE_ORGANIC_FALL:
+			# A bounded particulate pulse favors decomposers/scavengers and then
+			# cross-feeders as mineralization/exudation proceeds.
+			detritus.add_radial_world(
+				position,
+				disturbance_radius * 0.82,
+				0.36
+			)
+			nutrient.add_radial_world(
+				position,
+				disturbance_radius * 0.56,
+				0.11
+			)
+			exudate.add_radial_world(
+				position,
+				disturbance_radius * 0.46,
+				0.045
+			)
+			damage_cue.add_radial_world(
+				position,
+				disturbance_radius * 0.42,
+				0.022
+			)
+
+
+func _disturbance_position(event_index: int, event_type: int) -> Vector2:
+	var sources: Array[Vector2] = (
+		producer_sources
+		if event_type == DISTURBANCE_WASHOUT
+		else nutrient_sources
+	)
+	if sources.is_empty():
+		return world_size * 0.5
+
+	# No RNG consumption: adding succession must not perturb mutation/hunting
+	# random streams. Seed + event index deterministically choose the patch.
+	var source_index: int = posmod(
+		absi(fixed_seed) + event_index * 5 + event_type * 3,
+		sources.size()
+	)
+	var base: Vector2 = sources[source_index]
+	var phase: float = (
+		float(posmod(absi(fixed_seed), 997)) * 0.017
+		+ float(event_index) * 2.399
+		+ float(event_type) * 0.91
+	)
+	var offset := Vector2(cos(phase), sin(phase)) * 5.5
+	var margin: float = disturbance_radius + 2.0
+	var result: Vector2 = base + offset
+	result.x = clampf(result.x, margin, world_size.x - margin)
+	result.y = clampf(result.y, margin, world_size.y - margin)
+	return result
+
+
 func _feed_environment(dt: float) -> void:
 	var amount_per_source: float = source_rate * dt
 	for source in nutrient_sources:
@@ -2891,6 +3039,16 @@ func state_signature() -> String:
 	parts.append("prod:%.5f" % producer_biomass.total())
 	parts.append("exu:%.5f" % exudate.total())
 	parts.append("sig:%.5f" % quorum_signal.total())
+	parts.append(
+		"dist:%d:%.3f:%d:%.3f:%.3f"
+		% [
+			disturbance_index,
+			next_disturbance_time,
+			last_disturbance_type,
+			last_disturbance_position.x,
+			last_disturbance_position.y,
+		]
+	)
 	parts.append("p:%d" % protozoa.size())
 	parts.append("c:%d" % ciliates.size())
 	parts.append("f:%d" % flagellates.size())

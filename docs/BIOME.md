@@ -444,3 +444,14 @@ A new small flagellate-like protist now occupies the intermediate grazer niche:
 - can itself be captured by larger ciliates and amoebae.
 
 This creates a bounded tri-trophic chain: **bacteria -> flagellates -> ciliates/amoebae**, while flagellates and ciliates compete for bacterial prey. The first slice is deliberately capped at 28 agents and does not add another unbounded search structure.
+
+
+## Succession / disturbance cycle (#51)
+
+The CPU-reference ecosystem now has a deterministic slow disturbance cycle, starting after the initial establishment window and then repeating at long intervals. It deliberately changes **fields**, not arbitrary organism state:
+
+- **resource pulse**: local dissolved nutrient/oxygen enrichment creates a bloom opportunity;
+- **washout**: locally strips producer mat, EPS/quorum and some exudate, while detached material becomes detritus and fresh water raises oxygen;
+- **organic fall**: a particulate detritus pulse favors decomposers/scavengers, then cross-feeders through mineralization/exudation.
+
+Event positions are derived from seed + event index without consuming the main simulation RNG, preserving deterministic mutation/predation streams. This creates colonization fronts, dormancy/wake cycles, producer recovery and changing trophic hotspots using the existing ecological mechanisms instead of scripted species replacement.

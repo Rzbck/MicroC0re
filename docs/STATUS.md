@@ -74,7 +74,6 @@ These Review items have passed GitHub Actions parse/smoke validation where appli
 - #42 metabolic cross-feeding
 - #43 mature biofilm/EPS ecosystem engineering
 - #50 pH / temperature / redox / toxicity
-- #51 succession / disturbance / recolonization
 - #52 optional host-tissue / heme / blood chemistry
 - #53 phycosphere symbiosis
 - #55 rotifer / nematode microfauna
@@ -135,6 +134,8 @@ Previous 2026-10-02 observations:
 
 ### Living biome
 - new exudate field links microalgae, phototrophic bacteria, decomposers and heterotrophic uptake;
+- deterministic succession cycle now alternates local resource pulses, washout and organic-fall events;
+- disturbances act on biome fields, creating bloom/recolonization/scavenger opportunities without scripted species replacement;
 - new quorum field makes biofilm/EPS production density-responsive;
 - EPS now slows predator handling and boosts local exudate capture, making matrix a functional niche/refuge;
 - bacteria can reversibly enter dormancy under low resource and wake when local dissolved resource returns;

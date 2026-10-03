@@ -79,6 +79,39 @@ func add_radial_world(position: Vector2, radius: float, amount: float) -> void:
 			values[idx] = maxf(0.0, values[idx] + amount * weight)
 
 
+func attenuate_radial_world(
+	position: Vector2,
+	radius: float,
+	strength: float
+) -> void:
+	if radius <= 0.0 or strength <= 0.0:
+		return
+
+	var safe_strength: float = clampf(strength, 0.0, 1.0)
+	var cx: int = clampi(floori(position.x / cell_size), 0, width - 1)
+	var cy: int = clampi(floori(position.y / cell_size), 0, height - 1)
+	var cell_radius: int = maxi(1, ceili(radius / cell_size))
+	var radius_sq: float = radius * radius
+
+	for y in range(maxi(0, cy - cell_radius), mini(height, cy + cell_radius + 1)):
+		for x in range(maxi(0, cx - cell_radius), mini(width, cx + cell_radius + 1)):
+			var cell_center := Vector2(
+				(float(x) + 0.5) * cell_size,
+				(float(y) + 0.5) * cell_size
+			)
+			var distance_sq: float = cell_center.distance_squared_to(position)
+			if distance_sq > radius_sq:
+				continue
+
+			var normalized: float = 1.0 - sqrt(distance_sq) / radius
+			var weight: float = normalized * normalized
+			var idx: int = _index(x, y)
+			values[idx] = maxf(
+				0.0,
+				values[idx] * (1.0 - safe_strength * weight)
+			)
+
+
 func take_nearest_world(position: Vector2, requested: float) -> float:
 	if requested <= 0.0:
 		return 0.0
