@@ -17,8 +17,9 @@ const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
 const CHEMISTRY_DT_SMALL := 1.0 / 15.0
-const CHEMISTRY_DT_MASS := 1.0 / 10.0
-const CHEMISTRY_DT_ULTRA := 1.0 / 7.5
+const CHEMISTRY_DT_MEDIUM := 1.0 / 10.0
+const CHEMISTRY_DT_MASS := 1.0 / 8.0
+const CHEMISTRY_DT_ULTRA := 1.0 / 6.0
 const SLOW_BIOME_DT := 1.0 / 5.0
 const MECHANICS_DT := 1.0 / 30.0
 const AGENT_DT_SMALL := 1.0 / 30.0
@@ -76,7 +77,7 @@ var producer_biomass: Variant
 var exudate: Variant
 var quorum_signal: Variant
 var fungal_enzyme: Variant
-var bacteria: Array[Bacterium] = []
+var bacteria: Array = []
 var protozoa: Array = []
 var ciliates: Array = []
 var flagellates: Array = []
@@ -85,7 +86,7 @@ var decomposers: Array = []
 var hyphae: Array = []
 var phage_clouds: Array = []
 var dna_fragments: Array = []
-var _population_buffer: Array[Bacterium] = []
+var _population_buffer: Array = []
 var nutrient_sources: Array[Vector2] = []
 var producer_sources: Array[Vector2] = []
 
@@ -104,6 +105,7 @@ var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
 var _agent_tick: int = 0
 var _current_agent_dt: float = AGENT_DT_SMALL
+var _current_metabolic_stride: int = 1
 var _current_memory_alpha: float = 0.0
 var _current_rotational_sigma: float = 0.0
 var _current_mechanics_dt: float = MECHANICS_DT
@@ -659,6 +661,7 @@ func step(dt: float) -> void:
 	while _agent_accumulator >= target_agent_dt:
 		var agent_dt: float = target_agent_dt
 		_current_agent_dt = agent_dt
+		_current_metabolic_stride = _metabolic_stride()
 		_current_memory_alpha = (
 			1.0 - exp(-agent_dt / maxf(0.001, chemotaxis_memory_tau))
 		)
@@ -668,7 +671,7 @@ func step(dt: float) -> void:
 		_current_mechanics_dt = agent_dt
 		_agent_tick += 1
 		var agents_start: int = Time.get_ticks_usec()
-		var next_population: Array[Bacterium] = _population_buffer
+		var next_population: Array = _population_buffer
 		next_population.clear()
 		var living_start: int = _refresh_population_metadata()
 		var available_bacterial_births: int = maxi(
@@ -710,7 +713,7 @@ func step(dt: float) -> void:
 				)
 				if float(cell.division_progress) >= 1.0:
 					if available_bacterial_births > 0:
-						var daughters: Array[Bacterium] = _divide(cell)
+						var daughters: Array = _divide(cell)
 						next_population.append_array(daughters)
 						available_bacterial_births -= 1
 						bacteria_identity_changed = true
@@ -730,7 +733,7 @@ func step(dt: float) -> void:
 	
 			next_population.append(cell)
 	
-		var previous_population: Array[Bacterium] = bacteria
+		var previous_population: Array = bacteria
 		bacteria = next_population
 		_population_buffer = previous_population
 		_population_buffer.clear()
@@ -776,6 +779,8 @@ func _chemistry_dt_for_population() -> float:
 		return CHEMISTRY_DT_ULTRA
 	if count >= AGENT_MASS_THRESHOLD:
 		return CHEMISTRY_DT_MASS
+	if count >= AGENT_MEDIUM_THRESHOLD:
+		return CHEMISTRY_DT_MEDIUM
 	return CHEMISTRY_DT_SMALL
 
 
@@ -802,14 +807,13 @@ func _metabolic_stride() -> int:
 
 
 func _should_run_metabolism(cell_id: int) -> bool:
-	var stride: int = _metabolic_stride()
 	return (
-		stride <= 1
-		or posmod(cell_id + _agent_tick, stride) == 0
+		_current_metabolic_stride <= 1
+		or posmod(cell_id + _agent_tick, _current_metabolic_stride) == 0
 	)
 
 
-func _advance_cell_motion_only(cell: Bacterium, dt: float) -> void:
+func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 	cell.age = float(cell.age) + dt
 	if bool(cell.dormant):
 		cell.dormant_time = float(cell.dormant_time) + dt
@@ -2581,8 +2585,8 @@ func _advance_gene_transfers(dt: float) -> void:
 	_active_transfer_recipient_ids = next_active
 
 func _maybe_start_conjugation(
-	a: Bacterium,
-	b: Bacterium,
+	a: Variant,
+	b: Variant,
 	distance: float,
 	target_distance: float
 ) -> void:
@@ -2639,19 +2643,19 @@ func _maybe_start_conjugation(
 	_active_transfer_recipient_ids.append(int(recipient.id))
 
 
-func _plasmid_uptake_factor(cell: Bacterium) -> float:
+func _plasmid_uptake_factor(cell: Variant) -> float:
 	return 1.16 if cell.has_plasmid(BacteriumScript.PLASMID_SCAVENGE) else 1.0
 
 
-func _plasmid_adhesion_factor(cell: Bacterium) -> float:
+func _plasmid_adhesion_factor(cell: Variant) -> float:
 	return 1.18 if cell.has_plasmid(BacteriumScript.PLASMID_ADHESION) else 1.0
 
 
-func _plasmid_maintenance_factor(cell: Bacterium) -> float:
+func _plasmid_maintenance_factor(cell: Variant) -> float:
 	return 0.88 if cell.has_plasmid(BacteriumScript.PLASMID_STRESS) else 1.0
 
 
-func _plasmid_burden(cell: Bacterium) -> float:
+func _plasmid_burden(cell: Variant) -> float:
 	var mask: int = int(cell.plasmid_mask)
 	var modules: int = 0
 	modules += 1 if (mask & int(BacteriumScript.PLASMID_CONJUGATION)) != 0 else 0
@@ -2661,12 +2665,12 @@ func _plasmid_burden(cell: Bacterium) -> float:
 	return 0.0018 * float(modules)
 
 
-func _advance_cell(cell: Bacterium, dt: float) -> void:
+func _advance_cell(cell: Variant, dt: float) -> void:
 	if not _should_run_metabolism(int(cell.id)):
 		_advance_cell_motion_only(cell, dt)
 		return
 
-	var metabolic_dt: float = dt * float(_metabolic_stride())
+	var metabolic_dt: float = dt * float(_current_metabolic_stride)
 	cell.age = float(cell.age) + dt
 
 	if bool(cell.phage_infected):
@@ -3108,7 +3112,7 @@ func _advance_lysis(cell: Variant, dt: float) -> void:
 	damage_cue.add_radial_world(Vector2(cell.position), 4.0, release * 1.8)
 
 
-func _ready_to_begin_division(cell: Bacterium) -> bool:
+func _ready_to_begin_division(cell: Variant) -> bool:
 	var limit: int = maxi(2, bacteria_population_limit)
 	var required_length: float = base_division_length * float(cell.gene_size)
 	var soft_start: float = minf(
@@ -3175,7 +3179,7 @@ func _refresh_population_metadata() -> int:
 	return living_count
 
 
-func _divide(parent: Bacterium) -> Array[Bacterium]:
+func _divide(parent: Variant) -> Array:
 	var parent_axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var parent_length: float = float(parent.length)
 	var daughter_energy: float = float(parent.energy) * 0.475
@@ -3205,11 +3209,11 @@ func _divide(parent: Bacterium) -> Array[Bacterium]:
 		daughter.sensed_memory = nutrient.sample_world(Vector2(daughter.position))
 		_constrain_to_world(daughter)
 
-	var daughters: Array[Bacterium] = [a, b]
+	var daughters: Array = [a, b]
 	return daughters
 
 
-func _recycle_dead_cell(cell: Bacterium) -> void:
+func _recycle_dead_cell(cell: Variant) -> void:
 	var recycled: float = maxf(0.05, float(cell.length) * 0.04)
 	var position: Vector2 = Vector2(cell.position)
 
@@ -4054,7 +4058,7 @@ func _resolve_all_contacts() -> void:
 	mechanics_mode_last = 0
 	var count: int = bacteria.size()
 	for i in range(count):
-		var cell: Bacterium = bacteria[i]
+		var cell: Variant = bacteria[i]
 		if (
 			bool(cell.dying)
 			or bool(cell.consumed)
@@ -4234,7 +4238,7 @@ func _rebuild_spatial_grid() -> void:
 	_max_half_body_length = 0.0
 
 	for i in range(count):
-		var cell: Bacterium = bacteria[i]
+		var cell: Variant = bacteria[i]
 		var position: Vector2 = Vector2(cell.position)
 		_mech_positions[i] = position
 		_mech_radii[i] = float(cell.radius)
@@ -4266,7 +4270,7 @@ func _rebuild_spatial_grid() -> void:
 		_grid_head[cell_index] = i
 
 
-func _resolve_pair(a: Bacterium, b: Bacterium) -> void:
+func _resolve_pair(a: Variant, b: Variant) -> void:
 	var position_a: Vector2 = Vector2(a.position)
 	var position_b: Vector2 = Vector2(b.position)
 	var length_a: float = float(a.length)
@@ -4418,7 +4422,7 @@ func _closest_points_between_segments(
 	return [closest_a, closest_b]
 
 
-func _constrain_to_world(cell: Bacterium) -> void:
+func _constrain_to_world(cell: Variant) -> void:
 	var margin: float = float(cell.length) * 0.5 + float(cell.radius) + 0.5
 
 	if float(cell.position.x) < margin:
