@@ -407,3 +407,12 @@ Correction:
 - existing local `.microcore/telemetry/last-session.json` reports remain
   valid and can be published after pulling this commit without replaying the
   session.
+
+
+## Telemetry publisher parser recovery
+- recovered the complete publisher from the pre-hotfix revision after the first
+  regex patch accidentally triggered JavaScript replacement-string `$'`
+  semantics and duplicated the remainder of the PowerShell file;
+- the Godot version regex is now valid and the publisher file is no longer
+  duplicated/truncated;
+- the previously recorded local session report is still reusable after pulling.
