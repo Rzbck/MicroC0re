@@ -77,7 +77,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $interesting = @(Get-Content smoke-output.txt | Where-Object {
-            $_ -match 'ERROR|SCRIPT ERROR|Parse Error|smoke FAIL|performance:|terrain:|ecology:|population guard:|determinism:'
+            $_ -match 'ERROR|SCRIPT ERROR|Parse Error|smoke FAIL|performance:|terrain:|ecology:|population guard:|determinism:| at: '
           })
           if ($interesting.Count -eq 0) {
             $interesting = @(Get-Content smoke-output.txt | Select-Object -Last 40)

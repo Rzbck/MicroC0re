@@ -642,3 +642,12 @@ This pass attacks those two hot paths:
 - smoke diagnostics now run the existing PowerShell wrapper in a child pwsh
   process; its intentional exit code no longer terminates the capture step
   before smoke-output.txt is written.
+
+
+## #67 lineage-bin initialization fix
+- smoke diagnostics exposed repeated PackedInt32Array bounds errors from the new
+  lineage-frequency pressure table;
+- the tranche-4 patch had declared the 32-bin packed array but its initialization
+  anchor missed the direction-LUT block introduced in tranche 2;
+- the lineage table is now resized/zeroed in PetriSimulation._init before any
+  division-pressure read/write.

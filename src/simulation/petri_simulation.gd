@@ -332,6 +332,8 @@ func _init(seed_value: int = 1) -> void:
 	fungal_enzyme = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	_grid_head.resize(GRID_CELL_COUNT)
 	_grid_head.fill(-1)
+	_lineage_counts.resize(LINEAGE_BIN_COUNT)
+	_lineage_counts.fill(0)
 	_direction_lut.resize(DIRECTION_LUT_SIZE)
 	for i in range(DIRECTION_LUT_SIZE):
 		var lut_angle: float = (
