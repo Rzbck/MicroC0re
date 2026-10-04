@@ -142,7 +142,7 @@ func _init() -> void:
 		cell.energy = 12.0
 		cell.begin_division()
 		cell.division_progress = 1.0
-	cap_probe.step(1.0 / 60.0)
+	cap_probe.step(1.0 / 30.0)
 	if cap_probe.bacteria.size() > cap_probe.bacteria_population_limit:
 		errors.append("performance: bacterial division overshot safety ceiling")
 
@@ -410,6 +410,10 @@ func _init() -> void:
 
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
+	# Keep the deterministic smoke window at the historical small-population
+	# ceiling. The live app uses the 5k guard; scale belongs to perf_benchmark.
+	first.bacteria_population_limit = 420
+	second.bacteria_population_limit = 420
 	first.seed_demo(24)
 	second.seed_demo(24)
 
@@ -459,7 +463,7 @@ func _init() -> void:
 		errors.append("ecology: decomposer guild disappeared during smoke")
 	if first.hyphae.is_empty():
 		errors.append("ecology: hyphal decomposer guild disappeared during smoke")
-	if first.bacteria.size() > 420:
+	if first.bacteria.size() > first.bacteria_population_limit:
 		errors.append("population guard: bacterial hard ceiling exceeded")
 	if first.protozoa.size() > 18:
 		errors.append("population guard: protozoan hard ceiling exceeded")

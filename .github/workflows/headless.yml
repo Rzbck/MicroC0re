@@ -58,8 +58,36 @@ jobs:
         run: godot --headless --path . --script src/app/pixel_isometric_world.gd --check-only
 
       - name: Run deterministic smoke test
+        id: smoke_test
         shell: pwsh
-        run: ./scripts/run_headless.ps1
+        run: |
+          $output = & ./scripts/run_headless.ps1 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $output | Set-Content -Path smoke-output.txt -Encoding utf8
+          exit $code
+
+      - name: Publish smoke failure diagnostics
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $interesting = @(Get-Content smoke-output.txt | Where-Object {
+            $_ -match 'ERROR|SCRIPT ERROR|Parse Error|smoke FAIL|performance:|terrain:|ecology:|population guard:|determinism:'
+          })
+          if ($interesting.Count -eq 0) {
+            $interesting = @(Get-Content smoke-output.txt | Select-Object -Last 40)
+          }
+          $body = @(
+            ('### CI smoke failure ' + $env:GITHUB_SHA)
+            ''
+            '```text'
+          )
+          $body += $interesting | Select-Object -First 80
+          $body += '```'
+          $body | Set-Content smoke-failure.md -Encoding utf8
+          gh issue comment 67 --body-file smoke-failure.md
 
       - name: Run 5k CPU scale benchmark
         shell: pwsh

@@ -627,3 +627,12 @@ This pass attacks those two hot paths:
   simulation cost;
 - CI publishes every push's 100/500/1k/2k/5k living-world benchmark to #67 so
   subsequent optimization passes can use measured results directly.
+
+
+## #67 smoke diagnostics hardening
+- deterministic smoke keeps its historical 420-agent local test ceiling while
+  the live runtime now targets 5k; scale behavior is measured separately;
+- the synchronous-fission ceiling probe now advances a full 30 Hz agent step,
+  so it actually exercises a completed division wave;
+- push CI now posts filtered smoke failure diagnostics to #67 before stopping,
+  making headless failures auditable without raw Actions-log access.
