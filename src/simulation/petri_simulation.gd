@@ -22,10 +22,13 @@ const MECHANICS_DT := 1.0 / 30.0
 const AGENT_DT_SMALL := 1.0 / 30.0
 const AGENT_DT_MEDIUM := 1.0 / 20.0
 const AGENT_DT_MASS := 1.0 / 12.0
+const AGENT_DT_ULTRA := 1.0 / 8.0
 const AGENT_MEDIUM_THRESHOLD := 700
 const AGENT_MASS_THRESHOLD := 2200
+const AGENT_ULTRA_THRESHOLD := 6000
 const EXACT_MECHANICS_LIMIT := 900
 const DENSITY_NEIGHBOR_VISIT_CAP := 18
+const DENSITY_NEIGHBOR_VISIT_CAP_ULTRA := 12
 const DIRECTION_LUT_SIZE := 1024
 const REGULATION_BUCKETS := 6
 const LINEAGE_BIN_COUNT := 32
@@ -37,7 +40,7 @@ const GRID_HEIGHT := 43
 const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 # CPU-reference safety ceilings. These are performance guards, not biology.
 # Raise them only after GPU-resident agent mechanics is validated.
-const SAFETY_POPULATION_LIMIT := 5000
+const SAFETY_POPULATION_LIMIT := 10000
 const PROTOZOAN_SAFETY_LIMIT := 18
 const CILIATE_SAFETY_LIMIT := 16
 const FLAGELLATE_SAFETY_LIMIT := 28
@@ -764,6 +767,8 @@ func step(dt: float) -> void:
 
 func _agent_dt_for_population() -> float:
 	var count: int = bacteria.size()
+	if count >= AGENT_ULTRA_THRESHOLD:
+		return AGENT_DT_ULTRA
 	if count >= AGENT_MASS_THRESHOLD:
 		return AGENT_DT_MASS
 	if count >= AGENT_MEDIUM_THRESHOLD:
@@ -773,6 +778,8 @@ func _agent_dt_for_population() -> float:
 
 func _metabolic_stride() -> int:
 	var count: int = bacteria.size()
+	if count >= AGENT_ULTRA_THRESHOLD:
+		return 5
 	if count >= AGENT_MASS_THRESHOLD:
 		return 3
 	if count >= AGENT_MEDIUM_THRESHOLD:
@@ -4027,8 +4034,17 @@ func _resolve_all_contacts() -> void:
 		_constrain_to_world(cell)
 
 
+func _density_neighbor_visit_cap() -> int:
+	return (
+		DENSITY_NEIGHBOR_VISIT_CAP_ULTRA
+		if bacteria.size() >= AGENT_ULTRA_THRESHOLD
+		else DENSITY_NEIGHBOR_VISIT_CAP
+	)
+
+
 func _resolve_density_contacts() -> void:
 	var count: int = bacteria.size()
+	var visit_cap: int = _density_neighbor_visit_cap()
 	_density_corrections.resize(count)
 	_density_nearest.resize(count)
 	_density_corrections.fill(Vector2.ZERO)
@@ -4096,12 +4112,12 @@ func _resolve_density_contacts() -> void:
 							push += normal * (target - distance) * 0.34
 							pair_interactions_last += 1
 							pair_contacts_last += 1
-					if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+					if visited >= visit_cap:
 						break
 					j = _grid_next[j]
-				if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+				if visited >= visit_cap:
 					break
-			if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+			if visited >= visit_cap:
 				break
 
 		_density_corrections[i] = push.limit_length(0.55)

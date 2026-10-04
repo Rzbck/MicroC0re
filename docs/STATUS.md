@@ -651,3 +651,19 @@ This pass attacks those two hot paths:
   anchor missed the direction-LUT block introduced in tranche 2;
 - the lineage table is now resized/zeroed in PetriSimulation._init before any
   division-pressure read/write.
+
+
+## 10k CPU-reference tranche
+- raised the temporary CPU-reference bacteria ceiling from 5k to 10k;
+- added an ultra-density simulation tier above 6k: common agent decisions run
+  at 8 Hz, metabolism is staggered across five cohorts, and dense contact
+  sampling caps at 12 nearby candidates per agent;
+- living-terrain agent evaluation drops to 3 Hz above 6k while preserving
+  dt-scaled excavation/deposition rates; capability-fragment scans drop to
+  1.5 s cadence;
+- detailed sprite rendering is now automatically disabled above 1200 total
+  agents regardless of zoom, preventing a close-view draw-call explosion;
+- a selected organism is still redrawn with its full pixel sprite above the
+  retained mass batch, so inspection/follow remains useful at high density;
+- far-agent batch refresh falls from 15 Hz to 10 Hz in mass-population mode;
+- CI scale benchmark now includes a 10,000-bacterium probe.

@@ -26,6 +26,8 @@ const INSPECTOR_WIDTH := 276.0
 const SIMULATION_FRAME_BUDGET_MS := 16.0
 const FAR_AGENT_LOD_ZOOM := 6.20
 const FAR_AGENT_REFRESH := 1.0 / 15.0
+const FAR_AGENT_REFRESH_MASS := 1.0 / 10.0
+const DETAIL_POPULATION_LIMIT := 1200
 
 const LINEAGE_PALETTE := [
 	Color(0.42, 0.70, 0.46, 1.0),
@@ -241,8 +243,13 @@ func _process(delta: float) -> void:
 		_rebuild_terrain_batch()
 
 	far_agent_accumulator += delta
+	var far_refresh: float = (
+		FAR_AGENT_REFRESH_MASS
+		if _total_agent_count() > DETAIL_POPULATION_LIMIT
+		else FAR_AGENT_REFRESH
+	)
 	if (
-		far_agent_accumulator >= FAR_AGENT_REFRESH
+		far_agent_accumulator >= far_refresh
 		or not _using_far_agent_lod()
 	):
 		far_agent_accumulator = 0.0
@@ -282,6 +289,7 @@ func _draw() -> void:
 	var draw_start_usec: int = Time.get_ticks_usec()
 	_draw_capability_fragments()
 	_draw_agents()
+	_draw_selected_detail_overlay()
 	_draw_selection()
 	_draw_ui()
 
@@ -750,7 +758,34 @@ func _side_color(color: Color, factor: float) -> Color:
 
 
 func _using_far_agent_lod() -> bool:
-	return _camera_zoom() < FAR_AGENT_LOD_ZOOM
+	return (
+		_total_agent_count() > DETAIL_POPULATION_LIMIT
+		or _camera_zoom() < FAR_AGENT_LOD_ZOOM
+	)
+
+
+func _draw_selected_detail_overlay() -> void:
+	if (
+		not _using_far_agent_lod()
+		or selected_agent == null
+		or selected_kind.is_empty()
+	):
+		return
+	if selected_kind == "hypha":
+		_draw_hypha(selected_agent)
+		return
+	var p: Vector2 = Vector2(selected_agent.position)
+	var h: float = terrain.sample_height_nearest(p)
+	var depth: float = (
+		float(selected_agent.burrow_depth)
+		if "burrow_depth" in selected_agent
+		else 0.0
+	)
+	_draw_agent_sprite(
+		selected_kind,
+		selected_agent,
+		_project_world(p, h - depth * 0.24)
+	)
 
 
 func _rebuild_far_agent_batch() -> void:

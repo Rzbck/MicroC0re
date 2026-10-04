@@ -6,7 +6,7 @@ const LivingTerrainScript = preload("res://src/simulation/living_terrain.gd")
 const DT := 1.0 / 60.0
 const WARMUP_STEPS := 30
 const MEASURE_STEPS := 120
-const POPULATIONS := [100, 500, 1000, 2000, 5000]
+const POPULATIONS := [100, 500, 1000, 2000, 5000, 10000]
 
 
 func _init() -> void:
@@ -23,7 +23,9 @@ func _init() -> void:
 		var warmup_steps: int = (
 			WARMUP_STEPS
 			if population <= 1000
-			else 12 if population <= 2000 else 6
+			else 12 if population <= 2000
+			else 6 if population <= 5000
+			else 3
 		)
 		for _warmup in range(warmup_steps):
 			sim.step(DT)
@@ -32,7 +34,9 @@ func _init() -> void:
 		var measured_steps: int = (
 			MEASURE_STEPS
 			if population <= 1000
-			else 45 if population <= 2000 else 20
+			else 45 if population <= 2000
+			else 20 if population <= 5000
+			else 10
 		)
 		var candidate_sum: int = 0
 		var narrow_sum: int = 0

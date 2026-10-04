@@ -11,8 +11,10 @@ const TALUS_HEIGHT := 0.72
 const TERRAIN_AGENT_DT_SMALL := 1.0 / 15.0
 const TERRAIN_AGENT_DT_MEDIUM := 1.0 / 10.0
 const TERRAIN_AGENT_DT_MASS := 1.0 / 5.0
+const TERRAIN_AGENT_DT_ULTRA := 1.0 / 3.0
 const TERRAIN_MEDIUM_THRESHOLD := 700
 const TERRAIN_MASS_THRESHOLD := 2200
+const TERRAIN_ULTRA_THRESHOLD := 6000
 const FRAGMENT_BUCKET_SIZE := 4.0
 
 var world_size := Vector2.ZERO
@@ -226,6 +228,8 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 
 func _terrain_agent_dt(sim: Variant) -> float:
 	var count: int = sim.bacteria.size()
+	if count >= TERRAIN_ULTRA_THRESHOLD:
+		return TERRAIN_AGENT_DT_ULTRA
 	if count >= TERRAIN_MASS_THRESHOLD:
 		return TERRAIN_AGENT_DT_MASS
 	if count >= TERRAIN_MEDIUM_THRESHOLD:
@@ -235,6 +239,8 @@ func _terrain_agent_dt(sim: Variant) -> float:
 
 func _fragment_scan_interval(sim: Variant) -> float:
 	var count: int = sim.bacteria.size()
+	if count >= TERRAIN_ULTRA_THRESHOLD:
+		return 1.5
 	if count >= TERRAIN_MASS_THRESHOLD:
 		return 1.0
 	if count >= TERRAIN_MEDIUM_THRESHOLD:
