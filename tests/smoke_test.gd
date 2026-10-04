@@ -181,6 +181,16 @@ func _init() -> void:
 			errors.append("performance: density mechanics produced invalid position")
 			break
 
+		# Indexed scalar hot APIs must conserve local add/take semantics.
+	var indexed_probe = ScalarFieldScript.new(4, 4, 2.0, 0.0)
+	indexed_probe.add_index(5, 0.8)
+	var indexed_taken: float = indexed_probe.take_index(5, 0.3)
+	if (
+		absf(indexed_taken - 0.3) > 0.0001
+		or absf(float(indexed_probe.values[5]) - 0.5) > 0.0001
+	):
+		errors.append("performance: indexed scalar add/take mismatch")
+
 		# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)

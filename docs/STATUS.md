@@ -578,3 +578,26 @@ The high-density solver is an intentional mechanics LOD, not an ecology LOD:
 metabolism, mutation, HGT state, death, reproduction and terrain capabilities
 remain individual-agent data. Close/low-density populations still use detailed
 capsule contacts.
+
+
+## 10k-agent architecture tranche 3 — indexed metabolism + packed mechanics
+
+The post-tranche-2 CI benchmark improved 5k from 381.36 ms/step to 51.32
+ms/step (~7.4x faster), with 1k reaching 61.7 step calls/s. The remaining 5k
+cost was ~31.8 ms agent logic + ~15.0 ms density mechanics.
+
+This pass attacks those two hot paths:
+- ScalarField now exposes allocation-free index add/take operations;
+- bacterial metabolism computes the local field index once and reuses it for
+  nutrient/exudate/detritus/oxygen/quorum/EPS/waste transactions;
+- medium/mass populations stagger full metabolism across deterministic ID
+  buckets while skipped buckets still receive cheap movement, flow, phage and
+  age updates; rates on full metabolism ticks use the accumulated biological dt;
+- high-density mechanics snapshots positions/radii/active flags into packed
+  arrays once, then neighbor loops read packed values instead of repeatedly
+  dereferencing RefCounted organism properties;
+- density corrections/nearest-neighbor arrays are reused instead of allocated
+  every solve;
+- density mechanics above the exact-contact threshold runs every second mass
+  agent update with dt-correct conjugation probability, while low populations
+  retain detailed per-update capsule mechanics.

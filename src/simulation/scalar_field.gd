@@ -126,6 +126,24 @@ func attenuate_radial_world(
 			)
 
 
+func add_index(index: int, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	if index < 0 or index >= values.size():
+		return
+	values[index] = maxf(0.0, values[index] + amount)
+
+
+func take_index(index: int, requested: float) -> float:
+	if requested <= 0.0:
+		return 0.0
+	if index < 0 or index >= values.size():
+		return 0.0
+	var taken: float = minf(float(values[index]), requested)
+	values[index] = float(values[index]) - taken
+	return taken
+
+
 func take_nearest_world(position: Vector2, requested: float) -> float:
 	if requested <= 0.0:
 		return 0.0
