@@ -528,8 +528,14 @@ func _advance_agent(
 	agent.physical_armor = armor
 
 	if can_move:
-		var left_height: float = sample_height(position + forward.rotated(-0.72) * CELL_SIZE)
-		var right_height: float = sample_height(position + forward.rotated(0.72) * CELL_SIZE)
+		# Side steering only needs local sign, so nearest samples avoid two
+		# bilinear interpolations per agent while preserving the terrain feedback.
+		var left_height: float = sample_height_nearest(
+			position + forward.rotated(-0.72) * CELL_SIZE
+		)
+		var right_height: float = sample_height_nearest(
+			position + forward.rotated(0.72) * CELL_SIZE
+		)
 		var terrain_turn: float = clampf((left_height - right_height) * 0.34, -0.22, 0.22)
 		agent.angle = wrapf(
 			float(agent.angle) + terrain_turn * (1.0 - clampf(climb * 0.22, 0.0, 0.52)),

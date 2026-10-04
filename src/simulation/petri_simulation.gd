@@ -35,6 +35,7 @@ const DENSITY_NEIGHBOR_VISIT_CAP_ULTRA := 12
 const DIRECTION_LUT_SIZE := 1024
 const REGULATION_BUCKETS := 6
 const LINEAGE_BIN_COUNT := 32
+const ECOTYPE_PRESSURE_BIN_COUNT := 256
 const LIVE_POPULATION_SOFT_START := 1600
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
@@ -131,7 +132,7 @@ var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
 var _edible_by_id: Dictionary = {}
 var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
-var _ecotype_counts: Dictionary = {}
+var _ecotype_counts: PackedInt32Array = PackedInt32Array()
 var _refugia_protozoan: Variant = null
 var _refugia_ciliate: Variant = null
 var _refugia_flagellate: Variant = null
@@ -362,6 +363,8 @@ func _init(seed_value: int = 1) -> void:
 	_grid_head.fill(-1)
 	_lineage_counts.resize(LINEAGE_BIN_COUNT)
 	_lineage_counts.fill(0)
+	_ecotype_counts.resize(ECOTYPE_PRESSURE_BIN_COUNT)
+	_ecotype_counts.fill(0)
 	_direction_lut.resize(DIRECTION_LUT_SIZE)
 	for i in range(DIRECTION_LUT_SIZE):
 		var lut_angle: float = (
@@ -395,7 +398,7 @@ func seed_demo(count: int = 36) -> void:
 	dna_fragments.clear()
 	_population_buffer.clear()
 	_active_transfer_recipient_ids = PackedInt32Array()
-	_ecotype_counts.clear()
+	_ecotype_counts.fill(0)
 	_refugia_protozoan = null
 	_refugia_ciliate = null
 	_refugia_flagellate = null
@@ -3177,7 +3180,7 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		1.0
 	)
 	var ecotype_fraction: float = (
-		float(int(_ecotype_counts.get(int(cell.ecotype_id), 0)))
+		float(_ecotype_counts[_ecotype_pressure_bin(int(cell.ecotype_id))])
 		/ float(maxi(1, bacteria.size()))
 	)
 	var ecotype_pressure: float = clampf(
@@ -3214,9 +3217,13 @@ func _lineage_bin(hue: float) -> int:
 	)
 
 
+func _ecotype_pressure_bin(ecotype_id: int) -> int:
+	return posmod(ecotype_id, ECOTYPE_PRESSURE_BIN_COUNT)
+
+
 func _refresh_population_metadata() -> int:
 	_lineage_counts.fill(0)
-	_ecotype_counts.clear()
+	_ecotype_counts.fill(0)
 	var living_count: int = 0
 	for cell in bacteria:
 		if (
@@ -3229,8 +3236,8 @@ func _refresh_population_metadata() -> int:
 		living_count += 1
 		var bin_index: int = _lineage_bin(float(cell.lineage_hue))
 		_lineage_counts[bin_index] += 1
-		var ecotype_key: int = int(cell.ecotype_id)
-		_ecotype_counts[ecotype_key] = int(_ecotype_counts.get(ecotype_key, 0)) + 1
+		var ecotype_bin: int = _ecotype_pressure_bin(int(cell.ecotype_id))
+		_ecotype_counts[ecotype_bin] += 1
 	return living_count
 
 

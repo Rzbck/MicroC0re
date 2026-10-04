@@ -31,6 +31,8 @@ const FAR_AGENT_LOD_ZOOM := 6.20
 const FAR_AGENT_REFRESH := 1.0 / 15.0
 const FAR_AGENT_REFRESH_MASS := 1.0 / 10.0
 const DETAIL_POPULATION_LIMIT := 1200
+const FAST_LOD_X4_POPULATION := 650
+const FAST_LOD_X8_POPULATION := 320
 
 const LINEAGE_PALETTE := [
 	Color(0.42, 0.70, 0.46, 1.0),
@@ -772,9 +774,17 @@ func _side_color(color: Color, factor: float) -> Color:
 
 
 func _using_far_agent_lod() -> bool:
+	var count: int = _total_agent_count()
+	var speed_lod: bool = (
+		(simulation_speed >= 8.0 and count >= FAST_LOD_X8_POPULATION)
+		or (
+			simulation_speed >= 4.0
+			and count >= FAST_LOD_X4_POPULATION
+		)
+	)
 	return (
-		simulation_speed >= 4.0
-		or _total_agent_count() > DETAIL_POPULATION_LIMIT
+		speed_lod
+		or count > DETAIL_POPULATION_LIMIT
 		or _camera_zoom() < FAR_AGENT_LOD_ZOOM
 	)
 
