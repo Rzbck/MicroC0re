@@ -118,6 +118,7 @@ func record_frame(
 		"pair_candidates": int(sim.pair_candidates_last),
 		"pair_narrow": int(sim.pair_narrow_checks_last),
 		"pair_contacts": int(sim.pair_contacts_last),
+		"mechanics_mode": int(sim.mechanics_mode_last),
 		"draw_ms": _round3(draw_ms),
 		"terrain_build_ms": _round3(terrain_build_ms),
 		"draw_calls": int(

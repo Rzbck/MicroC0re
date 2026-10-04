@@ -73,6 +73,7 @@ foreach ($s in @($raw.samples)) {
         pair_candidates = I $s.pair_candidates
         pair_narrow = I $s.pair_narrow
         pair_contacts = I $s.pair_contacts
+        mechanics_mode = I $s.mechanics_mode
         draw_ms = [Math]::Round((N $s.draw_ms), 3)
         terrain_build_ms = [Math]::Round((N $s.terrain_build_ms), 3)
         draw_calls = I $s.draw_calls

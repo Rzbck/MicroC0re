@@ -163,6 +163,24 @@ func _init() -> void:
 		if id_probe.find_cell_by_id(int(id_cell.id)) != id_cell:
 			errors.append("performance: bacteria id cache lookup mismatch")
 
+		# High-density mechanics must switch to bounded density mode without
+	# producing non-finite positions.
+	var density_probe = PetriSimulationScript.new(771002)
+	density_probe.seed_demo(
+		PetriSimulationScript.EXACT_MECHANICS_LIMIT + 32
+	)
+	density_probe.step(1.0 / 30.0)
+	if int(density_probe.mechanics_mode_last) != 1:
+		errors.append("performance: high-density mechanics LOD did not engage")
+	for density_cell in density_probe.bacteria:
+		var density_position: Vector2 = Vector2(density_cell.position)
+		if not (
+			is_finite(density_position.x)
+			and is_finite(density_position.y)
+		):
+			errors.append("performance: density mechanics produced invalid position")
+			break
+
 		# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)

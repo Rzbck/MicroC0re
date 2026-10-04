@@ -542,3 +542,39 @@ than layering unsafe threads/readbacks over RefCounted objects.
   add the benchmark step;
 - CI now actually executes tests/perf_benchmark.gd after the deterministic smoke
   test, including the 2k and 5k seeded-agent probes.
+
+
+## 10k-agent architecture tranche 2 — benchmark-driven mechanics/agent LOD
+
+The new CI scale gate quantified the remaining CPU wall on the Linux reference:
+- 100 agents: 5.44 ms/step;
+- 500: 16.96 ms/step;
+- 1k: 36.23 ms/step;
+- 2k: 87.92 ms/step;
+- 5k: 381.36 ms/step.
+At 5k, exact capsule mechanics alone consumed ~263 ms/step and bacterial agent
+logic ~110 ms/step. The linked-cell grid was working, but solving every detailed
+rod contact in a dense 192x128 world is itself the wrong level of detail.
+
+This tranche adds simulation LOD without removing evolutionary state:
+- <=700 bacteria update at 30 Hz, medium populations at 20 Hz, and >2200 at
+  12 Hz; rates remain dt-based and the renderer stays independent;
+- exact capsule/contact mechanics remains below 900 bacteria;
+- above 900, a deterministic bounded local-density solver uses the same spatial
+  hash, limits neighbour visits per bacterium, resolves local pressure, and
+  preserves nearest-contact conjugation/HGT;
+- genome regulation is staggered across six deterministic ID buckets instead of
+  rebuilding the expression program for every bacterium every movement update;
+- local field reads use one precomputed grid index and direct PackedFloat32Array
+  access for nutrient/exudate/detritus/light/quorum/damage/oxygen/EPS;
+- chemotaxis memory and rotational-diffusion constants are precomputed once per
+  agent update;
+- a 1024-entry direction LUT removes hot-path sin/cos for bacterial headings and
+  exact contact axes;
+- plasmid burden no longer allocates/iterates a temporary bit list each cell;
+- telemetry records whether exact or density mechanics was active.
+
+The high-density solver is an intentional mechanics LOD, not an ecology LOD:
+metabolism, mutation, HGT state, death, reproduction and terrain capabilities
+remain individual-agent data. Close/low-density populations still use detailed
+capsule contacts.

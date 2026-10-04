@@ -19,7 +19,15 @@ const FIELD_CELL_SIZE := 2.0
 const CHEMISTRY_DT := 1.0 / 15.0
 const SLOW_BIOME_DT := 1.0 / 5.0
 const MECHANICS_DT := 1.0 / 30.0
-const AGENT_DT := 1.0 / 30.0
+const AGENT_DT_SMALL := 1.0 / 30.0
+const AGENT_DT_MEDIUM := 1.0 / 20.0
+const AGENT_DT_MASS := 1.0 / 12.0
+const AGENT_MEDIUM_THRESHOLD := 700
+const AGENT_MASS_THRESHOLD := 2200
+const EXACT_MECHANICS_LIMIT := 900
+const DENSITY_NEIGHBOR_VISIT_CAP := 18
+const DIRECTION_LUT_SIZE := 1024
+const REGULATION_BUCKETS := 6
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
 const GRID_WIDTH := 64
@@ -86,6 +94,13 @@ var _phage_tick: int = 0
 var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
+var _agent_tick: int = 0
+var _current_agent_dt: float = AGENT_DT_SMALL
+var _current_memory_alpha: float = 0.0
+var _current_rotational_sigma: float = 0.0
+var _current_mechanics_dt: float = MECHANICS_DT
+var _direction_lut: PackedVector2Array = PackedVector2Array()
+var mechanics_mode_last: int = 0
 var _bacteria_by_id: Dictionary = {}
 var _edible_by_id: Dictionary = {}
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
@@ -308,6 +323,12 @@ func _init(seed_value: int = 1) -> void:
 	fungal_enzyme = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	_grid_head.resize(GRID_CELL_COUNT)
 	_grid_head.fill(-1)
+	_direction_lut.resize(DIRECTION_LUT_SIZE)
+	for i in range(DIRECTION_LUT_SIZE):
+		var lut_angle: float = (
+			TAU * float(i) / float(DIRECTION_LUT_SIZE) - PI
+		)
+		_direction_lut[i] = Vector2(cos(lut_angle), sin(lut_angle))
 	_flow_x_rows.resize(FIELD_HEIGHT)
 	_flow_y_cols.resize(FIELD_WIDTH)
 	_ambient_light_cache.resize(FIELD_WIDTH * FIELD_HEIGHT)
@@ -339,6 +360,7 @@ func seed_demo(count: int = 36) -> void:
 	_slow_biome_accumulator = 0.0
 	_mechanics_accumulator = 0.0
 	_agent_accumulator = 0.0
+	_agent_tick = 0
 	disturbance_index = 0
 	next_disturbance_time = 24.0
 	last_disturbance_type = -1
@@ -613,8 +635,18 @@ func step(dt: float) -> void:
 	agents_ms_last = 0.0
 	mechanics_ms_last = 0.0
 	_agent_accumulator += dt
-	while _agent_accumulator >= AGENT_DT:
-		var agent_dt: float = AGENT_DT
+	var target_agent_dt: float = _agent_dt_for_population()
+	while _agent_accumulator >= target_agent_dt:
+		var agent_dt: float = target_agent_dt
+		_current_agent_dt = agent_dt
+		_current_memory_alpha = (
+			1.0 - exp(-agent_dt / maxf(0.001, chemotaxis_memory_tau))
+		)
+		_current_rotational_sigma = sqrt(
+			2.0 * rotational_diffusion * agent_dt
+		)
+		_current_mechanics_dt = agent_dt
+		_agent_tick += 1
 		var agents_start: int = Time.get_ticks_usec()
 		var next_population: Array = _population_buffer
 		next_population.clear()
@@ -687,16 +719,15 @@ func step(dt: float) -> void:
 		agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
 	
 		var mechanics_start: int = Time.get_ticks_usec()
-		_mechanics_accumulator += agent_dt
-		while _mechanics_accumulator >= MECHANICS_DT:
-			pair_candidates_last = 0
-			pair_narrow_checks_last = 0
-			pair_interactions_last = 0
-			pair_contacts_last = 0
-			for _iteration in range(mechanical_iterations):
-				_resolve_all_contacts()
-			_mechanics_accumulator -= MECHANICS_DT
-		mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
+		pair_candidates_last = 0
+		pair_narrow_checks_last = 0
+		pair_interactions_last = 0
+		pair_contacts_last = 0
+		for _iteration in range(mechanical_iterations):
+			_resolve_all_contacts()
+		mechanics_ms_last = (
+			float(Time.get_ticks_usec() - mechanics_start) / 1000.0
+		)
 	
 		_advance_gene_transfers(agent_dt)
 		_advance_microalgae(agent_dt)
@@ -706,10 +737,28 @@ func step(dt: float) -> void:
 		_advance_ciliates(agent_dt)
 	
 		_rebuild_id_maps()
-		_agent_accumulator -= AGENT_DT
+		_agent_accumulator -= target_agent_dt
 
 	simulation_time += dt
 	_advance_disturbance_schedule()
+
+
+func _agent_dt_for_population() -> float:
+	var count: int = bacteria.size()
+	if count >= AGENT_MASS_THRESHOLD:
+		return AGENT_DT_MASS
+	if count >= AGENT_MEDIUM_THRESHOLD:
+		return AGENT_DT_MEDIUM
+	return AGENT_DT_SMALL
+
+
+func _direction_for_angle(angle: float) -> Vector2:
+	var normalized: float = wrapf(angle + PI, 0.0, TAU) / TAU
+	var index: int = posmod(
+		floori(normalized * float(DIRECTION_LUT_SIZE)),
+		DIRECTION_LUT_SIZE
+	)
+	return _direction_lut[index]
 
 
 func _advance_microalgae(dt: float) -> void:
@@ -2439,7 +2488,7 @@ func _maybe_start_conjugation(
 		2.0
 	)
 	var probability: float = 1.0 - exp(
-		-conjugation_contact_rate * pili_factor * MECHANICS_DT
+		-conjugation_contact_rate * pili_factor * _current_mechanics_dt
 	)
 	if rng.randf() >= probability:
 		return
@@ -2465,15 +2514,12 @@ func _plasmid_maintenance_factor(cell: Variant) -> float:
 
 
 func _plasmid_burden(cell: Variant) -> float:
+	var mask: int = int(cell.plasmid_mask)
 	var modules: int = 0
-	for bit in [
-		BacteriumScript.PLASMID_CONJUGATION,
-		BacteriumScript.PLASMID_SCAVENGE,
-		BacteriumScript.PLASMID_ADHESION,
-		BacteriumScript.PLASMID_STRESS,
-	]:
-		if cell.has_plasmid(bit):
-			modules += 1
+	modules += 1 if (mask & int(BacteriumScript.PLASMID_CONJUGATION)) != 0 else 0
+	modules += 1 if (mask & int(BacteriumScript.PLASMID_SCAVENGE)) != 0 else 0
+	modules += 1 if (mask & int(BacteriumScript.PLASMID_ADHESION)) != 0 else 0
+	modules += 1 if (mask & int(BacteriumScript.PLASMID_STRESS)) != 0 else 0
 	return 0.0018 * float(modules)
 
 
@@ -2496,18 +2542,28 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			return
 
 	var cell_position: Vector2 = Vector2(cell.position)
-	var local_nutrient_before: float = float(nutrient.sample_nearest_world(cell_position))
-	var local_exudate_before: float = float(exudate.sample_nearest_world(cell_position))
-	var local_detritus_before: float = float(detritus.sample_nearest_world(cell_position))
-	var local_light_before: float = _sample_light(cell_position)
-	var local_quorum_before: float = float(quorum_signal.sample_nearest_world(cell_position))
-	var local_damage_before: float = float(damage_cue.sample_nearest_world(cell_position))
-	var local_oxygen_before: float = float(oxygen.sample_nearest_world(cell_position))
+	var field_index: int = _field_index_for_world(cell_position)
+	var local_nutrient_before: float = float(nutrient.values[field_index])
+	var local_exudate_before: float = float(exudate.values[field_index])
+	var local_detritus_before: float = float(detritus.values[field_index])
+	var local_light_before: float = _apply_producer_shading(
+		float(_ambient_light_cache[field_index]),
+		float(producer_biomass.values[field_index])
+	)
+	var local_quorum_before: float = float(quorum_signal.values[field_index])
+	var local_damage_before: float = float(damage_cue.values[field_index])
+	var local_oxygen_before: float = float(oxygen.values[field_index])
 	var resource_signal: float = local_nutrient_before + local_exudate_before * 1.25
 
-	var genome_values: Array = []
-	if cell.genome != null:
-		genome_values = cell.genome.evaluate_context(
+	var refresh_regulation: bool = (
+		cell.genome != null
+		and (
+			String(cell.ecotype_label) == "founder"
+			or posmod(int(cell.id) + _agent_tick, REGULATION_BUCKETS) == 0
+		)
+	)
+	if refresh_regulation:
+		var genome_values: Array = cell.genome.evaluate_context(
 			clampf(local_nutrient_before * 2.2, 0.0, 1.0),
 			clampf(local_exudate_before * 4.0, 0.0, 1.0),
 			clampf(local_detritus_before * 4.5, 0.0, 1.0),
@@ -2621,8 +2677,11 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		)
 
 	var improvement: float = sensed - float(cell.sensed_memory)
-	var memory_alpha: float = 1.0 - exp(-dt / maxf(0.001, chemotaxis_memory_tau))
-	cell.sensed_memory = lerpf(float(cell.sensed_memory), sensed, memory_alpha)
+	cell.sensed_memory = lerpf(
+		float(cell.sensed_memory),
+		sensed,
+		_current_memory_alpha
+	)
 
 	var bounded_improvement: float = clampf(improvement, -0.25, 0.25)
 	var tumble_rate: float = (
@@ -2637,8 +2696,10 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		cell.angle = float(cell.angle) + rng.randfn(0.0, tumble_sigma)
 
 	if rotational_diffusion > 0.0 and not bool(cell.dividing):
-		var sigma: float = sqrt(2.0 * rotational_diffusion * dt)
-		cell.angle = float(cell.angle) + rng.randfn(0.0, sigma)
+		cell.angle = (
+			float(cell.angle)
+			+ rng.randfn(0.0, _current_rotational_sigma)
+		)
 
 	cell.angle = wrapf(float(cell.angle), -PI, PI)
 
@@ -2659,7 +2720,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		1.0
 	)
 
-	var local_eps: float = float(eps.sample_nearest_world(cell_position))
+	var local_eps: float = float(eps.values[field_index])
 	var local_quorum: float = local_quorum_before
 	var local_damage: float = local_damage_before
 	var quorum_response: float = clampf(local_quorum * 8.0, 0.0, 1.0)
@@ -2689,7 +2750,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			quorum_response * clampf(float(cell.expression_matrix), 0.0, 1.0)
 		)
 
-	var heading: Vector2 = Vector2.RIGHT.rotated(float(cell.angle))
+	var heading: Vector2 = _direction_for_angle(float(cell.angle))
 	var flow: Vector2 = _water_flow(cell_position)
 	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)
 	cell.position = (
@@ -2699,10 +2760,11 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	)
 	_constrain_to_world(cell)
 	cell_position = Vector2(cell.position)
+	field_index = _field_index_for_world(cell_position)
 
-	var local_nutrient: float = float(nutrient.sample_nearest_world(cell_position))
-	var local_exudate: float = float(exudate.sample_nearest_world(cell_position))
-	var local_oxygen: float = float(oxygen.sample_nearest_world(cell_position))
+	var local_nutrient: float = float(nutrient.values[field_index])
+	var local_exudate: float = float(exudate.values[field_index])
+	var local_oxygen: float = float(oxygen.values[field_index])
 	var oxygen_factor: float = (
 		0.48
 		+ 0.52 * local_oxygen / (oxygen_half_saturation + local_oxygen)
@@ -2782,8 +2844,17 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		+ _plasmid_burden(cell)
 	)
 	if cell.genome != null:
-		morphology_cost += float(
-			cell.genome.complexity_cost_from_values(genome_values)
+		var expressed_total: float = (
+			float(cell.expression_nutrient)
+			+ float(cell.expression_exudate)
+			+ float(cell.expression_detritus)
+			+ float(cell.expression_photo)
+			+ float(cell.expression_matrix)
+			+ float(cell.expression_quorum)
+		)
+		morphology_cost += (
+			0.00055 * float(cell.genome.modules.size())
+			+ 0.00040 * expressed_total
 		)
 	morphology_cost *= _plasmid_maintenance_factor(cell)
 	if bool(cell.competent):
@@ -3738,6 +3809,14 @@ func _allocate_id() -> int:
 func _resolve_all_contacts() -> void:
 	_rebuild_spatial_grid()
 
+	if bacteria.size() > EXACT_MECHANICS_LIMIT:
+		mechanics_mode_last = 1
+		_resolve_density_contacts()
+		for dense_cell in bacteria:
+			_constrain_to_world(dense_cell)
+		return
+
+	mechanics_mode_last = 0
 	var count: int = bacteria.size()
 	for i in range(count):
 		var cell: Variant = bacteria[i]
@@ -3791,6 +3870,124 @@ func _resolve_all_contacts() -> void:
 
 	for cell in bacteria:
 		_constrain_to_world(cell)
+
+
+func _resolve_density_contacts() -> void:
+	var count: int = bacteria.size()
+	var corrections := PackedVector2Array()
+	var nearest_indices := PackedInt32Array()
+	corrections.resize(count)
+	nearest_indices.resize(count)
+	nearest_indices.fill(-1)
+
+	for i in range(count):
+		var cell: Variant = bacteria[i]
+		if (
+			bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+
+		var position: Vector2 = Vector2(cell.position)
+		var bucket_x: int = clampi(
+			floori(position.x / SPATIAL_BUCKET_SIZE),
+			0,
+			GRID_WIDTH - 1
+		)
+		var bucket_y: int = clampi(
+			floori(position.y / SPATIAL_BUCKET_SIZE),
+			0,
+			GRID_HEIGHT - 1
+		)
+		var push := Vector2.ZERO
+		var visited: int = 0
+		var nearest_distance_sq: float = INF
+
+		for y in range(
+			maxi(0, bucket_y - 1),
+			mini(GRID_HEIGHT - 1, bucket_y + 1) + 1
+		):
+			var row: int = y * GRID_WIDTH
+			for x in range(
+				maxi(0, bucket_x - 1),
+				mini(GRID_WIDTH - 1, bucket_x + 1) + 1
+			):
+				var j: int = _grid_head[row + x]
+				while j >= 0:
+					if j != i:
+						var other: Variant = bacteria[j]
+						if (
+							not bool(other.dying)
+							and not bool(other.consumed)
+							and int(other.engulfed_by_id) < 0
+						):
+							visited += 1
+							pair_candidates_last += 1
+							var delta: Vector2 = (
+								position - Vector2(other.position)
+							)
+							var distance_sq: float = delta.length_squared()
+							if distance_sq < nearest_distance_sq:
+								nearest_distance_sq = distance_sq
+								nearest_indices[i] = j
+
+							var target: float = (
+								float(cell.radius)
+								+ float(other.radius)
+								+ 0.34
+							)
+							if distance_sq < target * target:
+								pair_narrow_checks_last += 1
+								var distance: float = sqrt(
+									maxf(distance_sq, 0.000001)
+								)
+								var normal: Vector2 = (
+									delta / distance
+									if distance > 0.001
+									else _direction_for_angle(
+										float(int(cell.id) % 360)
+									)
+								)
+								var overlap: float = target - distance
+								push += normal * overlap * 0.34
+								pair_interactions_last += 1
+								pair_contacts_last += 1
+					if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+						break
+					j = _grid_next[j]
+				if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+					break
+			if visited >= DENSITY_NEIGHBOR_VISIT_CAP:
+				break
+
+		corrections[i] = push.limit_length(0.55)
+
+	for i in range(count):
+		var correction: Vector2 = corrections[i]
+		if correction.length_squared() > 0.0:
+			bacteria[i].position = (
+				Vector2(bacteria[i].position) + correction
+			)
+
+		var neighbor_index: int = nearest_indices[i]
+		if neighbor_index < 0 or neighbor_index <= i:
+			continue
+		var a: Variant = bacteria[i]
+		var b: Variant = bacteria[neighbor_index]
+		var center_distance: float = Vector2(a.position).distance_to(
+			Vector2(b.position)
+		)
+		var contact_distance: float = (
+			float(a.radius) + float(b.radius) + 0.22
+		)
+		if center_distance <= contact_distance:
+			_maybe_start_conjugation(
+				a,
+				b,
+				center_distance,
+				float(a.radius) + float(b.radius)
+			)
 
 
 func _rebuild_spatial_grid() -> void:
@@ -3849,8 +4046,8 @@ func _resolve_pair(a: Variant, b: Variant) -> void:
 
 	pair_narrow_checks_last += 1
 
-	var axis_a: Vector2 = Vector2.RIGHT.rotated(float(a.angle))
-	var axis_b: Vector2 = Vector2.RIGHT.rotated(float(b.angle))
+	var axis_a: Vector2 = _direction_for_angle(float(a.angle))
+	var axis_b: Vector2 = _direction_for_angle(float(b.angle))
 	var half_line_a: float = maxf(0.0, (length_a - 2.0 * radius_a) * 0.5)
 	var half_line_b: float = maxf(0.0, (length_b - 2.0 * radius_b) * 0.5)
 
