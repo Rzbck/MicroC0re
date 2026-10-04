@@ -16,7 +16,9 @@ const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
-const CHEMISTRY_DT := 1.0 / 15.0
+const CHEMISTRY_DT_SMALL := 1.0 / 15.0
+const CHEMISTRY_DT_MASS := 1.0 / 10.0
+const CHEMISTRY_DT_ULTRA := 1.0 / 7.5
 const SLOW_BIOME_DT := 1.0 / 5.0
 const MECHANICS_DT := 1.0 / 30.0
 const AGENT_DT_SMALL := 1.0 / 30.0
@@ -115,6 +117,7 @@ var _density_nearest: PackedInt32Array = PackedInt32Array()
 var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
 var _edible_by_id: Dictionary = {}
+var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
 var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
 var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
@@ -599,20 +602,21 @@ func step(dt: float) -> void:
 		return
 
 	var chemistry_start: int = Time.get_ticks_usec()
+	var chemistry_dt: float = _chemistry_dt_for_population()
 	_chemistry_accumulator += dt
-	while _chemistry_accumulator >= CHEMISTRY_DT:
+	while _chemistry_accumulator >= chemistry_dt:
 		_refresh_environment_caches()
-		_feed_environment(CHEMISTRY_DT)
-		nutrient.diffuse(nutrient_diffusion, CHEMISTRY_DT, nutrient_decay)
-		waste.diffuse(waste_diffusion, CHEMISTRY_DT, waste_decay)
-		oxygen.diffuse(oxygen_diffusion, CHEMISTRY_DT, oxygen_decay)
+		_feed_environment(chemistry_dt)
+		nutrient.diffuse(nutrient_diffusion, chemistry_dt, nutrient_decay)
+		waste.diffuse(waste_diffusion, chemistry_dt, waste_decay)
+		oxygen.diffuse(oxygen_diffusion, chemistry_dt, oxygen_decay)
 		damage_cue.diffuse(
 			damage_cue_diffusion,
-			CHEMISTRY_DT,
+			chemistry_dt,
 			damage_cue_decay
 		)
 
-		_slow_biome_accumulator += CHEMISTRY_DT
+		_slow_biome_accumulator += chemistry_dt
 		while _slow_biome_accumulator >= SLOW_BIOME_DT:
 			_advance_producer_mat(SLOW_BIOME_DT)
 			detritus.diffuse(
@@ -634,6 +638,8 @@ func step(dt: float) -> void:
 				SLOW_BIOME_DT,
 				quorum_decay
 			)
+			if not dna_fragments.is_empty() or not phage_clouds.is_empty():
+				_rebuild_spatial_grid()
 			_advance_dna_fragments(SLOW_BIOME_DT)
 			_advance_phage_clouds(SLOW_BIOME_DT)
 			producer_biomass.diffuse(
@@ -643,7 +649,7 @@ func step(dt: float) -> void:
 			)
 			_slow_biome_accumulator -= SLOW_BIOME_DT
 
-		_chemistry_accumulator -= CHEMISTRY_DT
+		_chemistry_accumulator -= chemistry_dt
 	chemistry_ms_last = float(Time.get_ticks_usec() - chemistry_start) / 1000.0
 
 	agents_ms_last = 0.0
@@ -664,23 +670,18 @@ func step(dt: float) -> void:
 		var agents_start: int = Time.get_ticks_usec()
 		var next_population: Array = _population_buffer
 		next_population.clear()
-		_refresh_lineage_counts()
-		var living_start: int = 0
-		for counted_cell in bacteria:
-			if (
-				not bool(counted_cell.consumed)
-				and int(counted_cell.engulfed_by_id) < 0
-			):
-				living_start += 1
+		var living_start: int = _refresh_population_metadata()
 		var available_bacterial_births: int = maxi(
 			0,
 			bacteria_population_limit - living_start
 		)
+		var bacteria_identity_changed: bool = false
 	
 		for cell in bacteria:
 			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
 	
 			if bool(cell.consumed):
+				bacteria_identity_changed = true
 				continue
 	
 			if int(cell.engulfed_by_id) >= 0:
@@ -690,6 +691,7 @@ func step(dt: float) -> void:
 			if bool(cell.dying):
 				_advance_lysis(cell, agent_dt)
 				if float(cell.lysis_progress) >= 1.0:
+					bacteria_identity_changed = true
 					_recycle_dead_cell(cell)
 				else:
 					next_population.append(cell)
@@ -711,6 +713,7 @@ func step(dt: float) -> void:
 						var daughters: Array = _divide(cell)
 						next_population.append_array(daughters)
 						available_bacterial_births -= 1
+						bacteria_identity_changed = true
 					else:
 						# Explicit performance guard: suppress further fission at
 						# the CPU-reference ceiling without deleting live cells.
@@ -731,6 +734,8 @@ func step(dt: float) -> void:
 		bacteria = next_population
 		_population_buffer = previous_population
 		_population_buffer.clear()
+		if bacteria_identity_changed:
+			_rebuild_bacteria_id_map()
 		agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
 	
 		var mechanics_start: int = Time.get_ticks_usec()
@@ -758,11 +763,20 @@ func step(dt: float) -> void:
 		_advance_protozoa(agent_dt)
 		_advance_ciliates(agent_dt)
 	
-		_rebuild_id_maps()
+		_rebuild_edible_id_map()
 		_agent_accumulator -= target_agent_dt
 
 	simulation_time += dt
 	_advance_disturbance_schedule()
+
+
+func _chemistry_dt_for_population() -> float:
+	var count: int = bacteria.size()
+	if count >= AGENT_ULTRA_THRESHOLD:
+		return CHEMISTRY_DT_ULTRA
+	if count >= AGENT_MASS_THRESHOLD:
+		return CHEMISTRY_DT_MASS
+	return CHEMISTRY_DT_SMALL
 
 
 func _agent_dt_for_population() -> float:
@@ -2466,8 +2480,16 @@ func _release_predator_prey(prey_id: int, predator_id: int) -> void:
 
 
 func _advance_gene_transfers(dt: float) -> void:
-	for recipient in bacteria:
-		if int(recipient.transfer_role) != int(BacteriumScript.TRANSFER_RECIPIENT):
+	if _active_transfer_recipient_ids.is_empty():
+		return
+
+	var next_active := PackedInt32Array()
+	for recipient_id in _active_transfer_recipient_ids:
+		var recipient: Variant = find_cell_by_id(int(recipient_id))
+		if (
+			recipient == null
+			or int(recipient.transfer_role) != int(BacteriumScript.TRANSFER_RECIPIENT)
+		):
 			continue
 
 		if (
@@ -2493,12 +2515,11 @@ func _advance_gene_transfers(dt: float) -> void:
 			continue
 
 		var delta: Vector2 = Vector2(recipient.position) - Vector2(donor.position)
-		if delta.length() > conjugation_break_distance:
+		if delta.length_squared() > conjugation_break_distance * conjugation_break_distance:
 			donor.clear_transfer_state()
 			recipient.clear_transfer_state()
 			continue
 
-		# Weakly hold the mating pair together while the bridge is active.
 		var midpoint: Vector2 = (
 			Vector2(donor.position) + Vector2(recipient.position)
 		) * 0.5
@@ -2520,6 +2541,7 @@ func _advance_gene_transfers(dt: float) -> void:
 		donor.transfer_progress = progress
 
 		if progress < 1.0:
+			next_active.append(int(recipient.id))
 			continue
 
 		var missing_mask: int = (
@@ -2556,6 +2578,7 @@ func _advance_gene_transfers(dt: float) -> void:
 		donor.clear_transfer_state()
 		recipient.clear_transfer_state()
 
+	_active_transfer_recipient_ids = next_active
 
 func _maybe_start_conjugation(
 	a: Variant,
@@ -2613,6 +2636,7 @@ func _maybe_start_conjugation(
 	recipient.transfer_role = BacteriumScript.TRANSFER_RECIPIENT
 	recipient.transfer_partner_id = int(donor.id)
 	recipient.transfer_progress = 0.0
+	_active_transfer_recipient_ids.append(int(recipient.id))
 
 
 func _plasmid_uptake_factor(cell: Variant) -> float:
@@ -3134,8 +3158,9 @@ func _lineage_bin(hue: float) -> int:
 	)
 
 
-func _refresh_lineage_counts() -> void:
+func _refresh_population_metadata() -> int:
 	_lineage_counts.fill(0)
+	var living_count: int = 0
 	for cell in bacteria:
 		if (
 			cell == null
@@ -3144,8 +3169,10 @@ func _refresh_lineage_counts() -> void:
 			or int(cell.engulfed_by_id) >= 0
 		):
 			continue
+		living_count += 1
 		var bin_index: int = _lineage_bin(float(cell.lineage_hue))
 		_lineage_counts[bin_index] += 1
+	return living_count
 
 
 func _divide(parent: Variant) -> Array:
@@ -3380,6 +3407,43 @@ func _spawn_phage_cloud(
 	_next_phage_id += 1
 
 
+func _bacteria_indices_in_radius(
+	origin: Vector2,
+	radius: float
+) -> PackedInt32Array:
+	var result := PackedInt32Array()
+	var radius_sq: float = radius * radius
+	var bucket_x: int = clampi(
+		floori(origin.x / SPATIAL_BUCKET_SIZE),
+		0,
+		GRID_WIDTH - 1
+	)
+	var bucket_y: int = clampi(
+		floori(origin.y / SPATIAL_BUCKET_SIZE),
+		0,
+		GRID_HEIGHT - 1
+	)
+	var bucket_radius: int = maxi(
+		1,
+		ceili(radius / SPATIAL_BUCKET_SIZE)
+	)
+	for y in range(
+		maxi(0, bucket_y - bucket_radius),
+		mini(GRID_HEIGHT - 1, bucket_y + bucket_radius) + 1
+	):
+		var row: int = y * GRID_WIDTH
+		for x in range(
+			maxi(0, bucket_x - bucket_radius),
+			mini(GRID_WIDTH - 1, bucket_x + bucket_radius) + 1
+		):
+			var j: int = _grid_head[row + x]
+			while j >= 0:
+				if origin.distance_squared_to(_mech_positions[j]) <= radius_sq:
+					result.append(j)
+				j = _grid_next[j]
+	return result
+
+
 func _advance_phage_clouds(dt: float) -> void:
 	if phage_clouds.is_empty():
 		return
@@ -3410,16 +3474,18 @@ func _advance_phage_clouds(dt: float) -> void:
 			continue
 
 		var infections_this_tick: int = 0
-		var radius_sq: float = float(cloud.radius) * float(cloud.radius)
-		for cell in bacteria:
+		var nearby_indices: PackedInt32Array = _bacteria_indices_in_radius(
+			position,
+			float(cloud.radius)
+		)
+		for cell_index in nearby_indices:
+			var cell: Variant = bacteria[int(cell_index)]
 			if (
 				bool(cell.dying)
 				or bool(cell.consumed)
 				or bool(cell.phage_infected)
 				or int(cell.engulfed_by_id) >= 0
 			):
-				continue
-			if position.distance_squared_to(Vector2(cell.position)) > radius_sq:
 				continue
 
 			var compatibility: float = _phage_compatibility(
@@ -3429,7 +3495,8 @@ func _advance_phage_clouds(dt: float) -> void:
 			if compatibility <= 0.02:
 				continue
 
-			var local_eps: float = float(eps.sample_world(Vector2(cell.position)))
+			var field_index: int = _field_index_for_world(Vector2(cell.position))
+			var local_eps: float = float(eps.values[field_index])
 			var matrix_factor: float = 1.0 / (
 				1.0 + clampf(local_eps, 0.0, 1.5) * phage_eps_protection
 			)
@@ -3462,7 +3529,6 @@ func _advance_phage_clouds(dt: float) -> void:
 		survivors.append(cloud)
 
 	phage_clouds = survivors
-
 
 func _infect_cell_with_phage(cell: Variant, cloud: Variant) -> void:
 	if (
@@ -3946,12 +4012,14 @@ func _damage_cue_direction(position: Vector2) -> Vector2:
 	return gradient.normalized()
 
 
-func _rebuild_id_maps() -> void:
+func _rebuild_bacteria_id_map() -> void:
 	_bacteria_by_id.clear()
-	_edible_by_id.clear()
 	for cell in bacteria:
 		_bacteria_by_id[int(cell.id)] = cell
-		_edible_by_id[int(cell.id)] = cell
+
+
+func _rebuild_edible_id_map() -> void:
+	_edible_by_id.clear()
 	for organism in ciliates:
 		_edible_by_id[int(organism.id)] = organism
 	for organism in flagellates:
@@ -3960,6 +4028,11 @@ func _rebuild_id_maps() -> void:
 		_edible_by_id[int(organism.id)] = organism
 	for organism in decomposers:
 		_edible_by_id[int(organism.id)] = organism
+
+
+func _rebuild_id_maps() -> void:
+	_rebuild_bacteria_id_map()
+	_rebuild_edible_id_map()
 
 
 func _allocate_id() -> int:
@@ -4438,12 +4511,11 @@ func find_cell_by_id(cell_id: int) -> Variant:
 
 
 func find_edible_by_id(organism_id: int) -> Variant:
-	if _edible_by_id.has(organism_id):
-		return _edible_by_id[organism_id]
 	var cell: Variant = find_cell_by_id(organism_id)
 	if cell != null:
-		_edible_by_id[organism_id] = cell
 		return cell
+	if _edible_by_id.has(organism_id):
+		return _edible_by_id[organism_id]
 	for group in [ciliates, flagellates, microalgae, decomposers]:
 		for organism in group:
 			if int(organism.id) == organism_id:
