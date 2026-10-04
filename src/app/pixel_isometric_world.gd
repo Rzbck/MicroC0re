@@ -16,7 +16,7 @@ const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 32
 const TILE_HALF_W := 5.0
 const TILE_HALF_H := 2.5
-const HEIGHT_PIXELS := 9.0
+const HEIGHT_PIXELS := 11.0
 const CAMERA_ZOOM_STEP := 1.12
 const MIN_USER_ZOOM := 0.58
 const MAX_USER_ZOOM := 5.0
@@ -388,15 +388,15 @@ func _rebuild_terrain_batch() -> void:
 			var delta: float = (
 				height_value - float(baseline[cache_index])
 			)
-			if delta > 0.035:
+			if delta > 0.012:
 				top_color = top_color.lerp(
-					Color(0.62, 0.46, 0.24),
-					clampf(delta * 1.4, 0.10, 0.48)
+					Color(0.72, 0.49, 0.20),
+					clampf(delta * 3.8, 0.16, 0.78)
 				)
-			elif delta < -0.035:
+			elif delta < -0.012:
 				top_color = top_color.lerp(
-					Color(0.22, 0.15, 0.10),
-					clampf(-delta * 1.8, 0.12, 0.58)
+					Color(0.16, 0.11, 0.08),
+					clampf(-delta * 4.4, 0.18, 0.82)
 				)
 
 			if rx + 1 < dims.x:
@@ -813,6 +813,7 @@ func _rebuild_far_agent_batch() -> void:
 	_batch_far_group(points, colors, indices, sim.flagellates, 3)
 	_batch_far_group(points, colors, indices, sim.microalgae, 4)
 	_batch_far_group(points, colors, indices, sim.decomposers, 5)
+	_batch_far_group(points, colors, indices, sim.hyphae, 6)
 
 	if not indices.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(
@@ -837,51 +838,65 @@ func _batch_far_group(
 			continue
 
 		var p: Vector2 = Vector2(agent.position)
-		var height_value: float = (
-			terrain.sample_height_nearest(p)
-			- float(agent.burrow_depth) * 0.24
-		)
-		var center: Vector2 = _round_vec(
-			_project_world_unscaled(p, height_value)
-		)
-		var half_size := Vector2(0.70, 0.42)
+		var height_value: float = terrain.sample_height_nearest(p) - float(agent.burrow_depth) * 0.24
+		var center: Vector2 = _round_vec(_project_world_unscaled(p, height_value))
+		var half_length: float = 1.25
+		var half_width: float = 0.54
 		var color := Color(0.65, 0.72, 0.62)
 		match kind:
 			0:
+				half_length = 1.42 + clampf(float(agent.length) * 0.10, 0.0, 0.55)
+				half_width = 0.50 + clampf(float(agent.radius) * 0.24, 0.0, 0.24)
 				color = _lineage_color(float(agent.lineage_hue))
 				if bool(agent.dying):
-					color = color.lerp(
-						Color(0.72, 0.30, 0.18),
-						0.62
-					)
+					color = color.lerp(Color(0.72, 0.30, 0.18), 0.62)
 			1:
-				half_size = Vector2(1.45, 1.05)
+				half_length = 2.35
+				half_width = 1.30
 				color = Color(0.62, 0.82, 0.76)
 			2:
-				half_size = Vector2(1.20, 0.72)
+				half_length = 2.05
+				half_width = 0.92
 				color = Color(0.69, 0.69, 0.88)
 			3:
-				half_size = Vector2(0.90, 0.52)
+				half_length = 1.65
+				half_width = 0.66
 				color = Color(0.82, 0.72, 0.44)
 			4:
-				half_size = Vector2(0.82, 0.70)
+				half_length = 1.28
+				half_width = 0.88
 				color = Color(0.38, 0.68, 0.34)
 			5:
-				half_size = Vector2(0.88, 0.72)
+				half_length = 1.36
+				half_width = 0.88
 				color = Color(0.72, 0.57, 0.35)
+			6:
+				half_length = 1.90
+				half_width = 0.72
+				color = Color(0.64, 0.56, 0.38)
 
+		var heading: Vector2 = _project_heading_unscaled(float(agent.angle))
+		var side := Vector2(-heading.y, heading.x)
 		_batch_quad(
-			points,
-			colors,
-			indices,
-			center + Vector2(-half_size.x, -half_size.y),
-			center + Vector2(half_size.x, -half_size.y),
-			center + Vector2(half_size.x, half_size.y),
-			center + Vector2(-half_size.x, half_size.y),
+			points, colors, indices,
+			center + heading * half_length,
+			center + side * half_width,
+			center - heading * half_length * 0.72,
+			center - side * half_width,
 			color
 		)
 		last_far_agent_count += 1
 
+
+func _project_heading_unscaled(angle: float) -> Vector2:
+	var direction := Vector2.RIGHT.rotated(angle)
+	var origin: Vector2 = Vector2(sim.world_size) * 0.5
+	var a: Vector2 = _project_world_unscaled(origin, 0.6)
+	var b: Vector2 = _project_world_unscaled(origin + direction * LivingTerrainScript.CELL_SIZE, 0.6)
+	var screen_direction: Vector2 = b - a
+	if screen_direction.length_squared() <= 0.0001:
+		return Vector2.RIGHT
+	return screen_direction.normalized()
 
 func _project_world_unscaled(
 	world_position: Vector2,
@@ -998,15 +1013,16 @@ func _draw_agent_sprite(
 		tint = tint.darkened(clampf(depth * 0.10, 0.0, 0.28))
 		tint.a *= clampf(1.0 - depth * 0.12, 0.48, 1.0)
 
+	var sprite_heading: Vector2 = _project_heading(float(agent.angle))
+	var sprite_angle: float = snappedf(sprite_heading.angle(), PI / 4.0)
+	draw_set_transform(screen, sprite_angle, Vector2.ONE)
 	draw_texture_rect(
 		texture,
-		Rect2(
-			_round_vec(screen - size * 0.5),
-			size
-		),
+		Rect2(_round_vec(-size * 0.5), size),
 		false,
 		tint
 	)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	_draw_capability_marks(agent, screen, size)
 

@@ -54,6 +54,17 @@ const HYPHAL_NODE_SAFETY_LIMIT := 24
 const PHAGE_CLOUD_SAFETY_LIMIT := 24
 const DNA_FRAGMENT_SAFETY_LIMIT := 64
 
+# Persistent ecological refugia: inactive cyst/spore/seed-bank templates retain
+# the best recent phenotype so a trophic guild can recover without resetting
+# its evolutionary history.
+const REFUGIA_PROTOZOA_MIN := 2
+const REFUGIA_CILIATE_MIN := 2
+const REFUGIA_FLAGELLATE_MIN := 4
+const REFUGIA_MICROALGA_MIN := 8
+const REFUGIA_DECOMPOSER_MIN := 6
+const REFUGIA_HYPHA_MIN := 2
+const REFUGIA_RECOVERY_INTERVAL := 3.0
+
 const DISTURBANCE_RESOURCE_PULSE := 0
 const DISTURBANCE_WASHOUT := 1
 const DISTURBANCE_ORGANIC_FALL := 2
@@ -120,6 +131,14 @@ var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
 var _edible_by_id: Dictionary = {}
 var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
+var _ecotype_counts: Dictionary = {}
+var _refugia_protozoan: Variant = null
+var _refugia_ciliate: Variant = null
+var _refugia_flagellate: Variant = null
+var _refugia_microalga: Variant = null
+var _refugia_decomposer: Variant = null
+var _refugia_hypha: Variant = null
+var _refugia_accumulator: float = 0.0
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
 var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
 var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
@@ -374,6 +393,15 @@ func seed_demo(count: int = 36) -> void:
 	phage_clouds.clear()
 	dna_fragments.clear()
 	_population_buffer.clear()
+	_active_transfer_recipient_ids = PackedInt32Array()
+	_ecotype_counts.clear()
+	_refugia_protozoan = null
+	_refugia_ciliate = null
+	_refugia_flagellate = null
+	_refugia_microalga = null
+	_refugia_decomposer = null
+	_refugia_hypha = null
+	_refugia_accumulator = 0.0
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
 	_slow_biome_accumulator = 0.0
@@ -452,7 +480,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# A few large amoeboid predators make the ecology observable immediately:
 	# they chase nearby bacteria and engulf them with a staged deformation.
-	for proto_index in range(2):
+	for proto_index in range(3):
 		var proto_margin: float = 14.0
 		var proto_source: Vector2 = nutrient_sources[
 			(proto_index * 2 + 1) % nutrient_sources.size()
@@ -484,7 +512,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# Faster ciliate-like grazers patrol dense bacterial patches and create a
 	# second top-down pressure with a different movement/feeding strategy.
-	for ciliate_index in range(1):
+	for ciliate_index in range(2):
 		var ciliate_margin: float = 12.0
 		var ciliate_source: Vector2 = nutrient_sources[
 			(ciliate_index * 3 + 2) % nutrient_sources.size()
@@ -515,7 +543,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# Small flagellate bacterivores form an intermediate trophic tier. They
 	# start near resource patches where bacterial prey are likely to be dense.
-	for flagellate_index in range(4):
+	for flagellate_index in range(6):
 		var flag_source: Vector2 = nutrient_sources[
 			(flagellate_index * 2 + 3) % nutrient_sources.size()
 		]
@@ -538,7 +566,7 @@ func seed_demo(count: int = 36) -> void:
 
 	# Two bounded filamentous decomposers start on particulate patches. Their
 	# visible network only expands if local substrate can pay its growth cost.
-	for hypha_index in range(2):
+	for hypha_index in range(3):
 		var hypha_root: Vector2 = nutrient_sources[
 			(hypha_index * 3 + 1) % nutrient_sources.size()
 		]
@@ -554,7 +582,7 @@ func seed_demo(count: int = 36) -> void:
 	# Explicit producer cells complement the continuum producer mat. They are
 	# slow drifting microalgae-like cells that oxygenate the local water and
 	# can be grazed by protists.
-	for algae_index in range(12):
+	for algae_index in range(16):
 		var source: Vector2 = producer_sources[algae_index % producer_sources.size()]
 		var position: Vector2 = (
 			source
@@ -576,7 +604,7 @@ func seed_demo(count: int = 36) -> void:
 	# Yeast-like decomposers start near nutrient/detrital hotspots. They are a
 	# distinct trophic guild that consumes carrion and mineralizes part of it
 	# back into dissolved resource.
-	for yeast_index in range(8):
+	for yeast_index in range(10):
 		var source: Vector2 = nutrient_sources[yeast_index % nutrient_sources.size()]
 		var position: Vector2 = (
 			source
@@ -595,6 +623,7 @@ func seed_demo(count: int = 36) -> void:
 		yeast.energy = rng.randf_range(2.4, 3.2)
 		decomposers.append(yeast)
 
+	_refresh_refugia_memory()
 	_resolve_all_contacts()
 	_rebuild_id_maps()
 
@@ -758,6 +787,8 @@ func step(dt: float) -> void:
 		mechanics_ms_last = (
 			float(Time.get_ticks_usec() - mechanics_start) / 1000.0
 		)
+		if bacteria_identity_changed and not run_mechanics:
+			_rebuild_spatial_grid()
 	
 		_advance_gene_transfers(agent_dt)
 		_advance_microalgae(agent_dt)
@@ -765,6 +796,7 @@ func step(dt: float) -> void:
 		_advance_flagellates(agent_dt)
 		_advance_protozoa(agent_dt)
 		_advance_ciliates(agent_dt)
+		_maintain_ecological_refugia(agent_dt)
 	
 		_rebuild_edible_id_map()
 		_agent_accumulator -= target_agent_dt
@@ -874,6 +906,10 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 			* clampf(float(cell.expression_matrix), 0.0, 1.0)
 		)
 
+	var drift_turn: float = sin(
+		float(int(cell.id) * 17 + _agent_tick * 11) * 0.031
+	) * 0.16 * dt
+	cell.angle = wrapf(float(cell.angle) + drift_turn, -PI, PI)
 	var heading: Vector2 = _direction_for_angle(float(cell.angle))
 	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)
 	cell.position = (
@@ -1841,6 +1877,8 @@ func _nearest_bacterium_spatial(
 	radius: float,
 	require_competent: bool = false
 ) -> Variant:
+	if _grid_next.size() != bacteria.size():
+		_rebuild_spatial_grid()
 	var best: Variant = null
 	var best_distance_sq: float = radius * radius
 	var bucket_x: int = clampi(
@@ -3132,16 +3170,28 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		/ float(maxi(1, bacteria.size()))
 	)
 	var lineage_pressure: float = clampf(
-		(lineage_fraction - 0.18) / 0.52,
+		(lineage_fraction - 0.11) / 0.39,
 		0.0,
 		1.0
 	)
+	var ecotype_fraction: float = (
+		float(int(_ecotype_counts.get(int(cell.ecotype_id), 0)))
+		/ float(maxi(1, bacteria.size()))
+	)
+	var ecotype_pressure: float = clampf(
+		(ecotype_fraction - 0.075) / 0.30,
+		0.0,
+		1.0
+	)
+	var rare_ecotype_relief: float = 0.10 if ecotype_fraction < 0.025 else 0.0
 
 	var required_energy: float = base_division_energy * (
 		0.82
 		+ 0.18 * float(cell.gene_size)
 		+ global_pressure * global_pressure * 0.42
-		+ lineage_pressure * lineage_pressure * 0.72
+		+ lineage_pressure * lineage_pressure * 0.62
+		+ ecotype_pressure * ecotype_pressure * 0.95
+		- rare_ecotype_relief
 	)
 	return (
 		bacteria.size() < limit - 1
@@ -3164,6 +3214,7 @@ func _lineage_bin(hue: float) -> int:
 
 func _refresh_population_metadata() -> int:
 	_lineage_counts.fill(0)
+	_ecotype_counts.clear()
 	var living_count: int = 0
 	for cell in bacteria:
 		if (
@@ -3176,6 +3227,8 @@ func _refresh_population_metadata() -> int:
 		living_count += 1
 		var bin_index: int = _lineage_bin(float(cell.lineage_hue))
 		_lineage_counts[bin_index] += 1
+		var ecotype_key: int = int(cell.ecotype_id)
+		_ecotype_counts[ecotype_key] = int(_ecotype_counts.get(ecotype_key, 0)) + 1
 	return living_count
 
 
@@ -4037,6 +4090,107 @@ func _rebuild_edible_id_map() -> void:
 func _rebuild_id_maps() -> void:
 	_rebuild_bacteria_id_map()
 	_rebuild_edible_id_map()
+
+
+func _best_refugium(group: Array, current: Variant) -> Variant:
+	var best: Variant = current
+	var best_score: float = -INF
+	for organism in group:
+		if organism == null or bool(organism.dying):
+			continue
+		if "consumed" in organism and bool(organism.consumed):
+			continue
+		var score: float = float(organism.energy) + float(organism.generation) * 0.025
+		if score > best_score:
+			best_score = score
+			best = organism
+	return best
+
+
+func _refresh_refugia_memory() -> void:
+	_refugia_protozoan = _best_refugium(protozoa, _refugia_protozoan)
+	_refugia_ciliate = _best_refugium(ciliates, _refugia_ciliate)
+	_refugia_flagellate = _best_refugium(flagellates, _refugia_flagellate)
+	_refugia_microalga = _best_refugium(microalgae, _refugia_microalga)
+	_refugia_decomposer = _best_refugium(decomposers, _refugia_decomposer)
+	_refugia_hypha = _best_refugium(hyphae, _refugia_hypha)
+
+
+func _refugia_position(parent: Variant, margin: float) -> Vector2:
+	var position: Vector2 = (
+		Vector2(parent.position)
+		+ Vector2.RIGHT.rotated(rng.randf_range(-PI, PI))
+		* rng.randf_range(4.0, 11.0)
+	)
+	position.x = clampf(position.x, margin, world_size.x - margin)
+	position.y = clampf(position.y, margin, world_size.y - margin)
+	return position
+
+
+func _restore_refugium(kind: int, parent: Variant) -> void:
+	if parent == null:
+		return
+	var child: Variant = null
+	var position: Vector2
+	match kind:
+		0:
+			position = _refugia_position(parent, 8.0)
+			child = ProtozoanScript.new(_allocate_id(), position, rng.randf_range(-PI, PI), rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 8.0
+			protozoa.append(child)
+		1:
+			position = _refugia_position(parent, 7.0)
+			child = CiliateScript.new(_allocate_id(), position, rng.randf_range(-PI, PI), rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 6.5
+			ciliates.append(child)
+		2:
+			position = _refugia_position(parent, 5.0)
+			child = FlagellateScript.new(_allocate_id(), position, rng.randf_range(-PI, PI), rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 4.1
+			flagellates.append(child)
+		3:
+			position = _refugia_position(parent, 5.0)
+			child = MicroalgaScript.new(_allocate_id(), position, rng.randf_range(-PI, PI), rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 3.2
+			microalgae.append(child)
+		4:
+			position = _refugia_position(parent, 5.0)
+			child = DecomposerYeastScript.new(_allocate_id(), position, rng.randf_range(-PI, PI), rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 3.0
+			decomposers.append(child)
+		5:
+			position = _refugia_position(parent, 4.0)
+			child = HyphalColonyScript.new(_allocate_id(), position, rng.randf_range(0.0, TAU))
+			child.inherit_and_mutate(parent, rng)
+			child.energy = 4.8
+			hyphae.append(child)
+	if child != null and "cooldown" in child:
+		child.cooldown = 2.5
+
+
+func _maintain_ecological_refugia(dt: float) -> void:
+	_refresh_refugia_memory()
+	_refugia_accumulator += dt
+	if _refugia_accumulator < REFUGIA_RECOVERY_INTERVAL:
+		return
+	_refugia_accumulator = fmod(_refugia_accumulator, REFUGIA_RECOVERY_INTERVAL)
+	if protozoa.size() < REFUGIA_PROTOZOA_MIN:
+		_restore_refugium(0, _refugia_protozoan)
+	if ciliates.size() < REFUGIA_CILIATE_MIN:
+		_restore_refugium(1, _refugia_ciliate)
+	if flagellates.size() < REFUGIA_FLAGELLATE_MIN:
+		_restore_refugium(2, _refugia_flagellate)
+	if microalgae.size() < REFUGIA_MICROALGA_MIN:
+		_restore_refugium(3, _refugia_microalga)
+	if decomposers.size() < REFUGIA_DECOMPOSER_MIN:
+		_restore_refugium(4, _refugia_decomposer)
+	if hyphae.size() < REFUGIA_HYPHA_MIN:
+		_restore_refugium(5, _refugia_hypha)
 
 
 func _allocate_id() -> int:

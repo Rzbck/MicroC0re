@@ -155,7 +155,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_adhesion = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.45, 1.70)
 	gene_dormancy = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.55, 1.60)
 	gene_competence = clampf(1.0 + p_rng.randfn(0.0, 0.12), 0.40, 1.70)
-	mutation_rate = clampf(0.08 + p_rng.randfn(0.0, 0.012), 0.025, 0.16)
+	mutation_rate = clampf(0.11 + p_rng.randfn(0.0, 0.016), 0.030, 0.22)
 
 	flagella_count = clampi(2 + p_rng.randi_range(-1, 1), 1, 4)
 	flagella_length = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.65, 1.55)
@@ -212,7 +212,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 
 	var inherited_rate: float = float(parent.mutation_rate)
 	mutation_rate = clampf(
-		_mutate_float(inherited_rate, 0.010, 0.02, 0.18, inherited_rate, p_rng),
+		_mutate_float(inherited_rate, 0.014, 0.025, 0.24, inherited_rate, p_rng),
 		0.02,
 		0.18
 	)
@@ -256,7 +256,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	)
 
 	lineage_hue = wrapf(
-		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.008 + mutation_rate * 0.025),
+		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.014 + mutation_rate * 0.045),
 		0.0,
 		1.0
 	)

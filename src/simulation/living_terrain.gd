@@ -351,8 +351,8 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 				int(recipient.id)
 			)
 		):
-			recipient.capability_transfer_events = (
-				int(recipient.capability_transfer_events) + 1
+			recipient.capability_mix_events = (
+				int(recipient.capability_mix_events) + 1
 			)
 			recipient.energy = maxf(
 				0.0,
@@ -527,6 +527,24 @@ func _advance_agent(
 	agent.physical_oviposit = oviposit
 	agent.physical_armor = armor
 
+	if can_move:
+		var left_height: float = sample_height(position + forward.rotated(-0.72) * CELL_SIZE)
+		var right_height: float = sample_height(position + forward.rotated(0.72) * CELL_SIZE)
+		var terrain_turn: float = clampf((left_height - right_height) * 0.34, -0.22, 0.22)
+		agent.angle = wrapf(
+			float(agent.angle) + terrain_turn * (1.0 - clampf(climb * 0.22, 0.0, 0.52)),
+			-PI,
+			PI
+		)
+		forward = Vector2.RIGHT.rotated(float(agent.angle))
+		var terrain_resistance: float = maxf(0.0, uphill - climb * 0.26 - burrow * 0.14)
+		if terrain_resistance > 0.0:
+			agent.energy = maxf(
+				0.0,
+				float(agent.energy)
+				- terrain_resistance * (0.018 + 0.010 / maxf(0.25, climb + burrow)) * dt
+			)
+
 	if can_move and uphill > 0.34 + climb * 0.30 + burrow * 0.12:
 		agent.position = Vector2(agent.position) - forward * minf(0.10, uphill * 0.05)
 		var turn: float = sin(
@@ -536,7 +554,7 @@ func _advance_agent(
 
 	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (
-		0.42 + dig * 0.48 + deposit_strength * 0.20
+		0.50 + dig * 0.56 + deposit_strength * 0.25
 	)
 
 	if float(agent.terrain_action_clock) < 1.0:
@@ -570,7 +588,7 @@ func _advance_agent(
 		)
 		var requested: float = minf(
 			float(agent.carried_soil),
-			0.12 + deposit_strength * 0.16
+			0.15 + deposit_strength * 0.20
 		)
 		var placed: float = deposit(
 			target,
@@ -590,7 +608,7 @@ func _advance_agent(
 		)
 		var requested: float = minf(
 			capacity - float(agent.carried_soil),
-			0.11 + dig * 0.15
+			0.13 + dig * 0.18
 		)
 		var removed: float = excavate(
 			dig_target,
