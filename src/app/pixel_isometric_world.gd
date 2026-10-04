@@ -863,28 +863,35 @@ func _batch_far_group(
 			1:
 				half_length = 2.35
 				half_width = 1.30
-				color = Color(0.62, 0.82, 0.76)
+				color = _evolved_lineage_tint(Color(0.62, 0.82, 0.76), agent, 0.34)
 			2:
 				half_length = 2.05
 				half_width = 0.92
-				color = Color(0.69, 0.69, 0.88)
+				color = _evolved_lineage_tint(Color(0.69, 0.69, 0.88), agent, 0.38)
 			3:
 				half_length = 1.65
 				half_width = 0.66
-				color = Color(0.82, 0.72, 0.44)
+				color = _evolved_lineage_tint(Color(0.82, 0.72, 0.44), agent, 0.42)
 			4:
 				half_length = 1.28
 				half_width = 0.88
-				color = Color(0.38, 0.68, 0.34)
+				color = _evolved_lineage_tint(Color(0.38, 0.68, 0.34), agent, 0.44)
 			5:
 				half_length = 1.36
 				half_width = 0.88
-				color = Color(0.72, 0.57, 0.35)
+				color = _evolved_lineage_tint(Color(0.72, 0.57, 0.35), agent, 0.44)
 			6:
 				half_length = 1.90
 				half_width = 0.72
-				color = Color(0.64, 0.56, 0.38)
+				color = _evolved_lineage_tint(Color(0.64, 0.56, 0.38), agent, 0.40)
 
+		var morph_scale: float = (
+			clampf(float(agent.gene_size), 0.74, 1.38)
+			if "gene_size" in agent
+			else 1.0
+		)
+		half_length *= morph_scale
+		half_width *= lerpf(0.90, 1.12, clampf((morph_scale - 0.74) / 0.64, 0.0, 1.0))
 		var heading: Vector2 = _project_heading_unscaled(float(agent.angle))
 		var side := Vector2(-heading.y, heading.x)
 		_batch_quad(
@@ -1002,7 +1009,12 @@ func _draw_agent_sprite(
 		0.62,
 		2.60
 	)
-	var size: Vector2 = texture.get_size() * base_scale
+	var morph_scale: float = (
+		clampf(float(agent.gene_size), 0.74, 1.38)
+		if "gene_size" in agent
+		else 1.0
+	)
+	var size: Vector2 = texture.get_size() * base_scale * morph_scale
 	size.x = maxf(1.0, roundf(size.x))
 	size.y = maxf(1.0, roundf(size.y))
 
@@ -1125,6 +1137,15 @@ func _agent_texture(kind: String, agent: Variant) -> Texture2D:
 	return null
 
 
+func _evolved_lineage_tint(base: Color, agent: Variant, amount: float = 0.38) -> Color:
+	if not "lineage_hue" in agent:
+		return base
+	return base.lerp(
+		_lineage_color(float(agent.lineage_hue)),
+		clampf(amount, 0.0, 0.72)
+	)
+
+
 func _agent_tint(kind: String, agent: Variant) -> Color:
 	match kind:
 		"bacterium":
@@ -1135,15 +1156,15 @@ func _agent_tint(kind: String, agent: Variant) -> Color:
 				color = color.lerp(Color(0.34, 0.42, 0.40), 0.62)
 			return color
 		"amoeba":
-			return Color(0.78, 0.90, 0.84)
+			return _evolved_lineage_tint(Color(0.78, 0.90, 0.84), agent, 0.34)
 		"ciliate":
-			return Color(0.84, 0.84, 0.95)
+			return _evolved_lineage_tint(Color(0.84, 0.84, 0.95), agent, 0.38)
 		"flagellate":
-			return Color(0.92, 0.84, 0.62)
+			return _evolved_lineage_tint(Color(0.92, 0.84, 0.62), agent, 0.42)
 		"alga":
-			return Color(0.90, 0.96, 0.86)
+			return _evolved_lineage_tint(Color(0.90, 0.96, 0.86), agent, 0.44)
 		"yeast":
-			return Color(0.94, 0.88, 0.78)
+			return _evolved_lineage_tint(Color(0.94, 0.88, 0.78), agent, 0.44)
 	return Color.WHITE
 
 
@@ -1175,7 +1196,7 @@ func _draw_hypha(colony: Variant) -> void:
 		draw_line(
 			a,
 			b,
-			Color(0.64, 0.56, 0.38),
+			_evolved_lineage_tint(Color(0.64, 0.56, 0.38), colony, 0.42),
 			width_px,
 			false
 		)
@@ -1194,7 +1215,7 @@ func _draw_hypha(colony: Variant) -> void:
 				tip - Vector2.ONE * px,
 				Vector2.ONE * px * 2.0
 			),
-			Color(0.78, 0.72, 0.50),
+			_evolved_lineage_tint(Color(0.78, 0.72, 0.50), colony, 0.34),
 			true
 		)
 
