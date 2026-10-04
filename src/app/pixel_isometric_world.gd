@@ -10,6 +10,7 @@ const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
+const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 
 const FIXED_DT := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 4
@@ -19,6 +20,9 @@ const HEIGHT_PIXELS := 9.0
 const CAMERA_ZOOM_STEP := 1.12
 const MIN_USER_ZOOM := 0.58
 const MAX_USER_ZOOM := 5.0
+const TERRAIN_VISUAL_REFRESH := 0.25
+const MENU_WIDTH := 220.0
+const INSPECTOR_WIDTH := 276.0
 
 const LINEAGE_PALETTE := [
 	Color(0.42, 0.70, 0.46, 1.0),
@@ -53,7 +57,22 @@ var view_pan := Vector2.ZERO
 var panning: bool = false
 var rotating: bool = false
 var rotate_drag_accumulator: float = 0.0
+var rotate_drag_start := Vector2.ZERO
 var help_visible: bool = false
+var menu_visible: bool = false
+var metrics_visible: bool = false
+
+var selected_kind: String = ""
+var selected_agent: Variant = null
+var follow_selected: bool = false
+
+var terrain_cache_accumulator: float = 0.0
+var terrain_color_cache := PackedColorArray()
+var terrain_mark_cache := PackedInt32Array()
+var last_draw_ms: float = 0.0
+var last_sim_step_ms: float = 0.0
+var last_visible_tiles: int = 0
+var telemetry: Variant = null
 
 
 func _ready() -> void:
@@ -71,6 +90,9 @@ func _ready() -> void:
 	hypha_atlas = PixelHyphaAtlasScript.new()
 
 	_start_seed(current_seed)
+	telemetry = SessionTelemetryScript.new()
+	telemetry.begin(current_seed)
+	_refresh_terrain_visual_cache()
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	call_deferred("_fit_view")
 	queue_redraw()
@@ -85,22 +107,59 @@ func _start_seed(seed_value: int) -> void:
 	visual_time = 0.0
 	view_pan = Vector2.ZERO
 	user_zoom = 1.0
+	selected_kind = ""
+	selected_agent = null
+	follow_selected = false
+	terrain_cache_accumulator = TERRAIN_VISUAL_REFRESH
+	if telemetry != null:
+		telemetry.set_seed(current_seed)
 
 
 func _process(delta: float) -> void:
 	visual_time += delta
 	_handle_keyboard_pan(delta)
+	last_sim_step_ms = 0.0
 
 	if not paused:
 		accumulator += minf(delta * simulation_speed, 0.05)
 		var steps: int = 0
+		var sim_start_usec: int = Time.get_ticks_usec()
 		while accumulator >= FIXED_DT and steps < MAX_STEPS_PER_FRAME:
 			sim.step(FIXED_DT)
 			terrain.advance_from_sim(sim, FIXED_DT)
 			accumulator -= FIXED_DT
 			steps += 1
+		if steps > 0:
+			last_sim_step_ms = (
+				float(Time.get_ticks_usec() - sim_start_usec)
+				/ 1000.0
+				/ float(steps)
+			)
 		if accumulator >= FIXED_DT:
 			accumulator = fmod(accumulator, FIXED_DT)
+
+	terrain_cache_accumulator += delta
+	if terrain_cache_accumulator >= TERRAIN_VISUAL_REFRESH:
+		terrain_cache_accumulator = fmod(
+			terrain_cache_accumulator,
+			TERRAIN_VISUAL_REFRESH
+		)
+		_refresh_terrain_visual_cache()
+
+	if follow_selected:
+		_update_selected_follow()
+
+	if telemetry != null:
+		telemetry.record_frame(
+			delta,
+			last_sim_step_ms,
+			last_draw_ms,
+			sim,
+			terrain,
+			_camera_zoom(),
+			rotation_quarter,
+			last_visible_tiles
+		)
 
 	queue_redraw()
 
@@ -109,6 +168,8 @@ func _draw() -> void:
 	if sim == null or terrain == null:
 		return
 
+	var draw_start_usec: int = Time.get_ticks_usec()
+	last_visible_tiles = 0
 	var viewport_size: Vector2 = get_viewport_rect().size
 	draw_rect(
 		Rect2(Vector2.ZERO, viewport_size),
@@ -119,9 +180,15 @@ func _draw() -> void:
 	_draw_isometric_terrain()
 	_draw_capability_fragments()
 	_draw_agents()
+	_draw_selection()
+	_draw_ui()
 
 	if help_visible:
 		_draw_help()
+
+	last_draw_ms = float(
+		Time.get_ticks_usec() - draw_start_usec
+	) / 1000.0
 
 
 func _draw_isometric_terrain() -> void:
@@ -149,6 +216,15 @@ func _draw_terrain_tile(
 		Vector2(float(rx), float(ry)),
 		height_value
 	)
+	var viewport_size: Vector2 = get_viewport_rect().size
+	if (
+		center.x < -28.0
+		or center.y < -28.0
+		or center.x > viewport_size.x + 28.0
+		or center.y > viewport_size.y + 64.0
+	):
+		return
+	last_visible_tiles += 1
 	var half_w: float = maxf(2.0, roundf(TILE_HALF_W * _camera_zoom()))
 	var half_h: float = maxf(1.0, roundf(TILE_HALF_H * _camera_zoom()))
 
@@ -157,7 +233,12 @@ func _draw_terrain_tile(
 	var bottom := center + Vector2(0.0, half_h)
 	var left := center + Vector2(-half_w, 0.0)
 
-	var top_color: Color = _terrain_top_color(source, height_value)
+	var cache_index: int = source.y * terrain.width + source.x
+	var top_color: Color = (
+		terrain_color_cache[cache_index]
+		if cache_index >= 0 and cache_index < terrain_color_cache.size()
+		else _terrain_top_color(source, height_value)
+	)
 	var delta: float = terrain.height_delta_at_grid(source.x, source.y)
 	if delta > 0.035:
 		top_color = top_color.lerp(
@@ -221,17 +302,15 @@ func _draw_terrain_tile(
 		top_color
 	)
 
-	# Coherent ecological material marks sit on the tile instead of replacing
-	# the terrain with noise.
-	var world: Vector2 = terrain.world_position_for_grid(
-		source.x,
-		source.y
+	# Environmental field sampling is cached at 4 Hz instead of repeated for
+	# every tile on every rendered frame.
+	var mark: int = (
+		terrain_mark_cache[cache_index]
+		if cache_index >= 0 and cache_index < terrain_mark_cache.size()
+		else 0
 	)
-	var producer: float = float(sim.producer_biomass.sample_world(world))
-	var detritus_value: float = float(sim.detritus.sample_world(world))
-	var damage: float = float(sim.damage_cue.sample_world(world))
 	var px: float = maxf(1.0, roundf(_camera_zoom()))
-	if damage > 0.09:
+	if mark == 3:
 		draw_rect(
 			Rect2(
 				_round_vec(center + Vector2(-px, -px)),
@@ -240,7 +319,7 @@ func _draw_terrain_tile(
 			Color(0.72, 0.24, 0.10, 0.86),
 			true
 		)
-	elif detritus_value > 0.10:
+	elif mark == 2:
 		draw_rect(
 			Rect2(
 				_round_vec(center + Vector2(-px, 0.0)),
@@ -249,7 +328,7 @@ func _draw_terrain_tile(
 			Color(0.40, 0.25, 0.12, 0.90),
 			true
 		)
-	elif producer > 0.16:
+	elif mark == 1:
 		draw_rect(
 			Rect2(
 				_round_vec(center + Vector2(-px, -px)),
@@ -846,8 +925,11 @@ func _zoom_at(
 
 func _rotate_view(step: int) -> void:
 	rotation_quarter = posmod(rotation_quarter + step, 4)
-	view_pan = Vector2.ZERO
 	_recompute_fit_keep_zoom()
+	if follow_selected:
+		_update_selected_follow()
+	if telemetry != null:
+		telemetry.mark_event("rotations")
 
 
 func _recompute_fit_keep_zoom() -> void:
@@ -884,6 +966,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				button.position,
 				1.22 if button.ctrl_pressed else CAMERA_ZOOM_STEP
 			)
+			follow_selected = false
+			if telemetry != null:
+				telemetry.mark_event("zooms")
 			get_viewport().set_input_as_handled()
 			return
 		if (
@@ -898,16 +983,39 @@ func _unhandled_input(event: InputEvent) -> void:
 					else CAMERA_ZOOM_STEP
 				)
 			)
+			follow_selected = false
+			if telemetry != null:
+				telemetry.mark_event("zooms")
 			get_viewport().set_input_as_handled()
 			return
 		if button.button_index == MOUSE_BUTTON_MIDDLE:
 			panning = button.pressed
+			if panning:
+				follow_selected = false
 			get_viewport().set_input_as_handled()
 			return
 		if button.button_index == MOUSE_BUTTON_RIGHT:
-			rotating = button.pressed
-			if not rotating:
+			if button.pressed:
+				rotating = true
+				rotate_drag_start = button.position
 				rotate_drag_accumulator = 0.0
+			else:
+				if rotating and absf(rotate_drag_accumulator) >= 28.0:
+					_rotate_view(
+						1 if rotate_drag_accumulator > 0.0 else -1
+					)
+				rotating = false
+				rotate_drag_accumulator = 0.0
+			get_viewport().set_input_as_handled()
+			return
+		if (
+			button.button_index == MOUSE_BUTTON_LEFT
+			and button.pressed
+		):
+			if _handle_ui_click(button.position):
+				get_viewport().set_input_as_handled()
+				return
+			_select_at_screen(button.position)
 			get_viewport().set_input_as_handled()
 			return
 
@@ -918,11 +1026,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if rotating:
-			rotate_drag_accumulator += motion.relative.x
-			while absf(rotate_drag_accumulator) >= 54.0:
-				var step: int = 1 if rotate_drag_accumulator > 0.0 else -1
-				_rotate_view(step)
-				rotate_drag_accumulator -= 54.0 * float(step)
+			# A drag previews intent only. One quarter-turn is committed on
+			# release, so fast drags cannot accidentally spin several times.
+			rotate_drag_accumulator = (
+				motion.position.x - rotate_drag_start.x
+			)
 			get_viewport().set_input_as_handled()
 			return
 
@@ -933,13 +1041,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		match key.keycode:
 			KEY_SPACE:
 				paused = not paused
+			KEY_ESCAPE:
+				menu_visible = not menu_visible
+				if menu_visible and telemetry != null:
+					telemetry.mark_event("menu_opens")
 			KEY_F:
+				follow_selected = false
 				_fit_view()
 			KEY_R:
 				_start_seed(current_seed)
+				_refresh_terrain_visual_cache()
 				_fit_view()
 			KEY_N:
-				_start_seed(current_seed + 1)
+				current_seed += 1
+				_start_seed(current_seed)
+				if telemetry != null:
+					telemetry.mark_event("seed_changes")
+				_refresh_terrain_visual_cache()
 				_fit_view()
 			KEY_Q:
 				_rotate_view(-1)
@@ -947,6 +1065,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_rotate_view(1)
 			KEY_H:
 				help_visible = not help_visible
+			KEY_P:
+				metrics_visible = not metrics_visible
 			KEY_1:
 				simulation_speed = 1.0
 			KEY_2:
@@ -978,8 +1098,486 @@ func _handle_keyboard_pan(delta: float) -> void:
 
 	if direction.length_squared() <= 0.0:
 		return
+	follow_selected = false
 	direction = direction.normalized()
 	view_pan += direction * 220.0 * delta
+
+
+func _refresh_terrain_visual_cache() -> void:
+	if sim == null or terrain == null:
+		return
+	var count: int = terrain.width * terrain.height
+	terrain_color_cache.resize(count)
+	terrain_mark_cache.resize(count)
+	for y in range(terrain.height):
+		for x in range(terrain.width):
+			var index: int = y * terrain.width + x
+			var source := Vector2i(x, y)
+			var height_value: float = terrain.height_at_grid(x, y)
+			terrain_color_cache[index] = _terrain_top_color(
+				source,
+				height_value
+			)
+			var world_position: Vector2 = (
+				terrain.world_position_for_grid(x, y)
+			)
+			var damage: float = float(
+				sim.damage_cue.sample_world(world_position)
+			)
+			var detritus_value: float = float(
+				sim.detritus.sample_world(world_position)
+			)
+			var producer: float = float(
+				sim.producer_biomass.sample_world(world_position)
+			)
+			var mark: int = 0
+			if damage > 0.09:
+				mark = 3
+			elif detritus_value > 0.10:
+				mark = 2
+			elif producer > 0.16:
+				mark = 1
+			terrain_mark_cache[index] = mark
+
+
+func _select_at_screen(screen_position: Vector2) -> void:
+	if telemetry != null:
+		telemetry.mark_event("selection_attempts")
+	var best_agent: Variant = null
+	var best_kind: String = ""
+	var best_distance_sq: float = 22.0 * 22.0
+
+	for record in _selection_groups():
+		var kind: String = String(record[0])
+		var group: Array = record[1]
+		for agent in group:
+			if agent == null:
+				continue
+			if "consumed" in agent and bool(agent.consumed):
+				continue
+			var p: Vector2 = Vector2(agent.position)
+			var screen: Vector2 = _project_world(
+				p,
+				terrain.sample_height(p)
+				- float(agent.burrow_depth) * 0.24
+			)
+			var distance_sq: float = screen.distance_squared_to(
+				screen_position
+			)
+			if distance_sq < best_distance_sq:
+				best_distance_sq = distance_sq
+				best_agent = agent
+				best_kind = kind
+
+	if best_agent == null:
+		selected_agent = null
+		selected_kind = ""
+		follow_selected = false
+		return
+
+	selected_agent = best_agent
+	selected_kind = best_kind
+	follow_selected = true
+	user_zoom = maxf(user_zoom, 1.45)
+	_update_selected_follow()
+	if telemetry != null:
+		telemetry.mark_event("selection_hits")
+
+
+func _selection_groups() -> Array:
+	return [
+		["BACTERIUM", sim.bacteria],
+		["AMOEBA", sim.protozoa],
+		["CILIATE", sim.ciliates],
+		["FLAGELLATE", sim.flagellates],
+		["MICROALGA", sim.microalgae],
+		["YEAST", sim.decomposers],
+		["HYPHA", sim.hyphae],
+	]
+
+
+func _selected_screen_position() -> Vector2:
+	if selected_agent == null:
+		return Vector2.ZERO
+	var p: Vector2 = Vector2(selected_agent.position)
+	return _project_world(
+		p,
+		terrain.sample_height(p)
+		- float(selected_agent.burrow_depth) * 0.24
+	)
+
+
+func _update_selected_follow() -> void:
+	if selected_agent == null:
+		follow_selected = false
+		return
+	var center: Vector2 = get_viewport_rect().size * 0.5
+	var selected_screen: Vector2 = _selected_screen_position()
+	view_pan += center - selected_screen
+
+
+func _draw_selection() -> void:
+	if selected_agent == null:
+		return
+	var screen: Vector2 = _round_vec(_selected_screen_position())
+	var s: float = maxf(5.0, roundf(7.0 * _camera_zoom()))
+	var c := Color(0.82, 0.94, 0.70, 0.88)
+	var w: float = maxf(1.0, roundf(_camera_zoom()))
+	draw_line(
+		screen + Vector2(-s, -s),
+		screen + Vector2(-s * 0.35, -s),
+		c,
+		w,
+		false
+	)
+	draw_line(
+		screen + Vector2(s, -s),
+		screen + Vector2(s * 0.35, -s),
+		c,
+		w,
+		false
+	)
+	draw_line(
+		screen + Vector2(-s, s),
+		screen + Vector2(-s * 0.35, s),
+		c,
+		w,
+		false
+	)
+	draw_line(
+		screen + Vector2(s, s),
+		screen + Vector2(s * 0.35, s),
+		c,
+		w,
+		false
+	)
+
+
+func _draw_ui() -> void:
+	var button: Rect2 = _menu_button_rect()
+	draw_rect(
+		button,
+		Color(0.025, 0.055, 0.057, 0.92),
+		true
+	)
+	draw_rect(
+		button,
+		Color(0.34, 0.50, 0.45, 0.72),
+		false,
+		1.0
+	)
+	for i in range(3):
+		draw_line(
+			button.position + Vector2(7.0, 7.0 + float(i) * 5.0),
+			button.position + Vector2(21.0, 7.0 + float(i) * 5.0),
+			Color(0.78, 0.86, 0.82),
+			1.0
+		)
+
+	if menu_visible:
+		_draw_menu_panel()
+	if selected_agent != null:
+		_draw_inspector()
+	if metrics_visible:
+		_draw_metrics_panel()
+
+
+func _menu_button_rect() -> Rect2:
+	var viewport_size: Vector2 = get_viewport_rect().size
+	return Rect2(
+		Vector2(viewport_size.x - 42.0, 12.0),
+		Vector2(30.0, 26.0)
+	)
+
+
+func _menu_panel_rect() -> Rect2:
+	var viewport_size: Vector2 = get_viewport_rect().size
+	return Rect2(
+		Vector2(viewport_size.x - MENU_WIDTH - 12.0, 46.0),
+		Vector2(MENU_WIDTH, 236.0)
+	)
+
+
+func _draw_menu_panel() -> void:
+	var panel: Rect2 = _menu_panel_rect()
+	draw_rect(panel, Color(0.012, 0.026, 0.028, 0.94), true)
+	draw_rect(
+		panel,
+		Color(0.26, 0.45, 0.40, 0.80),
+		false,
+		1.0
+	)
+	_ui_text(
+		panel.position + Vector2(12.0, 21.0),
+		"MICROC0RE",
+		14,
+		Color(0.84, 0.92, 0.88)
+	)
+	var labels: Array = [
+		"RESUME" if paused else "PAUSE",
+		"SPEED  x%.0f" % simulation_speed,
+		"FIT BIOME",
+		"NEW SEED",
+		"PERF  " + ("ON" if metrics_visible else "OFF"),
+		"HELP  " + ("ON" if help_visible else "OFF"),
+	]
+	for i in range(labels.size()):
+		var row := Rect2(
+			panel.position + Vector2(10.0, 35.0 + float(i) * 31.0),
+			Vector2(panel.size.x - 20.0, 25.0)
+		)
+		draw_rect(row, Color(0.035, 0.072, 0.070, 0.88), true)
+		_ui_text(
+			row.position + Vector2(8.0, 17.0),
+			String(labels[i]),
+			12,
+			Color(0.72, 0.82, 0.78)
+		)
+
+
+func _draw_inspector() -> void:
+	var panel := Rect2(
+		Vector2(12.0, 12.0),
+		Vector2(INSPECTOR_WIDTH, 172.0)
+	)
+	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.93), true)
+	draw_rect(
+		panel,
+		Color(0.28, 0.50, 0.45, 0.78),
+		false,
+		1.0
+	)
+	_ui_text(
+		panel.position + Vector2(11.0, 21.0),
+		"%s #%d" % [selected_kind, int(selected_agent.id)],
+		14,
+		Color(0.84, 0.94, 0.88)
+	)
+	_ui_text(
+		panel.position + Vector2(panel.size.x - 22.0, 21.0),
+		"X",
+		13,
+		Color(0.78, 0.82, 0.80)
+	)
+
+	var state: String = "active"
+	if "dying" in selected_agent and bool(selected_agent.dying):
+		state = "dying"
+	elif "dormant" in selected_agent and bool(selected_agent.dormant):
+		state = "dormant"
+	elif "terrain_action" in selected_agent:
+		var action: String = String(selected_agent.terrain_action)
+		if action != "none":
+			state = action
+
+	var y: float = 43.0
+	_ui_text(
+		panel.position + Vector2(11.0, y),
+		"%s   E %.2f   age %.1fs" % [
+			state,
+			float(selected_agent.energy),
+			float(selected_agent.age),
+		],
+		12,
+		Color(0.72, 0.82, 0.78)
+	)
+	y += 20.0
+
+	if selected_kind == "BACTERIUM":
+		var module_count: int = (
+			selected_agent.genome.modules.size()
+			if selected_agent.genome != null
+			else 0
+		)
+		_ui_text(
+			panel.position + Vector2(11.0, y),
+			"%s   eco %04X   modules %d" % [
+				String(selected_agent.ecotype_label),
+				int(selected_agent.ecotype_id) & 0xffff,
+				module_count,
+			],
+			11,
+			Color(0.69, 0.80, 0.76)
+		)
+		y += 19.0
+	elif "generation" in selected_agent:
+		_ui_text(
+			panel.position + Vector2(11.0, y),
+			"generation %d   lineage %.2f" % [
+				int(selected_agent.generation),
+				float(selected_agent.lineage_hue),
+			],
+			11,
+			Color(0.69, 0.80, 0.76)
+		)
+		y += 19.0
+
+	_ui_text(
+		panel.position + Vector2(11.0, y),
+		"dig %.2f  bur %.2f  climb %.2f  armor %.2f" % [
+			float(selected_agent.physical_dig),
+			float(selected_agent.physical_burrow),
+			float(selected_agent.physical_climb),
+			float(selected_agent.physical_armor),
+		],
+		11,
+		Color(0.77, 0.73, 0.57)
+	)
+	y += 19.0
+	_ui_text(
+		panel.position + Vector2(11.0, y),
+		"soil %.2f  depth %.2f  mixes %d" % [
+			float(selected_agent.carried_soil),
+			float(selected_agent.burrow_depth),
+			int(selected_agent.capability_mix_events),
+		],
+		11,
+		Color(0.68, 0.72, 0.62)
+	)
+	y += 19.0
+
+	var p: Vector2 = Vector2(selected_agent.position)
+	_ui_text(
+		panel.position + Vector2(11.0, y),
+		"N %.2f  O2 %.2f  det %.2f  prod %.2f" % [
+			float(sim.nutrient.sample_world(p)),
+			float(sim.oxygen.sample_world(p)),
+			float(sim.detritus.sample_world(p)),
+			float(sim.producer_biomass.sample_world(p)),
+		],
+		11,
+		Color(0.62, 0.72, 0.70)
+	)
+
+
+func _draw_metrics_panel() -> void:
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var panel := Rect2(
+		Vector2(12.0, viewport_size.y - 88.0),
+		Vector2(330.0, 70.0)
+	)
+	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
+	_ui_text(
+		panel.position + Vector2(10.0, 18.0),
+		"FPS %.0f   process %.2fms   draw %.2fms" % [
+			Performance.get_monitor(Performance.TIME_FPS),
+			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			last_draw_ms,
+		],
+		11,
+		Color(0.78, 0.86, 0.82)
+	)
+	_ui_text(
+		panel.position + Vector2(10.0, 37.0),
+		"sim %.2fms   tiles %d   agents %d" % [
+			last_sim_step_ms,
+			last_visible_tiles,
+			_total_agent_count(),
+		],
+		11,
+		Color(0.68, 0.78, 0.74)
+	)
+	_ui_text(
+		panel.position + Vector2(10.0, 56.0),
+		"soil %.2f / %.2f   fragments %d" % [
+			float(terrain.excavated_total),
+			float(terrain.deposited_total),
+			terrain.capability_fragments.size(),
+		],
+		11,
+		Color(0.72, 0.70, 0.58)
+	)
+
+
+func _handle_ui_click(position: Vector2) -> bool:
+	if _menu_button_rect().has_point(position):
+		menu_visible = not menu_visible
+		if menu_visible and telemetry != null:
+			telemetry.mark_event("menu_opens")
+		return true
+
+	if selected_agent != null:
+		var close_rect := Rect2(
+			Vector2(INSPECTOR_WIDTH - 18.0, 12.0),
+			Vector2(30.0, 30.0)
+		)
+		if close_rect.has_point(position):
+			selected_agent = null
+			selected_kind = ""
+			follow_selected = false
+			return true
+		var inspector_rect := Rect2(
+			Vector2(12.0, 12.0),
+			Vector2(INSPECTOR_WIDTH, 172.0)
+		)
+		if inspector_rect.has_point(position):
+			return true
+
+	if not menu_visible:
+		return false
+	var panel: Rect2 = _menu_panel_rect()
+	if not panel.has_point(position):
+		menu_visible = false
+		return false
+
+	var local_y: float = position.y - panel.position.y
+	if local_y < 35.0:
+		return true
+	var row: int = floori((local_y - 35.0) / 31.0)
+	match row:
+		0:
+			paused = not paused
+		1:
+			simulation_speed = (
+				2.0 if simulation_speed == 1.0
+				else 4.0 if simulation_speed == 2.0
+				else 8.0 if simulation_speed == 4.0
+				else 1.0
+			)
+		2:
+			follow_selected = false
+			_fit_view()
+		3:
+			current_seed += 1
+			_start_seed(current_seed)
+			if telemetry != null:
+				telemetry.mark_event("seed_changes")
+			_refresh_terrain_visual_cache()
+			_fit_view()
+		4:
+			metrics_visible = not metrics_visible
+		5:
+			help_visible = not help_visible
+	return true
+
+
+func _total_agent_count() -> int:
+	return (
+		sim.bacteria.size()
+		+ sim.protozoa.size()
+		+ sim.ciliates.size()
+		+ sim.flagellates.size()
+		+ sim.microalgae.size()
+		+ sim.decomposers.size()
+		+ sim.hyphae.size()
+	)
+
+
+func _ui_text(
+	position: Vector2,
+	text_value: String,
+	font_size: int,
+	color: Color
+) -> void:
+	draw_string(
+		ThemeDB.fallback_font,
+		_round_vec(position),
+		text_value,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		font_size,
+		color
+	)
 
 
 func _draw_help() -> void:
@@ -1055,6 +1653,11 @@ func _appendage_class(cell: Variant) -> int:
 	if score < 4.8:
 		return 1
 	return 2
+
+
+func _exit_tree() -> void:
+	if telemetry != null:
+		telemetry.finalize()
 
 
 func _round_vec(value: Vector2) -> Vector2:

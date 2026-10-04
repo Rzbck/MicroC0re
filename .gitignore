@@ -46,3 +46,7 @@ id_ed25519
 # Local benchmark/profiling output
 benchmarks/local/
 profiles/
+
+
+# Local session telemetry + opt-in state (never commit raw local reports)
+.microcore/

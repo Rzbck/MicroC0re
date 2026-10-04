@@ -381,3 +381,20 @@ Correction:
   visibly legible on gameplay timescales;
 - carried soil and active dig/deposit actions are visible as restrained pixel
   clusters attached to the acting organism.
+
+
+## Live-session diagnostics / UI recovery — #66
+- click-to-inspect restored in the pixel-isometric renderer;
+- selecting an organism recenters/follows it and restores a compact readable
+  inspector with ecology + physical capability state;
+- compact top-right menu restored (pause, speed, fit, new seed, perf, help);
+- RMB rotation now commits one 90-degree turn on release instead of repeatedly
+  spinning while dragged; rotation preserves the current pan/focus;
+- optional P overlay exposes FPS/process/draw/simulation cost and visible tile
+  count;
+- terrain environmental sampling is cached at 4 Hz and off-screen isometric
+  tiles are culled before polygon drawing;
+- local bounded session telemetry records every run;
+- public GitHub publication is opt-in and posts only a strict allowlist to #66;
+  usernames, hostnames, IP/MAC, paths, locale/location, exact GPU model and raw
+  logs are never included.
