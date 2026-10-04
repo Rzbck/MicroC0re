@@ -71,7 +71,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_capture = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.70, 1.50)
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.82, 1.30)
 	gene_metabolism = clampf(1.0 + p_rng.randfn(0.0, 0.05), 0.75, 1.35)
-	mutation_rate = clampf(0.055 + p_rng.randfn(0.0, 0.009), 0.02, 0.12)
+	mutation_rate = clampf(0.075 + p_rng.randfn(0.0, 0.012), 0.025, 0.16)
 	lineage_hue = wrapf(0.66 + p_rng.randfn(0.0, 0.025), 0.0, 1.0)
 	radius = 2.4 * gene_size
 
@@ -85,7 +85,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	generation = int(parent.generation) + 1
 
 	mutation_rate = _mutate_float(
-		float(parent.mutation_rate), 0.007, 0.02, 0.12,
+		float(parent.mutation_rate), 0.010, 0.025, 0.16,
 		float(parent.mutation_rate), p_rng
 	)
 	gene_speed = _mutate_float(
@@ -104,7 +104,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 		float(parent.gene_metabolism), 0.045, 0.65, 1.50, mutation_rate, p_rng
 	)
 	lineage_hue = wrapf(
-		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.010 + mutation_rate * 0.025),
+		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.016 + mutation_rate * 0.040),
 		0.0,
 		1.0
 	)

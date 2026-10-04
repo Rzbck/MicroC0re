@@ -86,7 +86,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_engulf = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.70, 1.45)
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.78, 1.35)
 	gene_metabolism = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.72, 1.35)
-	mutation_rate = clampf(0.06 + p_rng.randfn(0.0, 0.01), 0.02, 0.14)
+	mutation_rate = clampf(0.08 + p_rng.randfn(0.0, 0.014), 0.025, 0.18)
 	radius = 3.2 * gene_size
 
 	physical_genome = PhysicalCapabilityGenomeScript.new()
@@ -99,7 +99,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	generation = int(parent.generation) + 1
 
 	mutation_rate = _mutate_float(
-		float(parent.mutation_rate), 0.008, 0.02, 0.14,
+		float(parent.mutation_rate), 0.011, 0.025, 0.18,
 		float(parent.mutation_rate), p_rng
 	)
 	gene_speed = _mutate_float(
@@ -118,7 +118,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 		float(parent.gene_metabolism), 0.050, 0.60, 1.55, mutation_rate, p_rng
 	)
 	lineage_hue = wrapf(
-		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.012 + mutation_rate * 0.03),
+		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.018 + mutation_rate * 0.045),
 		0.0,
 		1.0
 	)

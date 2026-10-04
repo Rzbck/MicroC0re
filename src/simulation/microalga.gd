@@ -67,7 +67,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.78, 1.35)
 	gene_exudate = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.65, 1.55)
 	gene_drift = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.60, 1.45)
-	mutation_rate = clampf(0.045 + p_rng.randfn(0.0, 0.008), 0.015, 0.12)
+	mutation_rate = clampf(0.065 + p_rng.randfn(0.0, 0.011), 0.020, 0.16)
 	lineage_hue = wrapf(0.28 + p_rng.randfn(0.0, 0.035), 0.0, 1.0)
 	visual_phase = p_rng.randf_range(0.0, TAU)
 	radius = 1.35 * gene_size
@@ -81,7 +81,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	lineage_id = int(parent.lineage_id)
 	generation = int(parent.generation) + 1
 	mutation_rate = _mutate(
-		float(parent.mutation_rate), 0.006, 0.015, 0.12,
+		float(parent.mutation_rate), 0.009, 0.020, 0.16,
 		float(parent.mutation_rate), p_rng
 	)
 	gene_light_use = _mutate(
@@ -100,7 +100,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 		float(parent.gene_drift), 0.045, 0.50, 1.65, mutation_rate, p_rng
 	)
 	lineage_hue = wrapf(
-		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.010),
+		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.016 + mutation_rate * 0.035),
 		0.0,
 		1.0
 	)
