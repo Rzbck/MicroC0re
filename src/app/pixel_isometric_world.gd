@@ -330,6 +330,11 @@ func _rebuild_terrain_batch() -> void:
 	var dims: Vector2i = _rotated_dimensions()
 	var max_diag: int = dims.x + dims.y - 2
 	var tile_count: int = 0
+	var cx: float = float(dims.x - 1) * 0.5
+	var cy: float = float(dims.y - 1) * 0.5
+	var terrain_width: int = terrain.width
+	var heights: PackedFloat32Array = terrain.heights
+	var baseline: PackedFloat32Array = terrain.baseline_heights
 
 	for diag in range(max_diag + 1):
 		var rx_min: int = maxi(0, diag - (dims.y - 1))
@@ -337,13 +342,14 @@ func _rebuild_terrain_batch() -> void:
 		for rx in range(rx_min, rx_max + 1):
 			var ry: int = diag - rx
 			var source: Vector2i = _rotated_to_source(rx, ry)
-			var height_value: float = terrain.height_at_grid(
-				source.x,
-				source.y
-			)
-			var center: Vector2 = _project_rotated_grid_unscaled(
-				Vector2(float(rx), float(ry)),
-				height_value
+			var cache_index: int = source.y * terrain_width + source.x
+			var height_value: float = float(heights[cache_index])
+			var dx: float = float(rx) - cx
+			var dy: float = float(ry) - cy
+			var center := Vector2(
+				(dx - dy) * TILE_HALF_W,
+				(dx + dy) * TILE_HALF_H
+				- (height_value - 0.60) * HEIGHT_PIXELS
 			)
 
 			var top := _round_vec(
@@ -359,9 +365,6 @@ func _rebuild_terrain_batch() -> void:
 				center + Vector2(-TILE_HALF_W, 0.0)
 			)
 
-			var cache_index: int = (
-				source.y * terrain.width + source.x
-			)
 			var top_color: Color = (
 				terrain_color_cache[cache_index]
 				if (
@@ -370,9 +373,8 @@ func _rebuild_terrain_batch() -> void:
 				)
 				else _terrain_top_color(source, height_value)
 			)
-			var delta: float = terrain.height_delta_at_grid(
-				source.x,
-				source.y
+			var delta: float = (
+				height_value - float(baseline[cache_index])
 			)
 			if delta > 0.035:
 				top_color = top_color.lerp(
@@ -390,9 +392,8 @@ func _rebuild_terrain_batch() -> void:
 					rx + 1,
 					ry
 				)
-				var nh1: float = terrain.height_at_grid(
-					n1.x,
-					n1.y
+				var nh1: float = float(
+					heights[n1.y * terrain_width + n1.x]
 				)
 				if height_value > nh1 + 0.015:
 					var drop1: float = maxf(
@@ -418,9 +419,8 @@ func _rebuild_terrain_batch() -> void:
 					rx,
 					ry + 1
 				)
-				var nh2: float = terrain.height_at_grid(
-					n2.x,
-					n2.y
+				var nh2: float = float(
+					heights[n2.y * terrain_width + n2.x]
 				)
 				if height_value > nh2 + 0.015:
 					var drop2: float = maxf(
@@ -798,7 +798,7 @@ func _batch_far_group(
 
 		var p: Vector2 = Vector2(agent.position)
 		var height_value: float = (
-			terrain.sample_height(p)
+			terrain.sample_height_nearest(p)
 			- float(agent.burrow_depth) * 0.24
 		)
 		var center: Vector2 = _round_vec(
@@ -875,7 +875,11 @@ func _draw_agents() -> void:
 		if kind == "hypha":
 			_draw_hypha(agent)
 		else:
-			_draw_agent_sprite(kind, agent)
+			_draw_agent_sprite(
+				kind,
+				agent,
+				Vector2(entry["screen"])
+			)
 
 
 func _append_agent_entries(
@@ -883,13 +887,15 @@ func _append_agent_entries(
 	kind: String,
 	group: Array
 ) -> void:
+	var viewport: Vector2 = get_viewport_rect().size
+	const CULL_MARGIN := 96.0
 	for agent in group:
 		if agent == null:
 			continue
 		if "consumed" in agent and bool(agent.consumed):
 			continue
 		var p: Vector2 = Vector2(agent.position)
-		var h: float = terrain.sample_height(p)
+		var h: float = terrain.sample_height_nearest(p)
 		var depth: float = (
 			float(agent.burrow_depth)
 			if "burrow_depth" in agent
@@ -899,24 +905,32 @@ func _append_agent_entries(
 			p,
 			h - depth * 0.24
 		)
+		if (
+			screen.x < -CULL_MARGIN
+			or screen.y < -CULL_MARGIN
+			or screen.x > viewport.x + CULL_MARGIN
+			or screen.y > viewport.y + CULL_MARGIN
+		):
+			continue
 		entries.append({
 			"kind": kind,
 			"agent": agent,
 			"screen_y": screen.y,
+			"screen": screen,
 		})
 
 
-func _draw_agent_sprite(kind: String, agent: Variant) -> void:
+func _draw_agent_sprite(
+	kind: String,
+	agent: Variant,
+	projected_screen: Vector2
+) -> void:
 	var texture: Texture2D = _agent_texture(kind, agent)
 	if texture == null:
 		return
 
-	var p: Vector2 = Vector2(agent.position)
-	var h: float = terrain.sample_height(p)
 	var depth: float = float(agent.burrow_depth)
-	var screen: Vector2 = _round_vec(
-		_project_world(p, h - depth * 0.24)
-	)
+	var screen: Vector2 = _round_vec(projected_screen)
 
 	var base_scale: float = clampf(
 		0.56 * _camera_zoom(),
@@ -1234,7 +1248,7 @@ func _draw_capability_fragments() -> void:
 		var screen: Vector2 = _round_vec(
 			_project_world(
 				p,
-				terrain.sample_height(p) + 0.06
+				terrain.sample_height_nearest(p) + 0.06
 			)
 		)
 		var c := Color(0.46, 0.82, 0.72, 0.80)
@@ -1624,7 +1638,7 @@ func _select_at_screen(screen_position: Vector2) -> void:
 			var p: Vector2 = Vector2(agent.position)
 			var screen: Vector2 = _project_world(
 				p,
-				terrain.sample_height(p)
+				terrain.sample_height_nearest(p)
 				- float(agent.burrow_depth) * 0.24
 			)
 			var distance_sq: float = screen.distance_squared_to(
@@ -1668,7 +1682,7 @@ func _selected_screen_position() -> Vector2:
 	var p: Vector2 = Vector2(selected_agent.position)
 	return _project_world(
 		p,
-		terrain.sample_height(p)
+		terrain.sample_height_nearest(p)
 		- float(selected_agent.burrow_depth) * 0.24
 	)
 

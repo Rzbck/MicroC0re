@@ -135,14 +135,15 @@ func _init() -> void:
 		# Performance invariant: synchronous bacterial fission may never overshoot
 	# the CPU reference ceiling even if many mothers finish division together.
 	var cap_probe = PetriSimulationScript.new(880044)
-	cap_probe.seed_demo(PetriSimulationScript.SAFETY_POPULATION_LIMIT - 2)
+	cap_probe.bacteria_population_limit = 420
+	cap_probe.seed_demo(418)
 	for cell in cap_probe.bacteria:
 		cell.length = 8.0
 		cell.energy = 12.0
 		cell.begin_division()
 		cell.division_progress = 1.0
 	cap_probe.step(1.0 / 60.0)
-	if cap_probe.bacteria.size() > PetriSimulationScript.SAFETY_POPULATION_LIMIT:
+	if cap_probe.bacteria.size() > cap_probe.bacteria_population_limit:
 		errors.append("performance: bacterial division overshot safety ceiling")
 
 	# 	# Hot-path scalar nearest sampling must match the exact addressed cell.

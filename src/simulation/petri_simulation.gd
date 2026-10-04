@@ -28,6 +28,8 @@ const EXACT_MECHANICS_LIMIT := 900
 const DENSITY_NEIGHBOR_VISIT_CAP := 18
 const DIRECTION_LUT_SIZE := 1024
 const REGULATION_BUCKETS := 6
+const LINEAGE_BIN_COUNT := 32
+const LIVE_POPULATION_SOFT_START := 1600
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
 const GRID_WIDTH := 64
@@ -35,7 +37,7 @@ const GRID_HEIGHT := 43
 const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 # CPU-reference safety ceilings. These are performance guards, not biology.
 # Raise them only after GPU-resident agent mechanics is validated.
-const SAFETY_POPULATION_LIMIT := 420
+const SAFETY_POPULATION_LIMIT := 5000
 const PROTOZOAN_SAFETY_LIMIT := 18
 const CILIATE_SAFETY_LIMIT := 16
 const FLAGELLATE_SAFETY_LIMIT := 28
@@ -57,6 +59,7 @@ var world_size := Vector2(
 
 var fixed_seed: int
 var rng := RandomNumberGenerator.new()
+var bacteria_population_limit: int = SAFETY_POPULATION_LIMIT
 
 var nutrient: Variant
 var waste: Variant
@@ -106,6 +109,7 @@ var _mech_radii: PackedFloat32Array = PackedFloat32Array()
 var _mech_active: PackedByteArray = PackedByteArray()
 var _density_corrections: PackedVector2Array = PackedVector2Array()
 var _density_nearest: PackedInt32Array = PackedInt32Array()
+var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
 var _edible_by_id: Dictionary = {}
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
@@ -655,6 +659,7 @@ func step(dt: float) -> void:
 		var agents_start: int = Time.get_ticks_usec()
 		var next_population: Array = _population_buffer
 		next_population.clear()
+		_refresh_lineage_counts()
 		var living_start: int = 0
 		for counted_cell in bacteria:
 			if (
@@ -664,7 +669,7 @@ func step(dt: float) -> void:
 				living_start += 1
 		var available_bacterial_births: int = maxi(
 			0,
-			SAFETY_POPULATION_LIMIT - living_start
+			bacteria_population_limit - living_start
 		)
 	
 		for cell in bacteria:
@@ -3071,20 +3076,38 @@ func _advance_lysis(cell: Variant, dt: float) -> void:
 
 
 func _ready_to_begin_division(cell: Variant) -> bool:
+	var limit: int = maxi(2, bacteria_population_limit)
 	var required_length: float = base_division_length * float(cell.gene_size)
-	var crowding: float = clampf(
-		(float(bacteria.size()) - 180.0)
-		/ float(SAFETY_POPULATION_LIMIT - 180),
+	var soft_start: float = minf(
+		float(LIVE_POPULATION_SOFT_START),
+		float(limit) * 0.55
+	)
+	var global_pressure: float = clampf(
+		(float(bacteria.size()) - soft_start)
+		/ maxf(1.0, float(limit) - soft_start),
 		0.0,
 		1.0
 	)
+
+	var lineage_bin: int = _lineage_bin(float(cell.lineage_hue))
+	var lineage_fraction: float = (
+		float(_lineage_counts[lineage_bin])
+		/ float(maxi(1, bacteria.size()))
+	)
+	var lineage_pressure: float = clampf(
+		(lineage_fraction - 0.18) / 0.52,
+		0.0,
+		1.0
+	)
+
 	var required_energy: float = base_division_energy * (
 		0.82
 		+ 0.18 * float(cell.gene_size)
-		+ crowding * crowding * 0.58
+		+ global_pressure * global_pressure * 0.42
+		+ lineage_pressure * lineage_pressure * 0.72
 	)
 	return (
-		bacteria.size() < SAFETY_POPULATION_LIMIT - 1
+		bacteria.size() < limit - 1
 		and not bool(cell.dividing)
 		and not bool(cell.dying)
 		and not bool(cell.phage_infected)
@@ -3092,6 +3115,28 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		and float(cell.energy) >= required_energy
 		and bool(cell.alive)
 	)
+
+
+func _lineage_bin(hue: float) -> int:
+	return clampi(
+		floori(wrapf(hue, 0.0, 1.0) * float(LINEAGE_BIN_COUNT)),
+		0,
+		LINEAGE_BIN_COUNT - 1
+	)
+
+
+func _refresh_lineage_counts() -> void:
+	_lineage_counts.fill(0)
+	for cell in bacteria:
+		if (
+			cell == null
+			or bool(cell.dying)
+			or bool(cell.consumed)
+			or int(cell.engulfed_by_id) >= 0
+		):
+			continue
+		var bin_index: int = _lineage_bin(float(cell.lineage_hue))
+		_lineage_counts[bin_index] += 1
 
 
 func _divide(parent: Variant) -> Array:

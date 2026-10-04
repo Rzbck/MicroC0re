@@ -8,7 +8,12 @@ const MIN_HEIGHT := -2.5
 const MAX_HEIGHT := 9.0
 const WATER_LEVEL := 0.42
 const TALUS_HEIGHT := 0.72
-const TERRAIN_AGENT_DT := 1.0 / 15.0
+const TERRAIN_AGENT_DT_SMALL := 1.0 / 15.0
+const TERRAIN_AGENT_DT_MEDIUM := 1.0 / 10.0
+const TERRAIN_AGENT_DT_MASS := 1.0 / 5.0
+const TERRAIN_MEDIUM_THRESHOLD := 700
+const TERRAIN_MASS_THRESHOLD := 2200
+const FRAGMENT_BUCKET_SIZE := 4.0
 
 var world_size := Vector2.ZERO
 var width: int = 0
@@ -19,6 +24,12 @@ var fixed_seed: int = 1
 var _relax_accumulator: float = 0.0
 var _agent_accumulator: float = 0.0
 var _terrain_tick: int = 0
+var _relax_delta: PackedFloat32Array = PackedFloat32Array()
+var _fragment_grid_width: int = 0
+var _fragment_grid_height: int = 0
+var _fragment_heads: PackedInt32Array = PackedInt32Array()
+var _fragment_next: PackedInt32Array = PackedInt32Array()
+var _fragment_agents: Array = []
 var revision: int = 0
 var excavated_total: float = 0.0
 var deposited_total: float = 0.0
@@ -40,6 +51,18 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	width = maxi(3, ceili(world_size.x / CELL_SIZE) + 1)
 	height = maxi(3, ceili(world_size.y / CELL_SIZE) + 1)
 	heights.resize(width * height)
+	_relax_delta.resize(width * height)
+	_relax_delta.fill(0.0)
+	_fragment_grid_width = maxi(
+		1,
+		ceili(world_size.x / FRAGMENT_BUCKET_SIZE)
+	)
+	_fragment_grid_height = maxi(
+		1,
+		ceili(world_size.y / FRAGMENT_BUCKET_SIZE)
+	)
+	_fragment_heads.resize(_fragment_grid_width * _fragment_grid_height)
+	_fragment_heads.fill(-1)
 	_generate_seeded_relief()
 	baseline_heights = heights.duplicate()
 
@@ -56,6 +79,20 @@ func sample_height(position: Vector2) -> float:
 	var a: float = lerpf(_height_value(x0, y0), _height_value(x1, y0), tx)
 	var b: float = lerpf(_height_value(x0, y1), _height_value(x1, y1), tx)
 	return lerpf(a, b, ty)
+
+
+func sample_height_nearest(position: Vector2) -> float:
+	var gx: int = clampi(
+		roundi(position.x / CELL_SIZE),
+		0,
+		width - 1
+	)
+	var gy: int = clampi(
+		roundi(position.y / CELL_SIZE),
+		0,
+		height - 1
+	)
+	return float(heights[gy * width + gx])
 
 
 func height_at_grid(x: int, y: int) -> float:
@@ -84,70 +121,100 @@ func total_mass() -> float:
 
 
 func excavate(position: Vector2, amount: float, radius_world: float = 1.8) -> float:
-	var remaining: float = maxf(0.0, amount)
-	if remaining <= 0.0:
-		return 0.0
-
-	var cells: Array = _radial_cells(position, radius_world)
-	var removed: float = 0.0
-	for entry in cells:
-		if remaining <= 0.000001:
-			break
-		var index: int = int(entry[0])
-		var weight: float = float(entry[1])
-		var available: float = maxf(0.0, float(heights[index]) - MIN_HEIGHT)
-		var take: float = minf(available, amount * weight)
-		if take <= 0.0:
-			continue
-		heights[index] = float(heights[index]) - take
-		remaining -= take
-		removed += take
-
-	if removed > 0.0:
-		excavated_total += removed
-		revision += 1
-	return removed
+	return _apply_radial_mass(position, amount, radius_world, false)
 
 
 func deposit(position: Vector2, amount: float, radius_world: float = 2.0) -> float:
-	var remaining: float = maxf(0.0, amount)
-	if remaining <= 0.0:
+	return _apply_radial_mass(position, amount, radius_world, true)
+
+
+func _apply_radial_mass(
+	position: Vector2,
+	amount: float,
+	radius_world: float,
+	is_deposit: bool
+) -> float:
+	var safe_amount: float = maxf(0.0, amount)
+	if safe_amount <= 0.0 or radius_world <= 0.0:
 		return 0.0
 
-	var cells: Array = _radial_cells(position, radius_world)
-	var placed: float = 0.0
-	for entry in cells:
-		if remaining <= 0.000001:
-			break
-		var index: int = int(entry[0])
-		var weight: float = float(entry[1])
-		var room: float = maxf(0.0, MAX_HEIGHT - float(heights[index]))
-		var add: float = minf(room, amount * weight)
-		if add <= 0.0:
-			continue
-		heights[index] = float(heights[index]) + add
-		remaining -= add
-		placed += add
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	var radius_cells: int = maxi(1, ceili(radius_world / CELL_SIZE) + 1)
+	var min_x: int = maxi(0, gx - radius_cells)
+	var max_x: int = mini(width - 1, gx + radius_cells)
+	var min_y: int = maxi(0, gy - radius_cells)
+	var max_y: int = mini(height - 1, gy + radius_cells)
+	var reach: float = radius_world + CELL_SIZE * 0.75
+	var weight_sum: float = 0.0
 
-	if placed > 0.0:
-		deposited_total += placed
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var wp := Vector2(float(x) * CELL_SIZE, float(y) * CELL_SIZE)
+			var distance: float = wp.distance_to(position)
+			if distance > reach:
+				continue
+			weight_sum += maxf(
+				0.08,
+				1.0 - distance / maxf(CELL_SIZE, reach)
+			)
+
+	if weight_sum <= 0.0:
+		return 0.0
+
+	var changed: float = 0.0
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var wp := Vector2(float(x) * CELL_SIZE, float(y) * CELL_SIZE)
+			var distance: float = wp.distance_to(position)
+			if distance > reach:
+				continue
+			var weight: float = maxf(
+				0.08,
+				1.0 - distance / maxf(CELL_SIZE, reach)
+			) / weight_sum
+			var index: int = y * width + x
+			var share: float = safe_amount * weight
+			if is_deposit:
+				var room: float = maxf(
+					0.0,
+					MAX_HEIGHT - float(heights[index])
+				)
+				var add: float = minf(room, share)
+				heights[index] = float(heights[index]) + add
+				changed += add
+			else:
+				var available: float = maxf(
+					0.0,
+					float(heights[index]) - MIN_HEIGHT
+				)
+				var take: float = minf(available, share)
+				heights[index] = float(heights[index]) - take
+				changed += take
+
+	if changed > 0.0:
+		if is_deposit:
+			deposited_total += changed
+		else:
+			excavated_total += changed
 		revision += 1
-	return placed
+	return changed
 
 
 func advance_from_sim(sim: Variant, dt: float) -> void:
 	_agent_accumulator += dt
-	while _agent_accumulator >= TERRAIN_AGENT_DT:
+	var terrain_dt: float = _terrain_agent_dt(sim)
+	while _agent_accumulator >= terrain_dt:
 		_terrain_tick += 1
-		_advance_group(sim, sim.bacteria, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.protozoa, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.ciliates, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.flagellates, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.microalgae, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.decomposers, TERRAIN_AGENT_DT, true)
-		_advance_group(sim, sim.hyphae, TERRAIN_AGENT_DT, false)
-		_advance_capability_fragments(sim, TERRAIN_AGENT_DT)
-		_agent_accumulator -= TERRAIN_AGENT_DT
+		_advance_group(sim, sim.bacteria, terrain_dt, true)
+		_advance_group(sim, sim.protozoa, terrain_dt, true)
+		_advance_group(sim, sim.ciliates, terrain_dt, true)
+		_advance_group(sim, sim.flagellates, terrain_dt, true)
+		_advance_group(sim, sim.microalgae, terrain_dt, true)
+		_advance_group(sim, sim.decomposers, terrain_dt, true)
+		_advance_group(sim, sim.hyphae, terrain_dt, false)
+		_advance_capability_fragments(sim, terrain_dt)
+		_agent_accumulator -= terrain_dt
 
 	_relax_accumulator += dt
 	if _relax_accumulator >= 0.10:
@@ -155,6 +222,24 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 		_relax_accumulator = 0.0
 		_relax_slopes(relax_dt)
 
+
+
+func _terrain_agent_dt(sim: Variant) -> float:
+	var count: int = sim.bacteria.size()
+	if count >= TERRAIN_MASS_THRESHOLD:
+		return TERRAIN_AGENT_DT_MASS
+	if count >= TERRAIN_MEDIUM_THRESHOLD:
+		return TERRAIN_AGENT_DT_MEDIUM
+	return TERRAIN_AGENT_DT_SMALL
+
+
+func _fragment_scan_interval(sim: Variant) -> float:
+	var count: int = sim.bacteria.size()
+	if count >= TERRAIN_MASS_THRESHOLD:
+		return 1.0
+	if count >= TERRAIN_MEDIUM_THRESHOLD:
+		return 0.50
+	return 0.20
 
 
 func _advance_capability_fragments(sim: Variant, dt: float) -> void:
@@ -168,30 +253,26 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 			survivors.append(fragment)
 	capability_fragments = survivors
 
-	if _fragment_scan_accumulator < 0.20:
+	if _fragment_scan_accumulator < _fragment_scan_interval(sim):
 		return
 	var scan_dt: float = _fragment_scan_accumulator
 	_fragment_scan_accumulator = 0.0
 
-	var agents: Array = _all_agents(sim)
+	_rebuild_fragment_agent_grid(sim)
 	var current: Dictionary = {}
-	for agent in agents:
+	for agent in _fragment_agents:
 		if agent == null or bool(agent.dying) or agent.physical_genome == null:
 			continue
-		var agent_id: int = int(agent.id)
-		current[agent_id] = {
-			"position": Vector2(agent.position),
-			"module": agent.physical_genome.module_for_transfer(
-				agent_id + _terrain_tick
-			),
-		}
+		current[int(agent.id)] = agent
 
 	for old_id in _known_agents.keys():
 		if current.has(old_id):
 			continue
-		var record: Dictionary = _known_agents[old_id]
-		var module_data: Dictionary = (
-			record.get("module", {}) as Dictionary
+		var old_agent: Variant = _known_agents[old_id]
+		if old_agent == null or old_agent.physical_genome == null:
+			continue
+		var module_data: Dictionary = old_agent.physical_genome.module_for_transfer(
+			int(old_id) + _terrain_tick
 		)
 		if module_data.is_empty():
 			continue
@@ -200,8 +281,8 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 		capability_fragments.append({
 			"id": _next_fragment_id,
 			"source_id": int(old_id),
-			"position": Vector2(record["position"]),
-			"module": module_data.duplicate(true),
+			"position": Vector2(old_agent.position),
+			"module": module_data,
 			"age": 0.0,
 		})
 		_next_fragment_id += 1
@@ -213,7 +294,6 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 	var remaining: Array = []
 	for fragment in capability_fragments:
 		var recipient: Variant = _nearest_capability_recipient(
-			agents,
 			Vector2(fragment["position"]),
 			int(fragment["source_id"])
 		)
@@ -226,7 +306,7 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 			0.0,
 			clampf(float(recipient.energy) / 4.0, 0.0, 1.0),
 			clampf(
-				float(sim.detritus.sample_world(
+				float(sim.detritus.sample_nearest_world(
 					Vector2(recipient.position)
 				)) * 4.0,
 				0.0,
@@ -242,10 +322,12 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 		var assimilation: float = float(
 			values[PhysicalCapabilityGenomeScript.CAP_ASSIMILATE]
 		)
-		var probability: float = clampf(
-			assimilation * 0.045 * scan_dt,
-			0.0,
-			0.16
+		if assimilation <= 0.05:
+			remaining.append(fragment)
+			continue
+
+		var probability: float = 1.0 - exp(
+			-(0.06 + assimilation * 0.24) * scan_dt
 		)
 		var roll: float = _stable_roll(
 			int(fragment["id"]),
@@ -263,12 +345,12 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 				int(recipient.id)
 			)
 		):
-			recipient.capability_mix_events = (
-				int(recipient.capability_mix_events) + 1
+			recipient.capability_transfer_events = (
+				int(recipient.capability_transfer_events) + 1
 			)
 			recipient.energy = maxf(
 				0.0,
-				float(recipient.energy) - 0.08
+				float(recipient.energy) - 0.045
 			)
 		else:
 			remaining.append(fragment)
@@ -276,40 +358,81 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 	capability_fragments = remaining
 
 
+func _rebuild_fragment_agent_grid(sim: Variant) -> void:
+	_fragment_agents.clear()
+	_fragment_agents.append_array(sim.bacteria)
+	_fragment_agents.append_array(sim.protozoa)
+	_fragment_agents.append_array(sim.ciliates)
+	_fragment_agents.append_array(sim.flagellates)
+	_fragment_agents.append_array(sim.microalgae)
+	_fragment_agents.append_array(sim.decomposers)
+	_fragment_agents.append_array(sim.hyphae)
+
+	_fragment_heads.fill(-1)
+	_fragment_next.resize(_fragment_agents.size())
+	_fragment_next.fill(-1)
+	for i in range(_fragment_agents.size()):
+		var agent: Variant = _fragment_agents[i]
+		if agent == null or bool(agent.dying) or agent.physical_genome == null:
+			continue
+		var position: Vector2 = Vector2(agent.position)
+		var bx: int = clampi(
+			floori(position.x / FRAGMENT_BUCKET_SIZE),
+			0,
+			_fragment_grid_width - 1
+		)
+		var by: int = clampi(
+			floori(position.y / FRAGMENT_BUCKET_SIZE),
+			0,
+			_fragment_grid_height - 1
+		)
+		var bucket: int = by * _fragment_grid_width + bx
+		_fragment_next[i] = _fragment_heads[bucket]
+		_fragment_heads[bucket] = i
+
+
 func _nearest_capability_recipient(
-	agents: Array,
 	position: Vector2,
 	source_id: int
 ) -> Variant:
 	var best: Variant = null
 	var best_distance_sq: float = 2.8 * 2.8
-	for agent in agents:
-		if (
-			agent == null
-			or bool(agent.dying)
-			or int(agent.id) == source_id
-			or agent.physical_genome == null
+	var bx: int = clampi(
+		floori(position.x / FRAGMENT_BUCKET_SIZE),
+		0,
+		_fragment_grid_width - 1
+	)
+	var by: int = clampi(
+		floori(position.y / FRAGMENT_BUCKET_SIZE),
+		0,
+		_fragment_grid_height - 1
+	)
+	for y in range(
+		maxi(0, by - 1),
+		mini(_fragment_grid_height - 1, by + 1) + 1
+	):
+		var row: int = y * _fragment_grid_width
+		for x in range(
+			maxi(0, bx - 1),
+			mini(_fragment_grid_width - 1, bx + 1) + 1
 		):
-			continue
-		var distance_sq: float = position.distance_squared_to(
-			Vector2(agent.position)
-		)
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best = agent
+			var i: int = _fragment_heads[row + x]
+			while i >= 0:
+				var agent: Variant = _fragment_agents[i]
+				if (
+					agent != null
+					and not bool(agent.dying)
+					and int(agent.id) != source_id
+					and agent.physical_genome != null
+				):
+					var distance_sq: float = position.distance_squared_to(
+						Vector2(agent.position)
+					)
+					if distance_sq < best_distance_sq:
+						best_distance_sq = distance_sq
+						best = agent
+				i = _fragment_next[i]
 	return best
-
-
-func _all_agents(sim: Variant) -> Array:
-	var agents: Array = []
-	agents.append_array(sim.bacteria)
-	agents.append_array(sim.protozoa)
-	agents.append_array(sim.ciliates)
-	agents.append_array(sim.flagellates)
-	agents.append_array(sim.microalgae)
-	agents.append_array(sim.decomposers)
-	agents.append_array(sim.hyphae)
-	return agents
 
 
 func _stable_roll(a: int, b: int, tick: int) -> float:
@@ -361,7 +484,7 @@ func _advance_agent(
 	var carrying_signal: float = clampf(float(agent.carried_soil) / 0.42, 0.0, 1.0)
 	var energy_signal: float = clampf(float(agent.energy) / 4.0, 0.0, 1.0)
 	var detritus_signal: float = clampf(
-		float(sim.detritus.sample_world(position)) * 4.0,
+		float(sim.detritus.sample_nearest_world(position)) * 4.0,
 		0.0,
 		1.0
 	)
@@ -525,9 +648,7 @@ func _generate_seeded_relief() -> void:
 
 
 func _relax_slopes(dt: float) -> void:
-	var delta := PackedFloat32Array()
-	delta.resize(heights.size())
-	delta.fill(0.0)
+	_relax_delta.fill(0.0)
 	var moved: bool = false
 
 	for y in range(height):
@@ -537,14 +658,14 @@ func _relax_slopes(dt: float) -> void:
 				moved = _relax_pair(
 					i,
 					_index(x + 1, y),
-					delta,
+					_relax_delta,
 					dt
 				) or moved
 			if y + 1 < height:
 				moved = _relax_pair(
 					i,
 					_index(x, y + 1),
-					delta,
+					_relax_delta,
 					dt
 				) or moved
 
@@ -552,7 +673,7 @@ func _relax_slopes(dt: float) -> void:
 		return
 	for i in range(heights.size()):
 		heights[i] = clampf(
-			float(heights[i]) + float(delta[i]),
+			float(heights[i]) + float(_relax_delta[i]),
 			MIN_HEIGHT,
 			MAX_HEIGHT
 		)
