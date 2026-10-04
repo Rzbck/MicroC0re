@@ -601,3 +601,29 @@ This pass attacks those two hot paths:
 - density mechanics above the exact-contact threshold runs every second mass
   agent update with dt-correct conjugation probability, while low populations
   retain detailed per-update capsule mechanics.
+
+
+## 10k-agent architecture tranche 4 — live scale + terrain/event hot paths
+
+- live bacterial hard guard raised from 420 to 5000; tests can override the
+  runtime limit so the synchronous-fission invariant remains cheap to validate;
+- division uses soft global pressure plus a 32-bin lineage-frequency penalty,
+  making one dominant clade progressively more expensive without imposing a
+  prototype-era 420 wall;
+- living-terrain capability updates adapt from 15 Hz to 10 Hz / 5 Hz at medium
+  and mass populations with dt-correct action rates;
+- capability-cassette tracking no longer duplicates one genome module for every
+  live organism every scan; only organisms that actually disappear materialize
+  a transferable cassette;
+- fragment recipient lookup now uses a linked spatial grid rather than repeated
+  full-population scans;
+- dig/deposit mass transfer is allocation-free and slope relaxation reuses its
+  packed delta buffer;
+- overview organisms use nearest terrain height; detailed rendering culls
+  off-screen organisms before sorting and reuses projected screen positions;
+- terrain batch generation reads packed height/baseline arrays directly and
+  precomputes projection center values;
+- the performance benchmark now includes LivingTerrain cost as well as core
+  simulation cost;
+- CI publishes every push's 100/500/1k/2k/5k living-world benchmark to #67 so
+  subsequent optimization passes can use measured results directly.

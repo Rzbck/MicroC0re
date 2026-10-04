@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: microcore-godot-smoke-${{ github.ref }}
@@ -61,4 +62,29 @@ jobs:
         run: ./scripts/run_headless.ps1
 
       - name: Run 5k CPU scale benchmark
-        run: godot --headless --path . --script tests/perf_benchmark.gd
+        shell: pwsh
+        run: |
+          $output = & godot --headless --path . --script tests/perf_benchmark.gd 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $lines = @($output | Where-Object { $_ -match '^population=' })
+          $body = @(
+            ('### CI scale benchmark ' + $env:GITHUB_SHA)
+            ''
+            'Living-world CPU benchmark (core simulation + living terrain):'
+            ''
+            '```text'
+          )
+          $body += $lines
+          $body += '```'
+          $body | Set-Content -Path perf-benchmark.md -Encoding utf8
+          if ($code -ne 0) {
+            exit $code
+          }
+
+      - name: Publish scale benchmark to issue 67
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 67 --body-file perf-benchmark.md
