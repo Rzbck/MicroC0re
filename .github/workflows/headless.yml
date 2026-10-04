@@ -59,3 +59,6 @@ jobs:
       - name: Run deterministic smoke test
         shell: pwsh
         run: ./scripts/run_headless.ps1
+
+      - name: Run 5k CPU scale benchmark
+        run: godot --headless --path . --script tests/perf_benchmark.gd

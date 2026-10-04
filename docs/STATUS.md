@@ -535,3 +535,10 @@ than layering unsafe threads/readbacks over RefCounted objects.
   seeded bacteria after parser + smoke validation;
 - the 2k/5k cases use shorter measurement windows so every performance commit
   exposes scale regressions without turning CI into a long soak test.
+
+
+## CI scale benchmark wiring fix
+- the first #67 workflow patch targeted an obsolete smoke-test stanza and did not
+  add the benchmark step;
+- CI now actually executes tests/perf_benchmark.gd after the deterministic smoke
+  test, including the 2k and 5k seeded-agent probes.
