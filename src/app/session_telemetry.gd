@@ -59,6 +59,8 @@ func mark_event(name: String) -> void:
 func record_frame(
 	delta: float,
 	sim_step_ms: float,
+	core_sim_ms: float,
+	terrain_sim_ms: float,
 	draw_ms: float,
 	terrain_build_ms: float,
 	sim: Variant,
@@ -66,7 +68,8 @@ func record_frame(
 	camera_zoom: float,
 	rotation_quarter: int,
 	visible_tiles: int,
-	terrain_triangles: int
+	terrain_triangles: int,
+	far_agent_count: int
 ) -> void:
 	var frame_ms: float = maxf(0.0, delta * 1000.0)
 	frame_ms_sum += frame_ms
@@ -105,6 +108,14 @@ func record_frame(
 		"sim_ms": _round3(
 			sim_ms_sum / float(maxi(1, sim_sample_count))
 		),
+		"core_sim_ms": _round3(core_sim_ms),
+		"terrain_sim_ms": _round3(terrain_sim_ms),
+		"chemistry_ms": _round3(float(sim.chemistry_ms_last)),
+		"bacteria_agents_ms": _round3(float(sim.agents_ms_last)),
+		"mechanics_ms": _round3(float(sim.mechanics_ms_last)),
+		"pair_candidates": int(sim.pair_candidates_last),
+		"pair_narrow": int(sim.pair_narrow_checks_last),
+		"pair_contacts": int(sim.pair_contacts_last),
 		"draw_ms": _round3(draw_ms),
 		"terrain_build_ms": _round3(terrain_build_ms),
 		"draw_calls": int(
@@ -122,6 +133,7 @@ func record_frame(
 		"hyphae": sim.hyphae.size(),
 		"visible_tiles": visible_tiles,
 		"terrain_triangles": terrain_triangles,
+		"far_agent_count": far_agent_count,
 		"terrain_revision": int(terrain.revision),
 		"soil_excavated": _round3(float(terrain.excavated_total)),
 		"soil_deposited": _round3(float(terrain.deposited_total)),

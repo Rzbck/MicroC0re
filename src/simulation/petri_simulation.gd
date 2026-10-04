@@ -18,7 +18,7 @@ const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
 const CHEMISTRY_DT := 1.0 / 30.0
 const SLOW_BIOME_DT := 1.0 / 10.0
-const MECHANICS_DT := 1.0 / 60.0
+const MECHANICS_DT := 1.0 / 30.0
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
 const GRID_WIDTH := 64
@@ -214,7 +214,7 @@ var division_duration: float = 0.70
 var lysis_duration: float = 1.20
 
 # Contact / adhesion.
-var mechanical_iterations: int = 2
+var mechanical_iterations: int = 1
 var angular_contact_response: float = 0.055
 var adhesion_range: float = 0.55
 var adhesion_pull: float = 0.17
@@ -587,6 +587,17 @@ func step(dt: float) -> void:
 	var agents_start: int = Time.get_ticks_usec()
 	var next_population: Array = _population_buffer
 	next_population.clear()
+	var living_start: int = 0
+	for counted_cell in bacteria:
+		if (
+			not bool(counted_cell.consumed)
+			and int(counted_cell.engulfed_by_id) < 0
+		):
+			living_start += 1
+	var available_bacterial_births: int = maxi(
+		0,
+		SAFETY_POPULATION_LIMIT - living_start
+	)
 
 	for cell in bacteria:
 		cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - dt)
@@ -618,9 +629,10 @@ func step(dt: float) -> void:
 				float(cell.division_progress) + dt / maxf(0.001, division_duration)
 			)
 			if float(cell.division_progress) >= 1.0:
-				if next_population.size() < SAFETY_POPULATION_LIMIT - 1:
+				if available_bacterial_births > 0:
 					var daughters: Array = _divide(cell)
 					next_population.append_array(daughters)
+					available_bacterial_births -= 1
 				else:
 					# Explicit performance guard: suppress further fission at
 					# the CPU-reference ceiling without deleting live cells.
@@ -2421,56 +2433,42 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	var local_oxygen_before: float = float(oxygen.sample_world(cell_position))
 	var resource_signal: float = local_nutrient_before + local_exudate_before * 1.25
 
-	var genome_signals: Array = [
-		1.0,
-		clampf(local_nutrient_before * 2.2, 0.0, 1.0),
-		clampf(local_exudate_before * 4.0, 0.0, 1.0),
-		clampf(local_detritus_before * 4.5, 0.0, 1.0),
-		clampf(local_light_before, 0.0, 1.0),
-		clampf(local_quorum_before * 8.0, 0.0, 1.0),
-		clampf(local_damage_before * 7.0, 0.0, 1.0),
-		clampf(1.0 - float(cell.energy) / 2.4, 0.0, 1.0),
-		clampf(local_oxygen_before, 0.0, 1.0),
-	]
+	var genome_values: Array = []
 	if cell.genome != null:
+		genome_values = cell.genome.evaluate_context(
+			clampf(local_nutrient_before * 2.2, 0.0, 1.0),
+			clampf(local_exudate_before * 4.0, 0.0, 1.0),
+			clampf(local_detritus_before * 4.5, 0.0, 1.0),
+			clampf(local_light_before, 0.0, 1.0),
+			clampf(local_quorum_before * 8.0, 0.0, 1.0),
+			clampf(local_damage_before * 7.0, 0.0, 1.0),
+			clampf(1.0 - float(cell.energy) / 2.4, 0.0, 1.0),
+			clampf(local_oxygen_before, 0.0, 1.0)
+		)
 		cell.expression_nutrient = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_NUTRIENT_UPTAKE,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_NUTRIENT_UPTAKE]
 		)
 		cell.expression_exudate = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_EXUDATE_UPTAKE,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_EXUDATE_UPTAKE]
 		)
 		cell.expression_detritus = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_DETRITUS_SCAVENGE,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_DETRITUS_SCAVENGE]
 		)
 		cell.expression_photo = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_PHOTOTROPHY,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_PHOTOTROPHY]
 		)
 		cell.expression_matrix = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_MATRIX,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_MATRIX]
 		)
 		cell.expression_quorum = float(
-			cell.genome.expression(
-				EvolvableGenomeScript.MODULE_QUORUM_SIGNAL,
-				genome_signals
-			)
+			genome_values[EvolvableGenomeScript.MODULE_QUORUM_SIGNAL]
 		)
-		cell.guild = int(cell.genome.dominant_guild(genome_signals))
-		cell.ecotype_label = String(cell.genome.phenotype_label(genome_signals))
+		cell.guild = int(
+			cell.genome.dominant_guild_from_values(genome_values)
+		)
+		cell.ecotype_label = String(
+			cell.genome.phenotype_label_from_values(genome_values)
+		)
 
 	var dormancy_trait: float = clampf(float(cell.gene_dormancy), 0.45, 1.80)
 
@@ -2712,7 +2710,9 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		+ _plasmid_burden(cell)
 	)
 	if cell.genome != null:
-		morphology_cost += float(cell.genome.complexity_cost(genome_signals))
+		morphology_cost += float(
+			cell.genome.complexity_cost_from_values(genome_values)
+		)
 	morphology_cost *= _plasmid_maintenance_factor(cell)
 	if bool(cell.competent):
 		morphology_cost += competence_cost * float(cell.gene_competence)
@@ -2821,8 +2821,16 @@ func _advance_lysis(cell: Variant, dt: float) -> void:
 
 func _ready_to_begin_division(cell: Variant) -> bool:
 	var required_length: float = base_division_length * float(cell.gene_size)
+	var crowding: float = clampf(
+		(float(bacteria.size()) - 180.0)
+		/ float(SAFETY_POPULATION_LIMIT - 180),
+		0.0,
+		1.0
+	)
 	var required_energy: float = base_division_energy * (
-		0.82 + 0.18 * float(cell.gene_size)
+		0.82
+		+ 0.18 * float(cell.gene_size)
+		+ crowding * crowding * 0.58
 	)
 	return (
 		bacteria.size() < SAFETY_POPULATION_LIMIT - 1

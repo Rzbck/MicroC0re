@@ -13,16 +13,19 @@ const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 
 const FIXED_DT := 1.0 / 60.0
-const MAX_STEPS_PER_FRAME := 4
+const MAX_STEPS_PER_FRAME := 2
 const TILE_HALF_W := 5.0
 const TILE_HALF_H := 2.5
 const HEIGHT_PIXELS := 9.0
 const CAMERA_ZOOM_STEP := 1.12
 const MIN_USER_ZOOM := 0.58
 const MAX_USER_ZOOM := 5.0
-const TERRAIN_VISUAL_REFRESH := 0.25
+const TERRAIN_VISUAL_REFRESH := 0.50
 const MENU_WIDTH := 220.0
 const INSPECTOR_WIDTH := 276.0
+const SIMULATION_FRAME_BUDGET_MS := 18.0
+const FAR_AGENT_LOD_ZOOM := 3.35
+const FAR_AGENT_REFRESH := 1.0 / 15.0
 
 const LINEAGE_PALETTE := [
 	Color(0.42, 0.70, 0.46, 1.0),
@@ -71,6 +74,8 @@ var terrain_color_cache := PackedColorArray()
 var terrain_mark_cache := PackedInt32Array()
 var last_draw_ms: float = 0.0
 var last_sim_step_ms: float = 0.0
+var last_core_sim_ms: float = 0.0
+var last_terrain_sim_ms: float = 0.0
 var last_terrain_build_ms: float = 0.0
 var last_visible_tiles: int = 0
 var last_terrain_triangles: int = 0
@@ -78,6 +83,9 @@ var telemetry: Variant = null
 
 var terrain_batch_layer: Node2D
 var terrain_mark_layer: Node2D
+var far_agent_layer: Node2D
+var far_agent_accumulator: float = 0.0
+var last_far_agent_count: int = 0
 
 
 func _ready() -> void:
@@ -103,6 +111,12 @@ func _ready() -> void:
 	terrain_mark_layer.z_as_relative = false
 	add_child(terrain_mark_layer)
 
+	far_agent_layer = Node2D.new()
+	far_agent_layer.name = "FarAgentBatch"
+	far_agent_layer.z_index = -10
+	far_agent_layer.z_as_relative = false
+	add_child(far_agent_layer)
+
 	atlas = PixelAtlasScript.new()
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
@@ -115,6 +129,7 @@ func _ready() -> void:
 	telemetry.begin(current_seed)
 	_refresh_terrain_visual_cache()
 	_rebuild_terrain_batch()
+	_rebuild_far_agent_batch()
 	_update_terrain_layer_transform()
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	call_deferred("_fit_view")
@@ -147,19 +162,40 @@ func _process(delta: float) -> void:
 	if not paused:
 		accumulator += minf(delta * simulation_speed, 0.05)
 		var steps: int = 0
-		var sim_start_usec: int = Time.get_ticks_usec()
+		var frame_sim_start: int = Time.get_ticks_usec()
+		var core_sum_ms: float = 0.0
+		var terrain_sum_ms: float = 0.0
 		while accumulator >= FIXED_DT and steps < MAX_STEPS_PER_FRAME:
+			var core_start: int = Time.get_ticks_usec()
 			sim.step(FIXED_DT)
+			core_sum_ms += float(
+				Time.get_ticks_usec() - core_start
+			) / 1000.0
+
+			var terrain_start: int = Time.get_ticks_usec()
 			terrain.advance_from_sim(sim, FIXED_DT)
+			terrain_sum_ms += float(
+				Time.get_ticks_usec() - terrain_start
+			) / 1000.0
+
 			accumulator -= FIXED_DT
 			steps += 1
+			if (
+				float(Time.get_ticks_usec() - frame_sim_start) / 1000.0
+				>= SIMULATION_FRAME_BUDGET_MS
+			):
+				break
 		if steps > 0:
+			last_core_sim_ms = core_sum_ms / float(steps)
+			last_terrain_sim_ms = terrain_sum_ms / float(steps)
 			last_sim_step_ms = (
-				float(Time.get_ticks_usec() - sim_start_usec)
-				/ 1000.0
-				/ float(steps)
+				last_core_sim_ms + last_terrain_sim_ms
 			)
-		if accumulator >= FIXED_DT:
+		else:
+			last_core_sim_ms = 0.0
+			last_terrain_sim_ms = 0.0
+		if accumulator >= FIXED_DT * 3.0:
+			# Prefer a slower simulation clock to an input/render freeze.
 			accumulator = fmod(accumulator, FIXED_DT)
 
 	terrain_cache_accumulator += delta
@@ -171,6 +207,14 @@ func _process(delta: float) -> void:
 		_refresh_terrain_visual_cache()
 		_rebuild_terrain_batch()
 
+	far_agent_accumulator += delta
+	if (
+		far_agent_accumulator >= FAR_AGENT_REFRESH
+		or not _using_far_agent_lod()
+	):
+		far_agent_accumulator = 0.0
+		_rebuild_far_agent_batch()
+
 	if follow_selected:
 		_update_selected_follow()
 
@@ -180,6 +224,8 @@ func _process(delta: float) -> void:
 		telemetry.record_frame(
 			delta,
 			last_sim_step_ms,
+			last_core_sim_ms,
+			last_terrain_sim_ms,
 			last_draw_ms,
 			last_terrain_build_ms,
 			sim,
@@ -187,7 +233,8 @@ func _process(delta: float) -> void:
 			_camera_zoom(),
 			rotation_quarter,
 			last_visible_tiles,
-			last_terrain_triangles
+			last_terrain_triangles,
+			last_far_agent_count
 		)
 
 	queue_redraw()
@@ -212,7 +259,11 @@ func _draw() -> void:
 
 
 func _update_terrain_layer_transform() -> void:
-	if terrain_batch_layer == null or terrain_mark_layer == null:
+	if (
+		terrain_batch_layer == null
+		or terrain_mark_layer == null
+		or far_agent_layer == null
+	):
 		return
 	var origin: Vector2 = get_viewport_rect().size * 0.5 + view_pan
 	var zoom_value: float = _camera_zoom()
@@ -222,6 +273,7 @@ func _update_terrain_layer_transform() -> void:
 	transform.origin = _round_vec(origin)
 	terrain_batch_layer.transform = transform
 	terrain_mark_layer.transform = transform
+	far_agent_layer.transform = transform
 
 
 func _rebuild_terrain_batch() -> void:
@@ -662,7 +714,113 @@ func _side_color(color: Color, factor: float) -> Color:
 	)
 
 
+func _using_far_agent_lod() -> bool:
+	return _camera_zoom() < FAR_AGENT_LOD_ZOOM
+
+
+func _rebuild_far_agent_batch() -> void:
+	if far_agent_layer == null:
+		return
+	var rid: RID = far_agent_layer.get_canvas_item()
+	RenderingServer.canvas_item_clear(rid)
+	last_far_agent_count = 0
+	far_agent_layer.visible = _using_far_agent_lod()
+	if not far_agent_layer.visible or terrain == null:
+		return
+
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+
+	_batch_far_group(points, colors, indices, sim.bacteria, 0)
+	_batch_far_group(points, colors, indices, sim.protozoa, 1)
+	_batch_far_group(points, colors, indices, sim.ciliates, 2)
+	_batch_far_group(points, colors, indices, sim.flagellates, 3)
+	_batch_far_group(points, colors, indices, sim.microalgae, 4)
+	_batch_far_group(points, colors, indices, sim.decomposers, 5)
+
+	if not indices.is_empty():
+		RenderingServer.canvas_item_add_triangle_array(
+			rid,
+			indices,
+			points,
+			colors
+		)
+
+
+func _batch_far_group(
+	points: PackedVector2Array,
+	colors: PackedColorArray,
+	indices: PackedInt32Array,
+	group: Array,
+	kind: int
+) -> void:
+	for agent in group:
+		if agent == null:
+			continue
+		if "consumed" in agent and bool(agent.consumed):
+			continue
+
+		var p: Vector2 = Vector2(agent.position)
+		var height_value: float = (
+			terrain.sample_height(p)
+			- float(agent.burrow_depth) * 0.24
+		)
+		var center: Vector2 = _round_vec(
+			_project_world_unscaled(p, height_value)
+		)
+		var half_size := Vector2(0.70, 0.42)
+		var color := Color(0.65, 0.72, 0.62)
+		match kind:
+			0:
+				color = _lineage_color(float(agent.lineage_hue))
+				if bool(agent.dying):
+					color = color.lerp(
+						Color(0.72, 0.30, 0.18),
+						0.62
+					)
+			1:
+				half_size = Vector2(1.45, 1.05)
+				color = Color(0.62, 0.82, 0.76)
+			2:
+				half_size = Vector2(1.20, 0.72)
+				color = Color(0.69, 0.69, 0.88)
+			3:
+				half_size = Vector2(0.90, 0.52)
+				color = Color(0.82, 0.72, 0.44)
+			4:
+				half_size = Vector2(0.82, 0.70)
+				color = Color(0.38, 0.68, 0.34)
+			5:
+				half_size = Vector2(0.88, 0.72)
+				color = Color(0.72, 0.57, 0.35)
+
+		_batch_quad(
+			points,
+			colors,
+			indices,
+			center + Vector2(-half_size.x, -half_size.y),
+			center + Vector2(half_size.x, -half_size.y),
+			center + Vector2(half_size.x, half_size.y),
+			center + Vector2(-half_size.x, half_size.y),
+			color
+		)
+		last_far_agent_count += 1
+
+
+func _project_world_unscaled(
+	world_position: Vector2,
+	height_value: float
+) -> Vector2:
+	var gx: float = world_position.x / LivingTerrainScript.CELL_SIZE
+	var gy: float = world_position.y / LivingTerrainScript.CELL_SIZE
+	var rotated: Vector2 = _source_to_rotated_float(gx, gy)
+	return _project_rotated_grid_unscaled(rotated, height_value)
+
+
 func _draw_agents() -> void:
+	if _using_far_agent_lod():
+		return
 	var entries: Array = []
 	_append_agent_entries(entries, "bacterium", sim.bacteria)
 	_append_agent_entries(entries, "amoeba", sim.protozoa)
@@ -1194,6 +1352,7 @@ func _rotate_view(step: int) -> void:
 	rotation_quarter = posmod(rotation_quarter + step, 4)
 	_recompute_fit_keep_zoom()
 	_rebuild_terrain_batch()
+	_rebuild_far_agent_batch()
 	if follow_selected:
 		_update_selected_follow()
 	if telemetry != null:
@@ -1320,6 +1479,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_start_seed(current_seed)
 				_refresh_terrain_visual_cache()
 				_rebuild_terrain_batch()
+				_rebuild_far_agent_batch()
 				_fit_view()
 			KEY_N:
 				current_seed += 1
@@ -1328,6 +1488,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					telemetry.mark_event("seed_changes")
 				_refresh_terrain_visual_cache()
 				_rebuild_terrain_batch()
+				_rebuild_far_agent_batch()
 				_fit_view()
 			KEY_Q:
 				_rotate_view(-1)
@@ -1415,7 +1576,7 @@ func _select_at_screen(screen_position: Vector2) -> void:
 		telemetry.mark_event("selection_attempts")
 	var best_agent: Variant = null
 	var best_kind: String = ""
-	var best_distance_sq: float = 28.0 * 28.0
+	var best_distance_sq: float = 38.0 * 38.0
 
 	for record in _selection_groups():
 		var kind: String = String(record[0])
@@ -1740,9 +1901,10 @@ func _draw_metrics_panel() -> void:
 	)
 	_ui_text(
 		panel.position + Vector2(10.0, 37.0),
-		"sim %.2fms   terrain batch %.2fms   agents %d" % [
+		"sim %.2fms (core %.2f / earth %.2f)  agents %d" % [
 			last_sim_step_ms,
-			last_terrain_build_ms,
+			last_core_sim_ms,
+			last_terrain_sim_ms,
 			_total_agent_count(),
 		],
 		11,
@@ -1750,11 +1912,10 @@ func _draw_metrics_panel() -> void:
 	)
 	_ui_text(
 		panel.position + Vector2(10.0, 56.0),
-		"tiles %d   tris %d   soil %.2f / %.2f" % [
-			last_visible_tiles,
+		"terrain %.2fms  tris %d  far agents %d" % [
+			last_terrain_build_ms,
 			last_terrain_triangles,
-			float(terrain.excavated_total),
-			float(terrain.deposited_total),
+			last_far_agent_count,
 		],
 		11,
 		Color(0.72, 0.70, 0.58)
@@ -1816,6 +1977,7 @@ func _handle_ui_click(position: Vector2) -> bool:
 				telemetry.mark_event("seed_changes")
 			_refresh_terrain_visual_cache()
 			_rebuild_terrain_batch()
+			_rebuild_far_agent_batch()
 			_fit_view()
 		4:
 			metrics_visible = not metrics_visible

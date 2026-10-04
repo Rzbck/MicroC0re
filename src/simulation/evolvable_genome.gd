@@ -30,6 +30,8 @@ const MAX_MODULES := 14
 var modules: Array = []
 var last_structural_changes: int = 0
 var last_event: String = "founder"
+var _signal_cache: Array = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var _expression_cache: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 func configure_founder(p_rng: RandomNumberGenerator) -> void:
@@ -166,6 +168,109 @@ func inherit_and_mutate(
 		last_event = "module insertion"
 
 
+func evaluate_context(
+	nutrient_signal: float,
+	exudate_signal: float,
+	detritus_signal: float,
+	light_signal: float,
+	quorum_signal_value: float,
+	damage_signal: float,
+	low_energy_signal: float,
+	oxygen_signal: float
+) -> Array:
+	_signal_cache[0] = 1.0
+	_signal_cache[1] = nutrient_signal
+	_signal_cache[2] = exudate_signal
+	_signal_cache[3] = detritus_signal
+	_signal_cache[4] = light_signal
+	_signal_cache[5] = quorum_signal_value
+	_signal_cache[6] = damage_signal
+	_signal_cache[7] = low_energy_signal
+	_signal_cache[8] = oxygen_signal
+
+	for i in range(MODULE_COUNT):
+		_expression_cache[i] = 0.0
+
+	for module in modules:
+		var kind: int = int(module["kind"])
+		var sensor_index: int = int(module["sensor"])
+		var sensor_value: float = 1.0
+		if sensor_index != SENSOR_ALWAYS:
+			sensor_value = float(_signal_cache[sensor_index])
+		var gate: float = smoothstep(
+			float(module["threshold"]) - 0.18,
+			float(module["threshold"]) + 0.18,
+			sensor_value
+		)
+		if int(module["polarity"]) < 0:
+			gate = 1.0 - gate
+		_expression_cache[kind] = (
+			float(_expression_cache[kind])
+			+ float(module["strength"]) * gate
+		)
+
+	for i in range(MODULE_COUNT):
+		_expression_cache[i] = clampf(
+			float(_expression_cache[i]),
+			0.0,
+			3.0
+		)
+	return _expression_cache
+
+
+func complexity_cost_from_values(values: Array) -> float:
+	var active: float = 0.0
+	for value in values:
+		active += float(value)
+	return 0.00055 * float(modules.size()) + 0.00040 * active
+
+
+func dominant_guild_from_values(values: Array) -> int:
+	var detritus_score: float = float(values[MODULE_DETRITUS_SCAVENGE])
+	var photo_score: float = float(values[MODULE_PHOTOTROPHY])
+	var matrix_score: float = float(values[MODULE_MATRIX])
+	var baseline_score: float = (
+		float(values[MODULE_NUTRIENT_UPTAKE])
+		+ float(values[MODULE_EXUDATE_UPTAKE]) * 0.55
+	)
+
+	if (
+		photo_score > maxf(detritus_score, matrix_score)
+		and photo_score > baseline_score * 0.42
+	):
+		return 3
+	if (
+		matrix_score > maxf(detritus_score, photo_score)
+		and matrix_score > baseline_score * 0.36
+	):
+		return 2
+	if detritus_score > 0.34:
+		return 1
+	return 0
+
+
+func phenotype_label_from_values(values: Array) -> String:
+	const NAMES := ["nutrient", "crossfeed", "scavenge", "photo", "matrix"]
+	var best_index: int = 0
+	var second_index: int = 0
+	var best_value: float = -1.0
+	var second_value: float = -1.0
+	for i in range(5):
+		var value: float = float(values[i])
+		if value > best_value:
+			second_value = best_value
+			second_index = best_index
+			best_value = value
+			best_index = i
+		elif value > second_value:
+			second_value = value
+			second_index = i
+
+	if second_value >= best_value * 0.58:
+		return "%s+%s" % [NAMES[best_index], NAMES[second_index]]
+	return NAMES[best_index]
+
+
 func expression(kind: int, signals: Array) -> float:
 	var total: float = 0.0
 	for module in modules:
@@ -191,50 +296,56 @@ func expression(kind: int, signals: Array) -> float:
 
 
 func complexity_cost(signals: Array) -> float:
-	var active: float = 0.0
-	for kind in range(MODULE_COUNT):
-		active += expression(kind, signals)
-	return (
-		0.00055 * float(modules.size())
-		+ 0.00040 * active
-	)
+	var values: Array = _evaluate_signals(signals)
+	return complexity_cost_from_values(values)
 
 
 func dominant_guild(signals: Array) -> int:
-	# Keep the existing four morphology classes as a presentation vocabulary,
-	# but derive the class from the currently expressed program.
-	var detritus_score: float = expression(MODULE_DETRITUS_SCAVENGE, signals)
-	var photo_score: float = expression(MODULE_PHOTOTROPHY, signals)
-	var matrix_score: float = expression(MODULE_MATRIX, signals)
-	var baseline_score: float = (
-		expression(MODULE_NUTRIENT_UPTAKE, signals)
-		+ expression(MODULE_EXUDATE_UPTAKE, signals) * 0.55
-	)
-
-	if photo_score > maxf(detritus_score, matrix_score) and photo_score > baseline_score * 0.42:
-		return 3
-	if matrix_score > maxf(detritus_score, photo_score) and matrix_score > baseline_score * 0.36:
-		return 2
-	if detritus_score > 0.34:
-		return 1
-	return 0
+	return dominant_guild_from_values(_evaluate_signals(signals))
 
 
 func phenotype_label(signals: Array) -> String:
-	var labels := PackedStringArray()
-	var scores: Array = [
-		["nutrient", expression(MODULE_NUTRIENT_UPTAKE, signals)],
-		["crossfeed", expression(MODULE_EXUDATE_UPTAKE, signals)],
-		["scavenge", expression(MODULE_DETRITUS_SCAVENGE, signals)],
-		["photo", expression(MODULE_PHOTOTROPHY, signals)],
-		["matrix", expression(MODULE_MATRIX, signals)],
-	]
-	scores.sort_custom(_score_descending)
-	if not scores.is_empty():
-		labels.append(String(scores[0][0]))
-	if scores.size() > 1 and float(scores[1][1]) >= float(scores[0][1]) * 0.58:
-		labels.append(String(scores[1][0]))
-	return "+".join(labels)
+	return phenotype_label_from_values(_evaluate_signals(signals))
+
+
+func _evaluate_signals(signals: Array) -> Array:
+	for i in range(SENSOR_COUNT):
+		_signal_cache[i] = (
+			float(signals[i])
+			if i >= 0 and i < signals.size()
+			else 0.0
+		)
+	if not _signal_cache.is_empty():
+		_signal_cache[0] = 1.0
+
+	for i in range(MODULE_COUNT):
+		_expression_cache[i] = 0.0
+	for module in modules:
+		var kind: int = int(module["kind"])
+		var sensor_index: int = int(module["sensor"])
+		var sensor_value: float = (
+			1.0
+			if sensor_index == SENSOR_ALWAYS
+			else float(_signal_cache[sensor_index])
+		)
+		var gate: float = smoothstep(
+			float(module["threshold"]) - 0.18,
+			float(module["threshold"]) + 0.18,
+			sensor_value
+		)
+		if int(module["polarity"]) < 0:
+			gate = 1.0 - gate
+		_expression_cache[kind] = (
+			float(_expression_cache[kind])
+			+ float(module["strength"]) * gate
+		)
+	for i in range(MODULE_COUNT):
+		_expression_cache[i] = clampf(
+			float(_expression_cache[i]),
+			0.0,
+			3.0
+		)
+	return _expression_cache
 
 
 func ecotype_hash() -> int:

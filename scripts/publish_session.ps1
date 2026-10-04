@@ -65,6 +65,14 @@ foreach ($s in @($raw.samples)) {
         frame_ms_max = [Math]::Round((N $s.frame_ms_max), 3)
         process_ms = [Math]::Round((N $s.process_ms), 3)
         sim_ms = [Math]::Round((N $s.sim_ms), 3)
+        core_sim_ms = [Math]::Round((N $s.core_sim_ms), 3)
+        terrain_sim_ms = [Math]::Round((N $s.terrain_sim_ms), 3)
+        chemistry_ms = [Math]::Round((N $s.chemistry_ms), 3)
+        bacteria_agents_ms = [Math]::Round((N $s.bacteria_agents_ms), 3)
+        mechanics_ms = [Math]::Round((N $s.mechanics_ms), 3)
+        pair_candidates = I $s.pair_candidates
+        pair_narrow = I $s.pair_narrow
+        pair_contacts = I $s.pair_contacts
         draw_ms = [Math]::Round((N $s.draw_ms), 3)
         terrain_build_ms = [Math]::Round((N $s.terrain_build_ms), 3)
         draw_calls = I $s.draw_calls
@@ -78,6 +86,7 @@ foreach ($s in @($raw.samples)) {
         hyphae = I $s.hyphae
         visible_tiles = I $s.visible_tiles
         terrain_triangles = I $s.terrain_triangles
+        far_agent_count = I $s.far_agent_count
         terrain_revision = I $s.terrain_revision
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
@@ -90,6 +99,10 @@ foreach ($s in @($raw.samples)) {
 
 $frameValues = @($safeSamples | ForEach-Object { [double]$_.frame_ms_max })
 $simValues = @($safeSamples | ForEach-Object { [double]$_.sim_ms })
+$coreValues = @($safeSamples | ForEach-Object { [double]$_.core_sim_ms })
+$terrainSimValues = @($safeSamples | ForEach-Object { [double]$_.terrain_sim_ms })
+$agentsValues = @($safeSamples | ForEach-Object { [double]$_.bacteria_agents_ms })
+$mechanicsValues = @($safeSamples | ForEach-Object { [double]$_.mechanics_ms })
 $drawValues = @($safeSamples | ForEach-Object { [double]$_.draw_ms })
 $terrainBuildValues = @($safeSamples | ForEach-Object { [double]$_.terrain_build_ms })
 $fpsValues = @($safeSamples | ForEach-Object { [double]$_.fps })
@@ -128,6 +141,10 @@ Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $
 | --- | ---: | ---: | ---: |
 | frame max ms | $([Math]::Round((Percentile $frameValues 0.50),2)) | $([Math]::Round((Percentile $frameValues 0.95),2)) | $([Math]::Round((Percentile $frameValues 1.0),2)) |
 | sim step ms | $([Math]::Round((Percentile $simValues 0.50),2)) | $([Math]::Round((Percentile $simValues 0.95),2)) | $([Math]::Round((Percentile $simValues 1.0),2)) |
+| core sim ms | $([Math]::Round((Percentile $coreValues 0.50),2)) | $([Math]::Round((Percentile $coreValues 0.95),2)) | $([Math]::Round((Percentile $coreValues 1.0),2)) |
+| terrain agents ms | $([Math]::Round((Percentile $terrainSimValues 0.50),2)) | $([Math]::Round((Percentile $terrainSimValues 0.95),2)) | $([Math]::Round((Percentile $terrainSimValues 1.0),2)) |
+| bacteria update ms | $([Math]::Round((Percentile $agentsValues 0.50),2)) | $([Math]::Round((Percentile $agentsValues 0.95),2)) | $([Math]::Round((Percentile $agentsValues 1.0),2)) |
+| mechanics ms | $([Math]::Round((Percentile $mechanicsValues 0.50),2)) | $([Math]::Round((Percentile $mechanicsValues 0.95),2)) | $([Math]::Round((Percentile $mechanicsValues 1.0),2)) |
 | draw ms | $([Math]::Round((Percentile $drawValues 0.50),2)) | $([Math]::Round((Percentile $drawValues 0.95),2)) | $([Math]::Round((Percentile $drawValues 1.0),2)) |
 | terrain batch rebuild ms | $([Math]::Round((Percentile $terrainBuildValues 0.50),2)) | $([Math]::Round((Percentile $terrainBuildValues 0.95),2)) | $([Math]::Round((Percentile $terrainBuildValues 1.0),2)) |
 | FPS | $([Math]::Round((Percentile $fpsValues 0.50),1)) | — | $([Math]::Round((Percentile $fpsValues 0.0),1)) min |

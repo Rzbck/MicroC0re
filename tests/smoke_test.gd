@@ -131,7 +131,20 @@ func _init() -> void:
 	if recipient_physical.modules.size() < module_count_before:
 		errors.append("evolution: capability merge unexpectedly lost structure")
 
-		# Regression: dense producer biomass must reduce local effective light.
+		# Performance invariant: synchronous bacterial fission may never overshoot
+	# the CPU reference ceiling even if many mothers finish division together.
+	var cap_probe = PetriSimulationScript.new(880044)
+	cap_probe.seed_demo(PetriSimulationScript.SAFETY_POPULATION_LIMIT - 2)
+	for cell in cap_probe.bacteria:
+		cell.length = 8.0
+		cell.energy = 12.0
+		cell.begin_division()
+		cell.division_progress = 1.0
+	cap_probe.step(1.0 / 60.0)
+	if cap_probe.bacteria.size() > PetriSimulationScript.SAFETY_POPULATION_LIMIT:
+		errors.append("performance: bacterial division overshot safety ceiling")
+
+	# 	# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)
 	var shade_position := Vector2(21.0, 21.0)

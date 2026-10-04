@@ -450,3 +450,36 @@ Correction:
   preloads the active pixel-isometric renderer + telemetry script, so a parser
   regression in the actual main renderer can no longer pass while only legacy
   renderers compile.
+
+
+## Telemetry-driven population/simulation optimization — session 2165f5b63f76f882
+
+The 465 s session showed the terrain batch worked but exposed the next bottleneck:
+- initial full-biome draw fell from ~80 ms to ~3 ms and draw calls from ~4800
+  to ~150-200;
+- later the ecosystem produced 587-597 bacteria despite the documented 420
+  safety ceiling, with total agents peaking at 621;
+- simulation cost then climbed to ~100-109 ms/step and rendering those hundreds
+  of full sprites rose to ~20-23 ms;
+- the over-cap bloom was a real synchronous-division accounting bug: completed
+  fissions early in the array checked only the partially built next population,
+  ignoring survivors that would be appended later.
+
+Optimization pass:
+- bacterial fission now uses a net-birth budget computed from the starting live
+  population, so a division wave cannot exceed the 420 CPU ceiling;
+- high global bacterial crowding raises division energy cost smoothly instead of
+  letting one bloom instantly occupy the whole view;
+- ecological genome expression is now one module scan per bacterium/tick instead
+  of repeated scans for six traits + guild + label + complexity;
+- physical capability expression is one module scan per terrain-agent update;
+- terrain/terraforming agent logic now runs at 15 Hz with dt-correct rates;
+- bacterial contact mechanics reduced from 2x60 Hz to 1x30 Hz;
+- visible app has an 18 ms simulation catch-up budget and refuses the old
+  multi-step death spiral when the CPU cannot stay real-time;
+- full-biome organism rendering now switches to one retained colored triangle
+  batch below zoom 3.35; close zoom still uses the detailed pixel atlases;
+- terrain visual batch refresh reduced from 4 Hz to 2 Hz;
+- click selection tolerance increased to 38 px;
+- telemetry now separates core simulation, terraforming agents, bacteria update,
+  chemistry, mechanics, pair counts and far-agent batch population.

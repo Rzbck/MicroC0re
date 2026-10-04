@@ -32,6 +32,8 @@ const MAX_MODULES := 18
 var modules: Array = []
 var last_event: String = "founder"
 var structural_changes: int = 0
+var _signal_cache: Array = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var _expression_cache: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 func configure_founder(
@@ -213,6 +215,52 @@ func inherit_and_mutate(
 		)
 		structural_changes += 1
 		last_event = "new physical capability"
+
+
+func evaluate_context(
+	slope_signal: float,
+	carried_signal: float,
+	energy_signal: float,
+	detritus_signal: float,
+	light_signal: float,
+	water_signal: float
+) -> Array:
+	_signal_cache[0] = 1.0
+	_signal_cache[1] = slope_signal
+	_signal_cache[2] = carried_signal
+	_signal_cache[3] = energy_signal
+	_signal_cache[4] = detritus_signal
+	_signal_cache[5] = light_signal
+	_signal_cache[6] = water_signal
+
+	for i in range(CAP_COUNT):
+		_expression_cache[i] = 0.0
+	for module in modules:
+		var kind: int = int(module["kind"])
+		var sensor_index: int = int(module["sensor"])
+		var sensor_value: float = (
+			1.0
+			if sensor_index == SENSOR_ALWAYS
+			else float(_signal_cache[sensor_index])
+		)
+		var gate: float = smoothstep(
+			float(module["threshold"]) - 0.18,
+			float(module["threshold"]) + 0.18,
+			sensor_value
+		)
+		if int(module["polarity"]) < 0:
+			gate = 1.0 - gate
+		_expression_cache[kind] = (
+			float(_expression_cache[kind])
+			+ float(module["strength"]) * gate
+		)
+	for i in range(CAP_COUNT):
+		_expression_cache[i] = clampf(
+			float(_expression_cache[i]),
+			0.0,
+			3.2
+		)
+	return _expression_cache
 
 
 func expression(kind: int, signals: Array) -> float:

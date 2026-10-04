@@ -8,6 +8,7 @@ const MIN_HEIGHT := -2.5
 const MAX_HEIGHT := 9.0
 const WATER_LEVEL := 0.42
 const TALUS_HEIGHT := 0.72
+const TERRAIN_AGENT_DT := 1.0 / 15.0
 
 var world_size := Vector2.ZERO
 var width: int = 0
@@ -16,6 +17,7 @@ var heights := PackedFloat32Array()
 var baseline_heights := PackedFloat32Array()
 var fixed_seed: int = 1
 var _relax_accumulator: float = 0.0
+var _agent_accumulator: float = 0.0
 var _terrain_tick: int = 0
 var revision: int = 0
 var excavated_total: float = 0.0
@@ -134,16 +136,18 @@ func deposit(position: Vector2, amount: float, radius_world: float = 2.0) -> flo
 
 
 func advance_from_sim(sim: Variant, dt: float) -> void:
-	_terrain_tick += 1
-	_advance_group(sim, sim.bacteria, dt, true)
-	_advance_group(sim, sim.protozoa, dt, true)
-	_advance_group(sim, sim.ciliates, dt, true)
-	_advance_group(sim, sim.flagellates, dt, true)
-	_advance_group(sim, sim.microalgae, dt, true)
-	_advance_group(sim, sim.decomposers, dt, true)
-	_advance_group(sim, sim.hyphae, dt, false)
-
-	_advance_capability_fragments(sim, dt)
+	_agent_accumulator += dt
+	while _agent_accumulator >= TERRAIN_AGENT_DT:
+		_terrain_tick += 1
+		_advance_group(sim, sim.bacteria, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.protozoa, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.ciliates, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.flagellates, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.microalgae, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.decomposers, TERRAIN_AGENT_DT, true)
+		_advance_group(sim, sim.hyphae, TERRAIN_AGENT_DT, false)
+		_advance_capability_fragments(sim, TERRAIN_AGENT_DT)
+		_agent_accumulator -= TERRAIN_AGENT_DT
 
 	_relax_accumulator += dt
 	if _relax_accumulator >= 0.10:
@@ -217,8 +221,7 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 			remaining.append(fragment)
 			continue
 
-		var signals: Array = [
-			1.0,
+		var values: Array = recipient.physical_genome.evaluate_context(
 			0.15,
 			0.0,
 			clampf(float(recipient.energy) / 4.0, 0.0, 1.0),
@@ -234,13 +237,10 @@ func _advance_capability_fragments(sim: Variant, dt: float) -> void:
 				0.0,
 				1.0
 			),
-			0.30,
-		]
+			0.30
+		)
 		var assimilation: float = float(
-			recipient.physical_genome.expression(
-				PhysicalCapabilityGenomeScript.CAP_ASSIMILATE,
-				signals
-			)
+			values[PhysicalCapabilityGenomeScript.CAP_ASSIMILATE]
 		)
 		var probability: float = clampf(
 			assimilation * 0.045 * scan_dt,
@@ -371,37 +371,25 @@ func _advance_agent(
 		0.0,
 		1.0
 	)
-	var signals: Array = [
-		1.0,
+	var values: Array = agent.physical_genome.evaluate_context(
 		clampf(uphill / 1.25, 0.0, 1.0),
 		carrying_signal,
 		energy_signal,
 		detritus_signal,
 		light_signal,
-		water_signal,
-	]
-
-	var dig: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_DIG, signals
-	))
-	var carry: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_CARRY, signals
-	))
-	var deposit_strength: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_DEPOSIT, signals
-	))
-	var burrow: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_BURROW, signals
-	))
-	var climb: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_CLIMB, signals
-	))
-	var oviposit: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_OVIPOSIT, signals
-	))
-	var armor: float = float(agent.physical_genome.expression(
-		PhysicalCapabilityGenomeScript.CAP_ARMOR, signals
-	))
+		water_signal
+	)
+	var dig: float = float(values[PhysicalCapabilityGenomeScript.CAP_DIG])
+	var carry: float = float(values[PhysicalCapabilityGenomeScript.CAP_CARRY])
+	var deposit_strength: float = float(
+		values[PhysicalCapabilityGenomeScript.CAP_DEPOSIT]
+	)
+	var burrow: float = float(values[PhysicalCapabilityGenomeScript.CAP_BURROW])
+	var climb: float = float(values[PhysicalCapabilityGenomeScript.CAP_CLIMB])
+	var oviposit: float = float(
+		values[PhysicalCapabilityGenomeScript.CAP_OVIPOSIT]
+	)
+	var armor: float = float(values[PhysicalCapabilityGenomeScript.CAP_ARMOR])
 
 	agent.physical_dig = dig
 	agent.physical_deposit = deposit_strength
