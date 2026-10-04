@@ -157,6 +157,10 @@ func _init() -> void:
 	var id_probe = PetriSimulationScript.new(73001)
 	id_probe.seed_demo(24)
 	id_probe.step(1.0 / 30.0)
+	id_probe._rebuild_spatial_grid()
+	if id_probe.bacteria.size() > 2:
+		id_probe.bacteria.pop_back()
+		id_probe._nearest_bacterium_spatial(Vector2(96.0, 64.0), 200.0)
 	if id_probe.bacteria.is_empty():
 		errors.append("performance: id-map probe lost all bacteria")
 	else:
@@ -407,6 +411,9 @@ func _init() -> void:
 			if agent.physical_genome == null:
 				errors.append("evolution: founder missing shared physical genome")
 				break
+			if not "capability_mix_events" in agent:
+				errors.append("evolution: founder missing capability mix counter")
+				break
 
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
@@ -448,6 +455,12 @@ func _init() -> void:
 
 	if first.state_signature() != second.state_signature():
 		errors.append("determinism: identical seeds produced different signatures")
+
+	var evolution_probe: Dictionary = first.evolution_metrics()
+	if int(evolution_probe.get("ecotypes", 0)) <= 0:
+		errors.append("evolution: ecotype telemetry reported no diversity")
+	if int(evolution_probe.get("max_generation", -1)) < 0:
+		errors.append("evolution: invalid max generation metric")
 
 	if first.bacteria.is_empty():
 		errors.append("population: all bacteria died during the smoke window")

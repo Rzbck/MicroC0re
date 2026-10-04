@@ -139,6 +139,7 @@ var _refugia_microalga: Variant = null
 var _refugia_decomposer: Variant = null
 var _refugia_hypha: Variant = null
 var _refugia_accumulator: float = 0.0
+var refugia_recoveries_total: int = 0
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
 var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
 var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
@@ -402,6 +403,7 @@ func seed_demo(count: int = 36) -> void:
 	_refugia_decomposer = null
 	_refugia_hypha = null
 	_refugia_accumulator = 0.0
+	refugia_recoveries_total = 0
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
 	_slow_biome_accumulator = 0.0
@@ -4169,8 +4171,10 @@ func _restore_refugium(kind: int, parent: Variant) -> void:
 			child.inherit_and_mutate(parent, rng)
 			child.energy = 4.8
 			hyphae.append(child)
-	if child != null and "cooldown" in child:
-		child.cooldown = 2.5
+	if child != null:
+		refugia_recoveries_total += 1
+		if "cooldown" in child:
+			child.cooldown = 2.5
 
 
 func _maintain_ecological_refugia(dt: float) -> void:
@@ -4601,6 +4605,51 @@ func max_generation() -> int:
 	for cell in bacteria:
 		result = maxi(result, int(cell.generation))
 	return result
+
+func evolution_metrics() -> Dictionary:
+	var ecotypes: Dictionary = {}
+	var lineage_bins: Dictionary = {}
+	var maximum_generation: int = 0
+	var structural_total: int = 0
+	var hgt_total: int = 0
+	var transformation_total: int = 0
+	var capability_mix_total: int = 0
+
+	for cell in bacteria:
+		if cell == null or bool(cell.consumed):
+			continue
+		ecotypes[int(cell.ecotype_id)] = true
+		lineage_bins[_lineage_bin(float(cell.lineage_hue))] = true
+		maximum_generation = maxi(maximum_generation, int(cell.generation))
+		structural_total += int(cell.structural_mutations)
+		hgt_total += int(cell.hgt_events)
+		transformation_total += int(cell.transformation_events)
+		capability_mix_total += int(cell.capability_mix_events)
+
+	for group in [protozoa, ciliates, flagellates, microalgae, decomposers, hyphae]:
+		for organism in group:
+			if organism == null:
+				continue
+			if "consumed" in organism and bool(organism.consumed):
+				continue
+			maximum_generation = maxi(maximum_generation, int(organism.generation))
+			if "lineage_hue" in organism:
+				lineage_bins[_lineage_bin(float(organism.lineage_hue))] = true
+			if "capability_mix_events" in organism:
+				capability_mix_total += int(organism.capability_mix_events)
+
+	return {
+		"ecotypes": ecotypes.size(),
+		"lineage_bins": lineage_bins.size(),
+		"max_generation": maximum_generation,
+		"structural_mutations": structural_total,
+		"hgt_events": hgt_total,
+		"transformations": transformation_total,
+		"capability_mix_events": capability_mix_total,
+		"refugia_recoveries": refugia_recoveries_total,
+	}
+
+
 
 
 func mean_energy() -> float:

@@ -95,6 +95,7 @@ func record_frame(
 		+ sim.decomposers.size()
 		+ sim.hyphae.size()
 	)
+	var evolution: Dictionary = sim.evolution_metrics()
 	var sample := {
 		"t_s": int(round(_elapsed_seconds())),
 		"fps": roundf(
@@ -143,6 +144,14 @@ func record_frame(
 		"soil_excavated": _round3(float(terrain.excavated_total)),
 		"soil_deposited": _round3(float(terrain.deposited_total)),
 		"capability_fragments": terrain.capability_fragments.size(),
+		"ecotypes": int(evolution["ecotypes"]),
+		"lineage_bins": int(evolution["lineage_bins"]),
+		"max_generation": int(evolution["max_generation"]),
+		"structural_mutations": int(evolution["structural_mutations"]),
+		"hgt_events": int(evolution["hgt_events"]),
+		"transformations": int(evolution["transformations"]),
+		"capability_mix_events": int(evolution["capability_mix_events"]),
+		"refugia_recoveries": int(evolution["refugia_recoveries"]),
 		"zoom": _round3(camera_zoom),
 		"rotation": posmod(rotation_quarter, 4),
 		"seed": seed,

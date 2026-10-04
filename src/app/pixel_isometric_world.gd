@@ -94,6 +94,8 @@ var terrain_mark_layer: Node2D
 var far_agent_layer: Node2D
 var far_agent_accumulator: float = 0.0
 var last_far_agent_count: int = 0
+var evolution_metrics_cache: Dictionary = {}
+var evolution_metrics_accumulator: float = 0.0
 
 
 func _ready() -> void:
@@ -152,6 +154,8 @@ func _start_seed(seed_value: int) -> void:
 	accumulator = 0.0
 	visual_time = 0.0
 	actual_sim_speed = 0.0
+	evolution_metrics_cache = sim.evolution_metrics()
+	evolution_metrics_accumulator = 0.0
 	_speed_wall_accumulator = 0.0
 	_speed_sim_time_start = float(sim.simulation_time)
 	view_pan = Vector2.ZERO
@@ -261,6 +265,12 @@ func _process(delta: float) -> void:
 
 	if follow_selected:
 		_update_selected_follow()
+
+	if metrics_visible:
+		evolution_metrics_accumulator += delta
+		if evolution_metrics_accumulator >= 0.5:
+			evolution_metrics_accumulator = fmod(evolution_metrics_accumulator, 0.5)
+			evolution_metrics_cache = sim.evolution_metrics()
 
 	_update_terrain_layer_transform()
 
@@ -1993,8 +2003,8 @@ func _draw_inspector() -> void:
 func _draw_metrics_panel() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var panel := Rect2(
-		Vector2(12.0, viewport_size.y - 88.0),
-		Vector2(330.0, 70.0)
+		Vector2(12.0, viewport_size.y - 108.0),
+		Vector2(390.0, 90.0)
 	)
 	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
 	_ui_text(
@@ -2021,15 +2031,29 @@ func _draw_metrics_panel() -> void:
 	)
 	_ui_text(
 		panel.position + Vector2(10.0, 56.0),
-		"terrain %.2fms  tris %d  far agents %d" % [
+		"terrain %.2fms  tris %d  far %d  soil %.1f/%.1f" % [
 			last_terrain_build_ms,
 			last_terrain_triangles,
 			last_far_agent_count,
+			float(terrain.excavated_total),
+			float(terrain.deposited_total),
 		],
 		11,
 		Color(0.72, 0.70, 0.58)
 	)
-
+	var evo: Dictionary = evolution_metrics_cache
+	_ui_text(
+		panel.position + Vector2(10.0, 75.0),
+		"evolution eco %d  gen %d  struct %d  HGT %d  refuge %d" % [
+			int(evo.get("ecotypes", 0)),
+			int(evo.get("max_generation", 0)),
+			int(evo.get("structural_mutations", 0)),
+			int(evo.get("hgt_events", 0)),
+			int(evo.get("refugia_recoveries", 0)),
+		],
+		11,
+		Color(0.78, 0.67, 0.82)
+	)
 
 func _handle_ui_click(position: Vector2) -> bool:
 	if _menu_button_rect().has_point(position):

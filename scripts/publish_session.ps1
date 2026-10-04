@@ -94,6 +94,14 @@ foreach ($s in @($raw.samples)) {
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
         capability_fragments = I $s.capability_fragments
+        ecotypes = I $s.ecotypes
+        lineage_bins = I $s.lineage_bins
+        max_generation = I $s.max_generation
+        structural_mutations = I $s.structural_mutations
+        hgt_events = I $s.hgt_events
+        transformations = I $s.transformations
+        capability_mix_events = I $s.capability_mix_events
+        refugia_recoveries = I $s.refugia_recoveries
         zoom = [Math]::Round((N $s.zoom), 3)
         rotation = I $s.rotation
         seed = I $s.seed
@@ -112,6 +120,11 @@ $requestedSpeedValues = @($safeSamples | ForEach-Object { [double]$_.requested_s
 $actualSpeedValues = @($safeSamples | ForEach-Object { [double]$_.actual_speed })
 $fpsValues = @($safeSamples | ForEach-Object { [double]$_.fps })
 $agentValues = @($safeSamples | ForEach-Object { [double]$_.agents })
+$ecotypeValues = @($safeSamples | ForEach-Object { [double]$_.ecotypes })
+$generationValues = @($safeSamples | ForEach-Object { [double]$_.max_generation })
+$structuralValues = @($safeSamples | ForEach-Object { [double]$_.structural_mutations })
+$hgtValues = @($safeSamples | ForEach-Object { [double]$_.hgt_events })
+$refugiaValues = @($safeSamples | ForEach-Object { [double]$_.refugia_recoveries })
 
 $counters = [ordered]@{
     rotations = I $raw.counters.rotations
@@ -156,7 +169,8 @@ Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $
 | requested speed | $([Math]::Round((Percentile $requestedSpeedValues 0.50),2)) | $([Math]::Round((Percentile $requestedSpeedValues 0.95),2)) | $([Math]::Round((Percentile $requestedSpeedValues 1.0),2)) |
 | achieved speed | $([Math]::Round((Percentile $actualSpeedValues 0.50),2)) | $([Math]::Round((Percentile $actualSpeedValues 0.95),2)) | $([Math]::Round((Percentile $actualSpeedValues 1.0),2)) |
 
-Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
+Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).  
+Evolution peaks: ecotypes $([Math]::Round((Percentile $ecotypeValues 1.0),0)), generation $([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $([Math]::Round((Percentile $hgtValues 1.0),0)), refugia recoveries $([Math]::Round((Percentile $refugiaValues 1.0),0)).
 
 <details>
 <summary>Allowlisted 2-second samples</summary>
