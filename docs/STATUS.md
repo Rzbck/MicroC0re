@@ -636,3 +636,9 @@ This pass attacks those two hot paths:
   so it actually exercises a completed division wave;
 - push CI now posts filtered smoke failure diagnostics to #67 before stopping,
   making headless failures auditable without raw Actions-log access.
+
+
+## CI smoke-capture fix
+- smoke diagnostics now run the existing PowerShell wrapper in a child pwsh
+  process; its intentional exit code no longer terminates the capture step
+  before smoke-output.txt is written.
