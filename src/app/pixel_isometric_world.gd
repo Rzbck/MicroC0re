@@ -13,7 +13,7 @@ const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 
 const FIXED_DT := 1.0 / 60.0
-const MAX_STEPS_PER_FRAME := 16
+const MAX_STEPS_PER_FRAME := 32
 const TILE_HALF_W := 5.0
 const TILE_HALF_H := 2.5
 const HEIGHT_PIXELS := 9.0
@@ -24,6 +24,9 @@ const TERRAIN_VISUAL_REFRESH := 1.0
 const MENU_WIDTH := 220.0
 const INSPECTOR_WIDTH := 276.0
 const SIMULATION_FRAME_BUDGET_MS := 16.0
+const SIMULATION_FAST_BUDGET_PER_X_MS := 8.0
+const SIMULATION_MAX_FRAME_BUDGET_MS := 80.0
+const SIMULATION_WALL_DELTA_CAP := 0.25
 const FAR_AGENT_LOD_ZOOM := 6.20
 const FAR_AGENT_REFRESH := 1.0 / 15.0
 const FAR_AGENT_REFRESH_MASS := 1.0 / 10.0
@@ -171,19 +174,20 @@ func _process(delta: float) -> void:
 		# Requested speed is accumulated as simulation time. We keep a CPU frame
 		# budget for input/render responsiveness, but no longer discard nearly
 		# all extra time at x2/x4/x8.
-		accumulator += minf(delta, 0.05) * simulation_speed
+		accumulator += minf(delta, SIMULATION_WALL_DELTA_CAP) * simulation_speed
 		var steps: int = 0
 		var frame_sim_start: int = Time.get_ticks_usec()
 		var core_sum_ms: float = 0.0
 		var terrain_sum_ms: float = 0.0
 		var dynamic_budget_ms: float = minf(
-			34.0,
+			SIMULATION_MAX_FRAME_BUDGET_MS,
 			SIMULATION_FRAME_BUDGET_MS
-			+ maxf(0.0, simulation_speed - 1.0) * 4.5
+			+ maxf(0.0, simulation_speed - 1.0)
+			* SIMULATION_FAST_BUDGET_PER_X_MS
 		)
 		var dynamic_step_limit: int = clampi(
-			ceili(simulation_speed * 2.0),
-			2,
+			ceili(simulation_speed * 4.0),
+			4,
 			MAX_STEPS_PER_FRAME
 		)
 		while accumulator >= FIXED_DT and steps < dynamic_step_limit:
@@ -216,8 +220,8 @@ func _process(delta: float) -> void:
 			last_terrain_sim_ms = 0.0
 
 		var max_backlog: float = FIXED_DT * maxf(
-			6.0,
-			simulation_speed * 10.0
+			12.0,
+			simulation_speed * 20.0
 		)
 		accumulator = minf(accumulator, max_backlog)
 
@@ -759,7 +763,8 @@ func _side_color(color: Color, factor: float) -> Color:
 
 func _using_far_agent_lod() -> bool:
 	return (
-		_total_agent_count() > DETAIL_POPULATION_LIMIT
+		simulation_speed >= 4.0
+		or _total_agent_count() > DETAIL_POPULATION_LIMIT
 		or _camera_zoom() < FAR_AGENT_LOD_ZOOM
 	)
 
