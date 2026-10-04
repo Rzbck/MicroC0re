@@ -439,3 +439,14 @@ Correction:
 - session publisher Markdown interpolation/code fencing fixed;
 - menu gains EXIT TO DESKTOP;
 - click selection radius increased from 22 px to 28 px.
+
+
+## Pixel-isometric batch parser hotfix
+- fixed the active renderer's `Transform2D` construction: Godot 4.7.1 has no
+  `Transform2D(float, Vector2, Vector2)` overload;
+- batch scale/origin are now assigned explicitly through the transform basis and
+  origin, preserving the intended pixel-isometric pan/zoom behavior;
+- CI now directly parses `src/app/pixel_isometric_world.gd` and the smoke test
+  preloads the active pixel-isometric renderer + telemetry script, so a parser
+  regression in the actual main renderer can no longer pass while only legacy
+  renderers compile.

@@ -11,6 +11,8 @@ const BacteriumScript = preload("res://src/simulation/bacterium.gd")
 # script parse errors cannot survive until the manual GUI test.
 const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
 const IsometricEcosystemScript = preload("res://src/app/isometric_ecosystem.gd")
+const PixelIsometricWorldScript = preload("res://src/app/pixel_isometric_world.gd")
+const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
 const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
@@ -624,6 +626,8 @@ func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
 		["physical_capability_genome", PhysicalCapabilityGenomeScript],
 		["living_terrain", LivingTerrainScript],
 		["isometric_ecosystem", IsometricEcosystemScript],
+		["pixel_isometric_world", PixelIsometricWorldScript],
+		["session_telemetry", SessionTelemetryScript],
 		["evolvable_genome", EvolvableGenomeScript],
 		["dna_fragment", DNAFragmentScript],
 		["phage_cloud", PhageCloudScript],

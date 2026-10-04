@@ -216,11 +216,10 @@ func _update_terrain_layer_transform() -> void:
 		return
 	var origin: Vector2 = get_viewport_rect().size * 0.5 + view_pan
 	var zoom_value: float = _camera_zoom()
-	var transform := Transform2D(
-		0.0,
-		Vector2(zoom_value, zoom_value),
-		_round_vec(origin)
-	)
+	var transform := Transform2D.IDENTITY
+	transform.x = Vector2(zoom_value, 0.0)
+	transform.y = Vector2(0.0, zoom_value)
+	transform.origin = _round_vec(origin)
 	terrain_batch_layer.transform = transform
 	terrain_mark_layer.transform = transform
 
