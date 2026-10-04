@@ -528,3 +528,10 @@ Still intentionally deferred to the next #67 tranches: chunk-dirty terrain
 meshes, SoA agent storage/GDExtension hot kernels, worker-thread chunk jobs, and
 GPU-resident fields/agents. Those require moving ownership of hot state rather
 than layering unsafe threads/readbacks over RefCounted objects.
+
+
+## Continuous scale gate
+- headless CI now runs the CPU benchmark through 100 / 500 / 1000 / 2000 / 5000
+  seeded bacteria after parser + smoke validation;
+- the 2k/5k cases use shorter measurement windows so every performance commit
+  exposes scale regressions without turning CI into a long soak test.
