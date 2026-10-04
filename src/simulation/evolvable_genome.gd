@@ -100,41 +100,59 @@ func inherit_and_mutate(
 	p_rng: RandomNumberGenerator,
 	mutation_rate: float
 ) -> void:
-	modules.clear()
-	for parent_module in parent.modules:
-		modules.append((parent_module as Dictionary).duplicate(true))
+	# Copy the small Array container, but share immutable module dictionaries.
+	# A dictionary is duplicated only if this daughter actually mutates it.
+	modules = parent.modules.duplicate(false)
 
 	last_structural_changes = 0
 	last_event = "copy"
 	var rate: float = clampf(mutation_rate, 0.01, 0.25)
 
-	for module in modules:
-		if p_rng.randf() < rate * 0.72:
+	for i in range(modules.size()):
+		var mutate_strength: bool = p_rng.randf() < rate * 0.72
+		var mutate_threshold: bool = p_rng.randf() < rate * 0.34
+		var mutate_sensor: bool = p_rng.randf() < rate * 0.12
+		var mutate_polarity: bool = p_rng.randf() < rate * 0.05
+		var mutate_kind: bool = p_rng.randf() < rate * 0.035
+		if not (
+			mutate_strength
+			or mutate_threshold
+			or mutate_sensor
+			or mutate_polarity
+			or mutate_kind
+		):
+			continue
+
+		var module: Dictionary = (
+			modules[i] as Dictionary
+		).duplicate(true)
+		if mutate_strength:
 			module["strength"] = clampf(
 				float(module["strength"]) + p_rng.randfn(0.0, 0.10),
 				0.04,
 				2.30
 			)
-		if p_rng.randf() < rate * 0.34:
+		if mutate_threshold:
 			module["threshold"] = clampf(
 				float(module["threshold"]) + p_rng.randfn(0.0, 0.08),
 				0.02,
 				0.96
 			)
-		if p_rng.randf() < rate * 0.12:
+		if mutate_sensor:
 			module["sensor"] = p_rng.randi_range(0, SENSOR_COUNT - 1)
 			last_event = "regulatory rewire"
-		if p_rng.randf() < rate * 0.05:
+		if mutate_polarity:
 			module["polarity"] = -int(module["polarity"])
 			last_event = "regulatory flip"
-		if p_rng.randf() < rate * 0.035:
+		if mutate_kind:
 			module["kind"] = p_rng.randi_range(0, MODULE_COUNT - 1)
 			last_event = "functional rewire"
+		modules[i] = module
 
-	var duplication_probability: float = clampf(0.018 + rate * 0.42, 0.018, 0.12)
-	if modules.size() < MAX_MODULES and p_rng.randf() < duplication_probability:
-		var source_index: int = p_rng.randi_range(0, modules.size() - 1)
-		var duplicated: Dictionary = (modules[source_index] as Dictionary).duplicate(true)
+	if modules.size() < MAX_MODULES and p_rng.randf() < 0.018 + rate * 0.42:
+		var duplicated: Dictionary = (
+			modules[p_rng.randi_range(0, modules.size() - 1)] as Dictionary
+		).duplicate(true)
 		duplicated["innovation"] = _new_innovation(p_rng)
 		duplicated["strength"] = clampf(
 			float(duplicated["strength"]) * p_rng.randf_range(0.72, 1.08),
@@ -148,14 +166,12 @@ func inherit_and_mutate(
 		last_structural_changes += 1
 		last_event = "module duplication"
 
-	var deletion_probability: float = clampf(0.010 + rate * 0.22, 0.010, 0.065)
-	if modules.size() > MIN_MODULES and p_rng.randf() < deletion_probability:
+	if modules.size() > MIN_MODULES and p_rng.randf() < 0.010 + rate * 0.22:
 		modules.remove_at(p_rng.randi_range(0, modules.size() - 1))
 		last_structural_changes += 1
 		last_event = "module deletion"
 
-	var insertion_probability: float = clampf(0.008 + rate * 0.18, 0.008, 0.050)
-	if modules.size() < MAX_MODULES and p_rng.randf() < insertion_probability:
+	if modules.size() < MAX_MODULES and p_rng.randf() < 0.008 + rate * 0.18:
 		_add_module(
 			p_rng.randi_range(0, MODULE_COUNT - 1),
 			p_rng.randf_range(0.12, 0.72),
@@ -394,9 +410,12 @@ func integrate_module(
 		return false
 
 	var donor_innovation: int = int(donor_module.get("innovation", -1))
-	for module in modules:
+	for i in range(modules.size()):
+		var module: Dictionary = modules[i]
 		if int(module.get("innovation", -2)) != donor_innovation:
 			continue
+		module = module.duplicate(true)
+		modules[i] = module
 		module["strength"] = clampf(
 			lerpf(
 				float(module["strength"]),

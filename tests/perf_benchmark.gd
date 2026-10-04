@@ -5,7 +5,7 @@ const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd"
 const DT := 1.0 / 60.0
 const WARMUP_STEPS := 30
 const MEASURE_STEPS := 120
-const POPULATIONS := [100, 500, 1000]
+const POPULATIONS := [100, 500, 1000, 2000, 5000]
 
 
 func _init() -> void:
@@ -19,6 +19,11 @@ func _init() -> void:
 		for _warmup in range(WARMUP_STEPS):
 			sim.step(DT)
 
+		var measured_steps: int = (
+			MEASURE_STEPS
+			if population <= 1000
+			else 45 if population <= 2000 else 20
+		)
 		var candidate_sum: int = 0
 		var narrow_sum: int = 0
 		var interaction_sum: int = 0
@@ -28,7 +33,7 @@ func _init() -> void:
 		var mechanics_ms_sum: float = 0.0
 
 		var start_usec: int = Time.get_ticks_usec()
-		for _step in range(MEASURE_STEPS):
+		for _step in range(measured_steps):
 			sim.step(DT)
 			candidate_sum += int(sim.pair_candidates_last)
 			narrow_sum += int(sim.pair_narrow_checks_last)
@@ -40,12 +45,12 @@ func _init() -> void:
 		var elapsed_usec: int = Time.get_ticks_usec() - start_usec
 
 		var total_ms: float = float(elapsed_usec) / 1000.0
-		var ms_per_tick: float = total_ms / float(MEASURE_STEPS)
+		var ms_per_tick: float = total_ms / float(measured_steps)
 		var ticks_per_second: float = 1000.0 / maxf(ms_per_tick, 0.000001)
 
 		var realtime_factor: float = ticks_per_second / 60.0
 
-		var denom: float = float(MEASURE_STEPS)
+		var denom: float = float(measured_steps)
 		print(
 			"population=%d final=%d | %.3f ms/tick | %.1f ticks/s | realtime x%.2f | chem %.3f ms agents %.3f ms mech %.3f ms | pairs %.0f -> narrow %.0f -> interact %.0f -> contact %.0f"
 			% [

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
 const LivingTerrainScript = preload("res://src/simulation/living_terrain.gd")
 const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
@@ -144,7 +145,25 @@ func _init() -> void:
 	if cap_probe.bacteria.size() > PetriSimulationScript.SAFETY_POPULATION_LIMIT:
 		errors.append("performance: bacterial division overshot safety ceiling")
 
-	# 	# Regression: dense producer biomass must reduce local effective light.
+	# 	# Hot-path scalar nearest sampling must match the exact addressed cell.
+	var scalar_probe = ScalarFieldScript.new(8, 8, 2.0, 0.0)
+	scalar_probe.set_cell(3, 4, 0.75)
+	if absf(
+		scalar_probe.sample_nearest_world(Vector2(6.4, 8.6)) - 0.75
+	) > 0.0001:
+		errors.append("performance: nearest scalar-field sampling mismatch")
+
+	var id_probe = PetriSimulationScript.new(73001)
+	id_probe.seed_demo(24)
+	id_probe.step(1.0 / 30.0)
+	if id_probe.bacteria.is_empty():
+		errors.append("performance: id-map probe lost all bacteria")
+	else:
+		var id_cell = id_probe.bacteria[0]
+		if id_probe.find_cell_by_id(int(id_cell.id)) != id_cell:
+			errors.append("performance: bacteria id cache lookup mismatch")
+
+		# Regression: dense producer biomass must reduce local effective light.
 	# This is a biome feedback, not a renderer-only tint.
 	var shade_probe = PetriSimulationScript.new(99173)
 	var shade_position := Vector2(21.0, 21.0)

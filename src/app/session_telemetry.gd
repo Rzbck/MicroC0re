@@ -69,7 +69,9 @@ func record_frame(
 	rotation_quarter: int,
 	visible_tiles: int,
 	terrain_triangles: int,
-	far_agent_count: int
+	far_agent_count: int,
+	requested_speed: float,
+	actual_speed: float
 ) -> void:
 	var frame_ms: float = maxf(0.0, delta * 1000.0)
 	frame_ms_sum += frame_ms
@@ -134,6 +136,8 @@ func record_frame(
 		"visible_tiles": visible_tiles,
 		"terrain_triangles": terrain_triangles,
 		"far_agent_count": far_agent_count,
+		"requested_speed": _round3(requested_speed),
+		"actual_speed": _round3(actual_speed),
 		"terrain_revision": int(terrain.revision),
 		"soil_excavated": _round3(float(terrain.excavated_total)),
 		"soil_deposited": _round3(float(terrain.deposited_total)),

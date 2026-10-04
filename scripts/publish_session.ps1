@@ -87,6 +87,8 @@ foreach ($s in @($raw.samples)) {
         visible_tiles = I $s.visible_tiles
         terrain_triangles = I $s.terrain_triangles
         far_agent_count = I $s.far_agent_count
+        requested_speed = [Math]::Round((N $s.requested_speed), 3)
+        actual_speed = [Math]::Round((N $s.actual_speed), 3)
         terrain_revision = I $s.terrain_revision
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
@@ -105,6 +107,8 @@ $agentsValues = @($safeSamples | ForEach-Object { [double]$_.bacteria_agents_ms 
 $mechanicsValues = @($safeSamples | ForEach-Object { [double]$_.mechanics_ms })
 $drawValues = @($safeSamples | ForEach-Object { [double]$_.draw_ms })
 $terrainBuildValues = @($safeSamples | ForEach-Object { [double]$_.terrain_build_ms })
+$requestedSpeedValues = @($safeSamples | ForEach-Object { [double]$_.requested_speed })
+$actualSpeedValues = @($safeSamples | ForEach-Object { [double]$_.actual_speed })
 $fpsValues = @($safeSamples | ForEach-Object { [double]$_.fps })
 $agentValues = @($safeSamples | ForEach-Object { [double]$_.agents })
 
@@ -148,6 +152,8 @@ Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $
 | draw ms | $([Math]::Round((Percentile $drawValues 0.50),2)) | $([Math]::Round((Percentile $drawValues 0.95),2)) | $([Math]::Round((Percentile $drawValues 1.0),2)) |
 | terrain batch rebuild ms | $([Math]::Round((Percentile $terrainBuildValues 0.50),2)) | $([Math]::Round((Percentile $terrainBuildValues 0.95),2)) | $([Math]::Round((Percentile $terrainBuildValues 1.0),2)) |
 | FPS | $([Math]::Round((Percentile $fpsValues 0.50),1)) | — | $([Math]::Round((Percentile $fpsValues 0.0),1)) min |
+| requested speed | $([Math]::Round((Percentile $requestedSpeedValues 0.50),2)) | $([Math]::Round((Percentile $requestedSpeedValues 0.95),2)) | $([Math]::Round((Percentile $requestedSpeedValues 1.0),2)) |
+| achieved speed | $([Math]::Round((Percentile $actualSpeedValues 0.50),2)) | $([Math]::Round((Percentile $actualSpeedValues 0.95),2)) | $([Math]::Round((Percentile $actualSpeedValues 1.0),2)) |
 
 Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
 

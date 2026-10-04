@@ -483,3 +483,48 @@ Optimization pass:
 - click selection tolerance increased to 38 px;
 - telemetry now separates core simulation, terraforming agents, bacteria update,
   chemistry, mechanics, pair counts and far-agent batch population.
+
+
+## 10k-agent architecture tranche 1 — telemetry session 7a0c1232e3da87b7
+
+The latest 298 s session validated the population cap but showed the next scale
+limits clearly:
+- 452 total agents max, with bacteria stabilizing around the 420 cap;
+- p50 simulation 15.7 ms, p95 41.76 ms;
+- bacterial update reached ~25-26 ms near the cap;
+- chemistry/slow-biome updates produced periodic ~30 ms spikes;
+- detailed close rendering still reached ~15-17 ms around 420 bacteria, while
+  the retained far batch stayed below 1 ms;
+- requested x2/x4/x8 simulation speed was not measurable and the old accumulator
+  policy discarded backlog, so acceleration could appear to do nothing.
+
+This pass moves the CPU reference toward the #67 architecture:
+- bacteria and other mobile agents now update at 30 Hz while rendering remains
+  independent; chemistry runs at 15 Hz and slow biome at 5 Hz with dt-correct
+  rates;
+- scalar-field diffusion uses precomputed neighbour indices in flat packed
+  arrays instead of rebuilding row/clamp topology for every cell/substep;
+- hot local bacterial field reads use nearest-cell sampling, matching the
+  existing nearest-cell uptake/write model and avoiding repeated bilinear reads;
+- water flow and ambient light are cached on the field grid; trigonometric
+  functions are evaluated per row/column cadence instead of per organism;
+- predator bacterial prey search and extracellular-DNA competence search reuse
+  the linked-cell spatial grid rather than scanning all bacteria;
+- stable ID dictionaries replace repeated linear find-by-id scans during feeding
+  and conjugation;
+- ecological and physical module dictionaries use copy-on-write inheritance:
+  daughters share immutable modules until an actual mutation/recombination;
+- far-agent batching now remains active until zoom 6.2, keeping hundreds of
+  organisms in a single retained triangle batch for most biome-scale views;
+- terrain visual rebuild cadence reduced to 1 Hz pending chunk-dirty terrain
+  batching;
+- x1/x2/x4/x8 now accumulate requested simulation time correctly, use a bounded
+  dynamic CPU budget instead of discarding almost all accelerated time, and
+  telemetry reports requested versus achieved speed;
+- the manual CPU benchmark now includes 2k and 5k seeded-agent probes with
+  shorter measurement windows at the largest scales.
+
+Still intentionally deferred to the next #67 tranches: chunk-dirty terrain
+meshes, SoA agent storage/GDExtension hot kernels, worker-thread chunk jobs, and
+GPU-resident fields/agents. Those require moving ownership of hot state rather
+than layering unsafe threads/readbacks over RefCounted objects.

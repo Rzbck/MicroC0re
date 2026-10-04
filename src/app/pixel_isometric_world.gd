@@ -13,18 +13,18 @@ const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 
 const FIXED_DT := 1.0 / 60.0
-const MAX_STEPS_PER_FRAME := 2
+const MAX_STEPS_PER_FRAME := 16
 const TILE_HALF_W := 5.0
 const TILE_HALF_H := 2.5
 const HEIGHT_PIXELS := 9.0
 const CAMERA_ZOOM_STEP := 1.12
 const MIN_USER_ZOOM := 0.58
 const MAX_USER_ZOOM := 5.0
-const TERRAIN_VISUAL_REFRESH := 0.50
+const TERRAIN_VISUAL_REFRESH := 1.0
 const MENU_WIDTH := 220.0
 const INSPECTOR_WIDTH := 276.0
-const SIMULATION_FRAME_BUDGET_MS := 18.0
-const FAR_AGENT_LOD_ZOOM := 3.35
+const SIMULATION_FRAME_BUDGET_MS := 16.0
+const FAR_AGENT_LOD_ZOOM := 6.20
 const FAR_AGENT_REFRESH := 1.0 / 15.0
 
 const LINEAGE_PALETTE := [
@@ -44,6 +44,9 @@ var current_seed: int = 1337
 var accumulator: float = 0.0
 var visual_time: float = 0.0
 var simulation_speed: float = 1.0
+var actual_sim_speed: float = 0.0
+var _speed_wall_accumulator: float = 0.0
+var _speed_sim_time_start: float = 0.0
 var paused: bool = false
 
 var atlas: Variant
@@ -143,6 +146,9 @@ func _start_seed(seed_value: int) -> void:
 	terrain = LivingTerrainScript.new(current_seed, Vector2(sim.world_size))
 	accumulator = 0.0
 	visual_time = 0.0
+	actual_sim_speed = 0.0
+	_speed_wall_accumulator = 0.0
+	_speed_sim_time_start = float(sim.simulation_time)
 	view_pan = Vector2.ZERO
 	user_zoom = 1.0
 	_update_terrain_layer_transform()
@@ -160,12 +166,25 @@ func _process(delta: float) -> void:
 	last_sim_step_ms = 0.0
 
 	if not paused:
-		accumulator += minf(delta * simulation_speed, 0.05)
+		# Requested speed is accumulated as simulation time. We keep a CPU frame
+		# budget for input/render responsiveness, but no longer discard nearly
+		# all extra time at x2/x4/x8.
+		accumulator += minf(delta, 0.05) * simulation_speed
 		var steps: int = 0
 		var frame_sim_start: int = Time.get_ticks_usec()
 		var core_sum_ms: float = 0.0
 		var terrain_sum_ms: float = 0.0
-		while accumulator >= FIXED_DT and steps < MAX_STEPS_PER_FRAME:
+		var dynamic_budget_ms: float = minf(
+			34.0,
+			SIMULATION_FRAME_BUDGET_MS
+			+ maxf(0.0, simulation_speed - 1.0) * 4.5
+		)
+		var dynamic_step_limit: int = clampi(
+			ceili(simulation_speed * 2.0),
+			2,
+			MAX_STEPS_PER_FRAME
+		)
+		while accumulator >= FIXED_DT and steps < dynamic_step_limit:
 			var core_start: int = Time.get_ticks_usec()
 			sim.step(FIXED_DT)
 			core_sum_ms += float(
@@ -182,21 +201,35 @@ func _process(delta: float) -> void:
 			steps += 1
 			if (
 				float(Time.get_ticks_usec() - frame_sim_start) / 1000.0
-				>= SIMULATION_FRAME_BUDGET_MS
+				>= dynamic_budget_ms
 			):
 				break
+
 		if steps > 0:
 			last_core_sim_ms = core_sum_ms / float(steps)
 			last_terrain_sim_ms = terrain_sum_ms / float(steps)
-			last_sim_step_ms = (
-				last_core_sim_ms + last_terrain_sim_ms
-			)
+			last_sim_step_ms = last_core_sim_ms + last_terrain_sim_ms
 		else:
 			last_core_sim_ms = 0.0
 			last_terrain_sim_ms = 0.0
-		if accumulator >= FIXED_DT * 3.0:
-			# Prefer a slower simulation clock to an input/render freeze.
-			accumulator = fmod(accumulator, FIXED_DT)
+
+		var max_backlog: float = FIXED_DT * maxf(
+			6.0,
+			simulation_speed * 10.0
+		)
+		accumulator = minf(accumulator, max_backlog)
+
+	_speed_wall_accumulator += delta
+	if _speed_wall_accumulator >= 0.5:
+		var sim_delta: float = (
+			float(sim.simulation_time) - _speed_sim_time_start
+		)
+		actual_sim_speed = sim_delta / maxf(
+			0.001,
+			_speed_wall_accumulator
+		)
+		_speed_wall_accumulator = 0.0
+		_speed_sim_time_start = float(sim.simulation_time)
 
 	terrain_cache_accumulator += delta
 	if terrain_cache_accumulator >= TERRAIN_VISUAL_REFRESH:
@@ -234,7 +267,9 @@ func _process(delta: float) -> void:
 			rotation_quarter,
 			last_visible_tiles,
 			last_terrain_triangles,
-			last_far_agent_count
+			last_far_agent_count,
+			simulation_speed,
+			actual_sim_speed
 		)
 
 	queue_redraw()
@@ -1746,7 +1781,10 @@ func _draw_menu_panel() -> void:
 	)
 	var labels: Array = [
 		"RESUME" if paused else "PAUSE",
-		"SPEED  x%.0f" % simulation_speed,
+		"SPEED  x%.0f  (actual x%.1f)" % [
+			simulation_speed,
+			actual_sim_speed,
+		],
 		"FIT BIOME",
 		"NEW SEED",
 		"PERF  " + ("ON" if metrics_visible else "OFF"),
@@ -1891,9 +1929,10 @@ func _draw_metrics_panel() -> void:
 	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
 	_ui_text(
 		panel.position + Vector2(10.0, 18.0),
-		"FPS %.0f   process %.2fms   draw %.2fms" % [
+		"FPS %.0f   speed x%.1f/x%.0f   draw %.2fms" % [
 			Performance.get_monitor(Performance.TIME_FPS),
-			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			actual_sim_speed,
+			simulation_speed,
 			last_draw_ms,
 		],
 		11,

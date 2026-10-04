@@ -151,36 +151,54 @@ func inherit_and_mutate(
 	p_rng: RandomNumberGenerator,
 	mutation_rate: float
 ) -> void:
-	modules.clear()
-	for module in parent.modules:
-		modules.append((module as Dictionary).duplicate(true))
+	# Copy the small Array container, but share immutable module dictionaries.
+	# A dictionary is duplicated only if this daughter actually mutates it.
+	modules = parent.modules.duplicate(false)
 
 	structural_changes = 0
 	last_event = "copy"
 	var rate: float = clampf(mutation_rate, 0.01, 0.26)
 
-	for module in modules:
-		if p_rng.randf() < rate * 0.84:
+	for i in range(modules.size()):
+		var mutate_strength: bool = p_rng.randf() < rate * 0.84
+		var mutate_threshold: bool = p_rng.randf() < rate * 0.42
+		var mutate_sensor: bool = p_rng.randf() < rate * 0.17
+		var mutate_polarity: bool = p_rng.randf() < rate * 0.06
+		var mutate_kind: bool = p_rng.randf() < rate * 0.045
+		if not (
+			mutate_strength
+			or mutate_threshold
+			or mutate_sensor
+			or mutate_polarity
+			or mutate_kind
+		):
+			continue
+
+		var module: Dictionary = (
+			modules[i] as Dictionary
+		).duplicate(true)
+		if mutate_strength:
 			module["strength"] = clampf(
 				float(module["strength"]) + p_rng.randfn(0.0, 0.12),
 				0.02,
 				2.60
 			)
-		if p_rng.randf() < rate * 0.42:
+		if mutate_threshold:
 			module["threshold"] = clampf(
 				float(module["threshold"]) + p_rng.randfn(0.0, 0.09),
 				0.02,
 				0.98
 			)
-		if p_rng.randf() < rate * 0.17:
+		if mutate_sensor:
 			module["sensor"] = p_rng.randi_range(0, SENSOR_COUNT - 1)
 			last_event = "physical sensor rewire"
-		if p_rng.randf() < rate * 0.06:
+		if mutate_polarity:
 			module["polarity"] = -int(module["polarity"])
 			last_event = "physical regulation flip"
-		if p_rng.randf() < rate * 0.045:
+		if mutate_kind:
 			module["kind"] = p_rng.randi_range(0, CAP_COUNT - 1)
 			last_event = "capability transmutation"
+		modules[i] = module
 
 	if modules.size() < MAX_MODULES and p_rng.randf() < 0.025 + rate * 0.52:
 		var duplicated: Dictionary = (
@@ -306,9 +324,12 @@ func integrate_module(
 		return false
 
 	var innovation: int = int(donor_module.get("innovation", -1))
-	for module in modules:
+	for i in range(modules.size()):
+		var module: Dictionary = modules[i]
 		if int(module.get("innovation", -2)) != innovation:
 			continue
+		module = module.duplicate(true)
+		modules[i] = module
 		module["strength"] = clampf(
 			lerpf(
 				float(module["strength"]),

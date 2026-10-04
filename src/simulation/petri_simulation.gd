@@ -16,9 +16,10 @@ const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
 const FIELD_WIDTH := 96
 const FIELD_HEIGHT := 64
 const FIELD_CELL_SIZE := 2.0
-const CHEMISTRY_DT := 1.0 / 30.0
-const SLOW_BIOME_DT := 1.0 / 10.0
+const CHEMISTRY_DT := 1.0 / 15.0
+const SLOW_BIOME_DT := 1.0 / 5.0
 const MECHANICS_DT := 1.0 / 30.0
+const AGENT_DT := 1.0 / 30.0
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
 const GRID_WIDTH := 64
@@ -76,6 +77,7 @@ var simulation_time: float = 0.0
 var _chemistry_accumulator: float = 0.0
 var _slow_biome_accumulator: float = 0.0
 var _mechanics_accumulator: float = 0.0
+var _agent_accumulator: float = 0.0
 var _next_id: int = 1
 var _next_dna_id: int = 1
 var _next_phage_id: int = 1
@@ -84,6 +86,14 @@ var _phage_tick: int = 0
 var _grid_head: PackedInt32Array = PackedInt32Array()
 var _grid_next: PackedInt32Array = PackedInt32Array()
 var _max_half_body_length: float = 2.0
+var _bacteria_by_id: Dictionary = {}
+var _edible_by_id: Dictionary = {}
+var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
+var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
+var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
+var _vertical_light_rows: PackedFloat32Array = PackedFloat32Array()
+var _light_x_wave: PackedFloat32Array = PackedFloat32Array()
+var _light_y_wave: PackedFloat32Array = PackedFloat32Array()
 var disturbance_index: int = 0
 var next_disturbance_time: float = 24.0
 var last_disturbance_type: int = -1
@@ -298,7 +308,19 @@ func _init(seed_value: int = 1) -> void:
 	fungal_enzyme = ScalarFieldScript.new(FIELD_WIDTH, FIELD_HEIGHT, FIELD_CELL_SIZE, 0.0)
 	_grid_head.resize(GRID_CELL_COUNT)
 	_grid_head.fill(-1)
+	_flow_x_rows.resize(FIELD_HEIGHT)
+	_flow_y_cols.resize(FIELD_WIDTH)
+	_ambient_light_cache.resize(FIELD_WIDTH * FIELD_HEIGHT)
+	_vertical_light_rows.resize(FIELD_HEIGHT)
+	_light_x_wave.resize(FIELD_WIDTH)
+	_light_y_wave.resize(FIELD_HEIGHT)
+	for y in range(FIELD_HEIGHT):
+		var normalized_y: float = (
+			(float(y) + 0.5) / float(FIELD_HEIGHT)
+		)
+		_vertical_light_rows[y] = lerpf(1.0, 0.38, normalized_y)
 	_build_sources()
+	_refresh_environment_caches()
 
 
 func seed_demo(count: int = 36) -> void:
@@ -316,6 +338,7 @@ func seed_demo(count: int = 36) -> void:
 	_chemistry_accumulator = 0.0
 	_slow_biome_accumulator = 0.0
 	_mechanics_accumulator = 0.0
+	_agent_accumulator = 0.0
 	disturbance_index = 0
 	next_disturbance_time = 24.0
 	last_disturbance_type = -1
@@ -338,6 +361,7 @@ func seed_demo(count: int = 36) -> void:
 	quorum_signal.fill(0.0)
 	fungal_enzyme.fill(0.0)
 	_prime_environment()
+	_refresh_environment_caches()
 
 	for _i in range(maxi(0, count)):
 		var margin: float = 8.0
@@ -531,6 +555,7 @@ func seed_demo(count: int = 36) -> void:
 		decomposers.append(yeast)
 
 	_resolve_all_contacts()
+	_rebuild_id_maps()
 
 
 func step(dt: float) -> void:
@@ -540,6 +565,7 @@ func step(dt: float) -> void:
 	var chemistry_start: int = Time.get_ticks_usec()
 	_chemistry_accumulator += dt
 	while _chemistry_accumulator >= CHEMISTRY_DT:
+		_refresh_environment_caches()
 		_feed_environment(CHEMISTRY_DT)
 		nutrient.diffuse(nutrient_diffusion, CHEMISTRY_DT, nutrient_decay)
 		waste.diffuse(waste_diffusion, CHEMISTRY_DT, waste_decay)
@@ -584,95 +610,103 @@ func step(dt: float) -> void:
 		_chemistry_accumulator -= CHEMISTRY_DT
 	chemistry_ms_last = float(Time.get_ticks_usec() - chemistry_start) / 1000.0
 
-	var agents_start: int = Time.get_ticks_usec()
-	var next_population: Array = _population_buffer
-	next_population.clear()
-	var living_start: int = 0
-	for counted_cell in bacteria:
-		if (
-			not bool(counted_cell.consumed)
-			and int(counted_cell.engulfed_by_id) < 0
-		):
-			living_start += 1
-	var available_bacterial_births: int = maxi(
-		0,
-		SAFETY_POPULATION_LIMIT - living_start
-	)
-
-	for cell in bacteria:
-		cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - dt)
-
-		if bool(cell.consumed):
-			continue
-
-		if int(cell.engulfed_by_id) >= 0:
-			next_population.append(cell)
-			continue
-
-		if bool(cell.dying):
-			_advance_lysis(cell, dt)
-			if float(cell.lysis_progress) >= 1.0:
-				_recycle_dead_cell(cell)
-			else:
+	agents_ms_last = 0.0
+	mechanics_ms_last = 0.0
+	_agent_accumulator += dt
+	while _agent_accumulator >= AGENT_DT:
+		var agent_dt: float = AGENT_DT
+		var agents_start: int = Time.get_ticks_usec()
+		var next_population: Array = _population_buffer
+		next_population.clear()
+		var living_start: int = 0
+		for counted_cell in bacteria:
+			if (
+				not bool(counted_cell.consumed)
+				and int(counted_cell.engulfed_by_id) < 0
+			):
+				living_start += 1
+		var available_bacterial_births: int = maxi(
+			0,
+			SAFETY_POPULATION_LIMIT - living_start
+		)
+	
+		for cell in bacteria:
+			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
+	
+			if bool(cell.consumed):
+				continue
+	
+			if int(cell.engulfed_by_id) >= 0:
 				next_population.append(cell)
-			continue
-
-		_advance_cell(cell, dt)
-
-		if bool(cell.dying):
-			next_population.append(cell)
-			continue
-
-		if bool(cell.dividing):
-			cell.division_progress = minf(
-				1.0,
-				float(cell.division_progress) + dt / maxf(0.001, division_duration)
-			)
-			if float(cell.division_progress) >= 1.0:
-				if available_bacterial_births > 0:
-					var daughters: Array = _divide(cell)
-					next_population.append_array(daughters)
-					available_bacterial_births -= 1
+				continue
+	
+			if bool(cell.dying):
+				_advance_lysis(cell, agent_dt)
+				if float(cell.lysis_progress) >= 1.0:
+					_recycle_dead_cell(cell)
 				else:
-					# Explicit performance guard: suppress further fission at
-					# the CPU-reference ceiling without deleting live cells.
-					cell.dividing = false
-					cell.division_progress = 0.0
-					cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
 					next_population.append(cell)
-			else:
+				continue
+	
+			_advance_cell(cell, agent_dt)
+	
+			if bool(cell.dying):
 				next_population.append(cell)
-			continue
-
-		if _ready_to_begin_division(cell):
-			cell.begin_division()
-
-		next_population.append(cell)
-
-	var previous_population: Array = bacteria
-	bacteria = next_population
-	_population_buffer = previous_population
-	_population_buffer.clear()
-	agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
-
-	var mechanics_start: int = Time.get_ticks_usec()
-	_mechanics_accumulator += dt
-	while _mechanics_accumulator >= MECHANICS_DT:
-		pair_candidates_last = 0
-		pair_narrow_checks_last = 0
-		pair_interactions_last = 0
-		pair_contacts_last = 0
-		for _iteration in range(mechanical_iterations):
-			_resolve_all_contacts()
-		_mechanics_accumulator -= MECHANICS_DT
-	mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
-
-	_advance_gene_transfers(dt)
-	_advance_microalgae(dt)
-	_advance_decomposers(dt)
-	_advance_flagellates(dt)
-	_advance_protozoa(dt)
-	_advance_ciliates(dt)
+				continue
+	
+			if bool(cell.dividing):
+				cell.division_progress = minf(
+					1.0,
+					float(cell.division_progress) + agent_dt / maxf(0.001, division_duration)
+				)
+				if float(cell.division_progress) >= 1.0:
+					if available_bacterial_births > 0:
+						var daughters: Array = _divide(cell)
+						next_population.append_array(daughters)
+						available_bacterial_births -= 1
+					else:
+						# Explicit performance guard: suppress further fission at
+						# the CPU-reference ceiling without deleting live cells.
+						cell.dividing = false
+						cell.division_progress = 0.0
+						cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
+						next_population.append(cell)
+				else:
+					next_population.append(cell)
+				continue
+	
+			if _ready_to_begin_division(cell):
+				cell.begin_division()
+	
+			next_population.append(cell)
+	
+		var previous_population: Array = bacteria
+		bacteria = next_population
+		_population_buffer = previous_population
+		_population_buffer.clear()
+		agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
+	
+		var mechanics_start: int = Time.get_ticks_usec()
+		_mechanics_accumulator += agent_dt
+		while _mechanics_accumulator >= MECHANICS_DT:
+			pair_candidates_last = 0
+			pair_narrow_checks_last = 0
+			pair_interactions_last = 0
+			pair_contacts_last = 0
+			for _iteration in range(mechanical_iterations):
+				_resolve_all_contacts()
+			_mechanics_accumulator -= MECHANICS_DT
+		mechanics_ms_last = float(Time.get_ticks_usec() - mechanics_start) / 1000.0
+	
+		_advance_gene_transfers(agent_dt)
+		_advance_microalgae(agent_dt)
+		_advance_decomposers(agent_dt)
+		_advance_flagellates(agent_dt)
+		_advance_protozoa(agent_dt)
+		_advance_ciliates(agent_dt)
+	
+		_rebuild_id_maps()
+		_agent_accumulator -= AGENT_DT
 
 	simulation_time += dt
 	_advance_disturbance_schedule()
@@ -1363,24 +1397,13 @@ func _advance_flagellates(dt: float) -> void:
 
 
 func _find_flagellate_prey(flagellate: Variant) -> Variant:
-	var best: Variant = null
 	var perception: float = (
 		flagellate_perception * float(flagellate.gene_perception)
 	)
-	var best_distance_sq: float = perception * perception
-	var origin: Vector2 = Vector2(flagellate.position)
-	for cell in bacteria:
-		if (
-			bool(cell.dying)
-			or bool(cell.consumed)
-			or int(cell.engulfed_by_id) >= 0
-		):
-			continue
-		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best = cell
-	return best
+	return _nearest_bacterium_spatial(
+		Vector2(flagellate.position),
+		perception
+	)
 
 
 func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
@@ -1632,6 +1655,61 @@ func _advance_protozoa(dt: float) -> void:
 	protozoa = next_protozoa
 
 
+func _nearest_bacterium_spatial(
+	origin: Vector2,
+	radius: float,
+	require_competent: bool = false
+) -> Variant:
+	var best: Variant = null
+	var best_distance_sq: float = radius * radius
+	var bucket_x: int = clampi(
+		floori(origin.x / SPATIAL_BUCKET_SIZE),
+		0,
+		GRID_WIDTH - 1
+	)
+	var bucket_y: int = clampi(
+		floori(origin.y / SPATIAL_BUCKET_SIZE),
+		0,
+		GRID_HEIGHT - 1
+	)
+	var bucket_radius: int = maxi(
+		1,
+		ceili(radius / SPATIAL_BUCKET_SIZE)
+	)
+	for y in range(
+		maxi(0, bucket_y - bucket_radius),
+		mini(GRID_HEIGHT - 1, bucket_y + bucket_radius) + 1
+	):
+		var row: int = y * GRID_WIDTH
+		for x in range(
+			maxi(0, bucket_x - bucket_radius),
+			mini(GRID_WIDTH - 1, bucket_x + bucket_radius) + 1
+		):
+			var j: int = _grid_head[row + x]
+			while j >= 0:
+				var cell: Variant = bacteria[j]
+				if (
+					not bool(cell.dying)
+					and not bool(cell.consumed)
+					and int(cell.engulfed_by_id) < 0
+					and (
+						not require_competent
+						or (
+							bool(cell.competent)
+							and not bool(cell.dormant)
+						)
+					)
+				):
+					var distance_sq: float = origin.distance_squared_to(
+						Vector2(cell.position)
+					)
+					if distance_sq < best_distance_sq:
+						best_distance_sq = distance_sq
+						best = cell
+				j = _grid_next[j]
+	return best
+
+
 func _find_protozoan_prey(proto: Variant) -> Variant:
 	var best: Variant = null
 	var perception: float = protozoan_perception * float(proto.gene_perception)
@@ -1639,18 +1717,15 @@ func _find_protozoan_prey(proto: Variant) -> Variant:
 	var origin: Vector2 = Vector2(proto.position)
 	var max_prey_biomass: float = float(proto.radius) * 2.10
 
-	for cell in bacteria:
-		if (
-			bool(cell.dying)
-			or bool(cell.consumed)
-			or int(cell.engulfed_by_id) >= 0
-		):
-			continue
-
-		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best = cell
+	var bacterial_prey: Variant = _nearest_bacterium_spatial(
+		origin,
+		perception
+	)
+	if bacterial_prey != null:
+		best = bacterial_prey
+		best_distance_sq = origin.distance_squared_to(
+			Vector2(bacterial_prey.position)
+		)
 
 	for flagellate in flagellates:
 		if (
@@ -1996,18 +2071,15 @@ func _find_ciliate_prey(ciliate: Variant) -> Variant:
 	var origin: Vector2 = Vector2(ciliate.position)
 	var max_prey_biomass: float = float(ciliate.radius) * 1.95
 
-	for cell in bacteria:
-		if (
-			bool(cell.dying)
-			or bool(cell.consumed)
-			or int(cell.engulfed_by_id) >= 0
-		):
-			continue
-
-		var distance_sq: float = origin.distance_squared_to(Vector2(cell.position))
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best = cell
+	var bacterial_prey: Variant = _nearest_bacterium_spatial(
+		origin,
+		perception
+	)
+	if bacterial_prey != null:
+		best = bacterial_prey
+		best_distance_sq = origin.distance_squared_to(
+			Vector2(bacterial_prey.position)
+		)
 
 	for flagellate in flagellates:
 		if (
@@ -2424,13 +2496,13 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			return
 
 	var cell_position: Vector2 = Vector2(cell.position)
-	var local_nutrient_before: float = float(nutrient.sample_world(cell_position))
-	var local_exudate_before: float = float(exudate.sample_world(cell_position))
-	var local_detritus_before: float = float(detritus.sample_world(cell_position))
+	var local_nutrient_before: float = float(nutrient.sample_nearest_world(cell_position))
+	var local_exudate_before: float = float(exudate.sample_nearest_world(cell_position))
+	var local_detritus_before: float = float(detritus.sample_nearest_world(cell_position))
 	var local_light_before: float = _sample_light(cell_position)
-	var local_quorum_before: float = float(quorum_signal.sample_world(cell_position))
-	var local_damage_before: float = float(damage_cue.sample_world(cell_position))
-	var local_oxygen_before: float = float(oxygen.sample_world(cell_position))
+	var local_quorum_before: float = float(quorum_signal.sample_nearest_world(cell_position))
+	var local_damage_before: float = float(damage_cue.sample_nearest_world(cell_position))
+	var local_oxygen_before: float = float(oxygen.sample_nearest_world(cell_position))
 	var resource_signal: float = local_nutrient_before + local_exudate_before * 1.25
 
 	var genome_values: Array = []
@@ -2587,7 +2659,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		1.0
 	)
 
-	var local_eps: float = float(eps.sample_world(cell_position))
+	var local_eps: float = float(eps.sample_nearest_world(cell_position))
 	var local_quorum: float = local_quorum_before
 	var local_damage: float = local_damage_before
 	var quorum_response: float = clampf(local_quorum * 8.0, 0.0, 1.0)
@@ -2628,9 +2700,9 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	_constrain_to_world(cell)
 	cell_position = Vector2(cell.position)
 
-	var local_nutrient: float = float(nutrient.sample_world(cell_position))
-	var local_exudate: float = float(exudate.sample_world(cell_position))
-	var local_oxygen: float = float(oxygen.sample_world(cell_position))
+	var local_nutrient: float = float(nutrient.sample_nearest_world(cell_position))
+	var local_exudate: float = float(exudate.sample_nearest_world(cell_position))
+	var local_oxygen: float = float(oxygen.sample_nearest_world(cell_position))
 	var oxygen_factor: float = (
 		0.48
 		+ 0.52 * local_oxygen / (oxygen_half_saturation + local_oxygen)
@@ -3337,24 +3409,11 @@ func _advance_dna_fragments(dt: float) -> void:
 
 
 func _nearest_competent_cell(position: Vector2, radius: float) -> Variant:
-	var best: Variant = null
-	var best_distance_sq: float = radius * radius
-	for cell in bacteria:
-		if (
-			not bool(cell.competent)
-			or bool(cell.dying)
-			or bool(cell.dormant)
-			or bool(cell.consumed)
-			or int(cell.engulfed_by_id) >= 0
-		):
-			continue
-		var distance_sq: float = position.distance_squared_to(
-			Vector2(cell.position)
-		)
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best = cell
-	return best
+	return _nearest_bacterium_spatial(
+		position,
+		radius,
+		true
+	)
 
 
 func _integrate_dna_fragment(cell: Variant, fragment: Variant) -> void:
@@ -3448,7 +3507,7 @@ func _feed_environment(dt: float) -> void:
 	# material back into the microbial loop.
 	for source in producer_sources:
 		var local_light: float = float(_sample_light(source))
-		var mat: float = float(producer_biomass.sample_world(source))
+		var mat: float = float(producer_biomass.sample_nearest_world(source))
 		var activity: float = local_light * clampf(mat * 1.8, 0.0, 1.0)
 		oxygen.add_radial_world(
 			source,
@@ -3532,8 +3591,11 @@ func sample_light(position: Vector2) -> float:
 
 
 func _sample_light(position: Vector2) -> float:
-	var biomass: float = float(producer_biomass.sample_world(position))
-	return _apply_producer_shading(_ambient_light(position), biomass)
+	var index: int = _field_index_for_world(position)
+	return _apply_producer_shading(
+		float(_ambient_light_cache[index]),
+		float(producer_biomass.values[index])
+	)
 
 
 func _ambient_light(position: Vector2) -> float:
@@ -3565,31 +3627,83 @@ func _apply_producer_shading(light_value: float, biomass: float) -> float:
 
 
 func _light_value_for_index(index: int) -> float:
-	var x: int = index % FIELD_WIDTH
-	var y: int = floori(float(index) / float(FIELD_WIDTH))
-	var position := Vector2(
-		(float(x) + 0.5) * FIELD_CELL_SIZE,
-		(float(y) + 0.5) * FIELD_CELL_SIZE
-	)
 	return _apply_producer_shading(
-		_ambient_light(position),
+		float(_ambient_light_cache[index]),
 		float(producer_biomass.values[index])
 	)
+
 
 func sample_water_flow(position: Vector2) -> Vector2:
 	return _water_flow(position)
 
 
+func _refresh_environment_caches() -> void:
+	var daylight: float = (
+		0.5
+		+ 0.5 * cos(
+			TAU * simulation_time / maxf(1.0, diel_cycle_seconds)
+		)
+	)
+	daylight = lerpf(night_light_floor, 1.0, daylight)
+
+	for x in range(FIELD_WIDTH):
+		var world_x: float = (float(x) + 0.5) * FIELD_CELL_SIZE
+		_flow_y_cols[x] = cos(
+			world_x * 0.038 - simulation_time * 0.075
+		) * water_flow_strength
+		_light_x_wave[x] = sin(
+			world_x * 0.055 + simulation_time * 0.07
+		)
+
+	for y in range(FIELD_HEIGHT):
+		var world_y: float = (float(y) + 0.5) * FIELD_CELL_SIZE
+		_flow_x_rows[y] = sin(
+			world_y * 0.045 + simulation_time * 0.11
+		) * water_flow_strength
+		_light_y_wave[y] = cos(
+			world_y * 0.045 - simulation_time * 0.05
+		)
+		var row: int = y * FIELD_WIDTH
+		var base_light: float = float(_vertical_light_rows[y]) * daylight
+		var y_wave: float = float(_light_y_wave[y])
+		for x in range(FIELD_WIDTH):
+			_ambient_light_cache[row + x] = clampf(
+				base_light
+				+ 0.08 * float(_light_x_wave[x]) * y_wave,
+				0.04,
+				1.0
+			)
+
+
+func _field_index_for_world(position: Vector2) -> int:
+	var x: int = clampi(
+		floori(position.x / FIELD_CELL_SIZE),
+		0,
+		FIELD_WIDTH - 1
+	)
+	var y: int = clampi(
+		floori(position.y / FIELD_CELL_SIZE),
+		0,
+		FIELD_HEIGHT - 1
+	)
+	return y * FIELD_WIDTH + x
+
+
 func _water_flow(position: Vector2) -> Vector2:
-	# Small deterministic aqueous current. It gives the biome a water phase
-	# without turning every organism into a passive particle.
-	var x_wave: float = sin(
-		position.y * 0.045 + simulation_time * 0.11
+	var x: int = clampi(
+		floori(position.x / FIELD_CELL_SIZE),
+		0,
+		FIELD_WIDTH - 1
 	)
-	var y_wave: float = cos(
-		position.x * 0.038 - simulation_time * 0.075
+	var y: int = clampi(
+		floori(position.y / FIELD_CELL_SIZE),
+		0,
+		FIELD_HEIGHT - 1
 	)
-	return Vector2(x_wave, y_wave) * water_flow_strength
+	return Vector2(
+		float(_flow_x_rows[y]),
+		float(_flow_y_cols[x])
+	)
 
 
 func _damage_cue_direction(position: Vector2) -> Vector2:
@@ -3597,6 +3711,22 @@ func _damage_cue_direction(position: Vector2) -> Vector2:
 	if gradient.length_squared() <= 0.0000001:
 		return Vector2.ZERO
 	return gradient.normalized()
+
+
+func _rebuild_id_maps() -> void:
+	_bacteria_by_id.clear()
+	_edible_by_id.clear()
+	for cell in bacteria:
+		_bacteria_by_id[int(cell.id)] = cell
+		_edible_by_id[int(cell.id)] = cell
+	for organism in ciliates:
+		_edible_by_id[int(organism.id)] = organism
+	for organism in flagellates:
+		_edible_by_id[int(organism.id)] = organism
+	for organism in microalgae:
+		_edible_by_id[int(organism.id)] = organism
+	for organism in decomposers:
+		_edible_by_id[int(organism.id)] = organism
 
 
 func _allocate_id() -> int:
@@ -3935,28 +4065,27 @@ func count_engulfing() -> int:
 
 
 func find_cell_by_id(cell_id: int) -> Variant:
+	if _bacteria_by_id.has(cell_id):
+		return _bacteria_by_id[cell_id]
 	for cell in bacteria:
 		if int(cell.id) == cell_id:
+			_bacteria_by_id[cell_id] = cell
 			return cell
 	return null
 
 
 func find_edible_by_id(organism_id: int) -> Variant:
+	if _edible_by_id.has(organism_id):
+		return _edible_by_id[organism_id]
 	var cell: Variant = find_cell_by_id(organism_id)
 	if cell != null:
+		_edible_by_id[organism_id] = cell
 		return cell
-	for ciliate in ciliates:
-		if int(ciliate.id) == organism_id:
-			return ciliate
-	for flagellate in flagellates:
-		if int(flagellate.id) == organism_id:
-			return flagellate
-	for alga in microalgae:
-		if int(alga.id) == organism_id:
-			return alga
-	for yeast in decomposers:
-		if int(yeast.id) == organism_id:
-			return yeast
+	for group in [ciliates, flagellates, microalgae, decomposers]:
+		for organism in group:
+			if int(organism.id) == organism_id:
+				_edible_by_id[organism_id] = organism
+				return organism
 	return null
 
 
