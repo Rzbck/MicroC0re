@@ -66,6 +66,7 @@ foreach ($s in @($raw.samples)) {
         process_ms = [Math]::Round((N $s.process_ms), 3)
         sim_ms = [Math]::Round((N $s.sim_ms), 3)
         draw_ms = [Math]::Round((N $s.draw_ms), 3)
+        terrain_build_ms = [Math]::Round((N $s.terrain_build_ms), 3)
         draw_calls = I $s.draw_calls
         agents = I $s.agents
         bacteria = I $s.bacteria
@@ -76,6 +77,7 @@ foreach ($s in @($raw.samples)) {
         decomposers = I $s.decomposers
         hyphae = I $s.hyphae
         visible_tiles = I $s.visible_tiles
+        terrain_triangles = I $s.terrain_triangles
         terrain_revision = I $s.terrain_revision
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
@@ -89,6 +91,7 @@ foreach ($s in @($raw.samples)) {
 $frameValues = @($safeSamples | ForEach-Object { [double]$_.frame_ms_max })
 $simValues = @($safeSamples | ForEach-Object { [double]$_.sim_ms })
 $drawValues = @($safeSamples | ForEach-Object { [double]$_.draw_ms })
+$terrainBuildValues = @($safeSamples | ForEach-Object { [double]$_.terrain_build_ms })
 $fpsValues = @($safeSamples | ForEach-Object { [double]$_.fps })
 $agentValues = @($safeSamples | ForEach-Object { [double]$_.agents })
 
@@ -118,7 +121,7 @@ $safe = [ordered]@{
 $summary = @"
 ### Session $sessionId
 
-Build `$buildSha` · Godot `$godot` · $osFamily · $gpuVendor · $renderer · $displayBucket  
+Build ``$buildSha`` · Godot ``$godot`` · $osFamily · $gpuVendor · $renderer · $displayBucket  
 Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $([Math]::Round((Percentile $agentValues 1.0),0))
 
 | metric | p50 | p95 | max/min |
@@ -126,6 +129,7 @@ Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $
 | frame max ms | $([Math]::Round((Percentile $frameValues 0.50),2)) | $([Math]::Round((Percentile $frameValues 0.95),2)) | $([Math]::Round((Percentile $frameValues 1.0),2)) |
 | sim step ms | $([Math]::Round((Percentile $simValues 0.50),2)) | $([Math]::Round((Percentile $simValues 0.95),2)) | $([Math]::Round((Percentile $simValues 1.0),2)) |
 | draw ms | $([Math]::Round((Percentile $drawValues 0.50),2)) | $([Math]::Round((Percentile $drawValues 0.95),2)) | $([Math]::Round((Percentile $drawValues 1.0),2)) |
+| terrain batch rebuild ms | $([Math]::Round((Percentile $terrainBuildValues 0.50),2)) | $([Math]::Round((Percentile $terrainBuildValues 0.95),2)) | $([Math]::Round((Percentile $terrainBuildValues 1.0),2)) |
 | FPS | $([Math]::Round((Percentile $fpsValues 0.50),1)) | — | $([Math]::Round((Percentile $fpsValues 0.0),1)) min |
 
 Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
@@ -133,9 +137,9 @@ Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $
 <details>
 <summary>Allowlisted 2-second samples</summary>
 
-```json
+~~~json
 $($safe | ConvertTo-Json -Depth 8 -Compress)
-```
+~~~
 
 </details>
 "@

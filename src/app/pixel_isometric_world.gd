@@ -71,8 +71,13 @@ var terrain_color_cache := PackedColorArray()
 var terrain_mark_cache := PackedInt32Array()
 var last_draw_ms: float = 0.0
 var last_sim_step_ms: float = 0.0
+var last_terrain_build_ms: float = 0.0
 var last_visible_tiles: int = 0
+var last_terrain_triangles: int = 0
 var telemetry: Variant = null
+
+var terrain_batch_layer: Node2D
+var terrain_mark_layer: Node2D
 
 
 func _ready() -> void:
@@ -82,6 +87,22 @@ func _ready() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	RenderingServer.set_default_clear_color(
+		Color(0.025, 0.055, 0.060, 1.0)
+	)
+
+	terrain_batch_layer = Node2D.new()
+	terrain_batch_layer.name = "TerrainBatch"
+	terrain_batch_layer.z_index = -20
+	terrain_batch_layer.z_as_relative = false
+	add_child(terrain_batch_layer)
+
+	terrain_mark_layer = Node2D.new()
+	terrain_mark_layer.name = "TerrainMarks"
+	terrain_mark_layer.z_index = -19
+	terrain_mark_layer.z_as_relative = false
+	add_child(terrain_mark_layer)
+
 	atlas = PixelAtlasScript.new()
 	protozoa_atlas = PixelProtozoaAtlasScript.new()
 	ciliate_atlas = PixelCiliateAtlasScript.new()
@@ -93,6 +114,8 @@ func _ready() -> void:
 	telemetry = SessionTelemetryScript.new()
 	telemetry.begin(current_seed)
 	_refresh_terrain_visual_cache()
+	_rebuild_terrain_batch()
+	_update_terrain_layer_transform()
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	call_deferred("_fit_view")
 	queue_redraw()
@@ -107,6 +130,7 @@ func _start_seed(seed_value: int) -> void:
 	visual_time = 0.0
 	view_pan = Vector2.ZERO
 	user_zoom = 1.0
+	_update_terrain_layer_transform()
 	selected_kind = ""
 	selected_agent = null
 	follow_selected = false
@@ -145,20 +169,25 @@ func _process(delta: float) -> void:
 			TERRAIN_VISUAL_REFRESH
 		)
 		_refresh_terrain_visual_cache()
+		_rebuild_terrain_batch()
 
 	if follow_selected:
 		_update_selected_follow()
+
+	_update_terrain_layer_transform()
 
 	if telemetry != null:
 		telemetry.record_frame(
 			delta,
 			last_sim_step_ms,
 			last_draw_ms,
+			last_terrain_build_ms,
 			sim,
 			terrain,
 			_camera_zoom(),
 			rotation_quarter,
-			last_visible_tiles
+			last_visible_tiles,
+			last_terrain_triangles
 		)
 
 	queue_redraw()
@@ -169,15 +198,6 @@ func _draw() -> void:
 		return
 
 	var draw_start_usec: int = Time.get_ticks_usec()
-	last_visible_tiles = 0
-	var viewport_size: Vector2 = get_viewport_rect().size
-	draw_rect(
-		Rect2(Vector2.ZERO, viewport_size),
-		Color(0.025, 0.055, 0.060, 1.0),
-		true
-	)
-
-	_draw_isometric_terrain()
 	_draw_capability_fragments()
 	_draw_agents()
 	_draw_selection()
@@ -189,6 +209,260 @@ func _draw() -> void:
 	last_draw_ms = float(
 		Time.get_ticks_usec() - draw_start_usec
 	) / 1000.0
+
+
+func _update_terrain_layer_transform() -> void:
+	if terrain_batch_layer == null or terrain_mark_layer == null:
+		return
+	var origin: Vector2 = get_viewport_rect().size * 0.5 + view_pan
+	var zoom_value: float = _camera_zoom()
+	var transform := Transform2D(
+		0.0,
+		Vector2(zoom_value, zoom_value),
+		_round_vec(origin)
+	)
+	terrain_batch_layer.transform = transform
+	terrain_mark_layer.transform = transform
+
+
+func _rebuild_terrain_batch() -> void:
+	if (
+		terrain == null
+		or terrain_batch_layer == null
+		or terrain_mark_layer == null
+	):
+		return
+
+	var started: int = Time.get_ticks_usec()
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	var mark_points := PackedVector2Array()
+	var mark_colors := PackedColorArray()
+	var mark_indices := PackedInt32Array()
+
+	var dims: Vector2i = _rotated_dimensions()
+	var max_diag: int = dims.x + dims.y - 2
+	var tile_count: int = 0
+
+	for diag in range(max_diag + 1):
+		var rx_min: int = maxi(0, diag - (dims.y - 1))
+		var rx_max: int = mini(dims.x - 1, diag)
+		for rx in range(rx_min, rx_max + 1):
+			var ry: int = diag - rx
+			var source: Vector2i = _rotated_to_source(rx, ry)
+			var height_value: float = terrain.height_at_grid(
+				source.x,
+				source.y
+			)
+			var center: Vector2 = _project_rotated_grid_unscaled(
+				Vector2(float(rx), float(ry)),
+				height_value
+			)
+
+			var top := _round_vec(
+				center + Vector2(0.0, -TILE_HALF_H)
+			)
+			var right := _round_vec(
+				center + Vector2(TILE_HALF_W, 0.0)
+			)
+			var bottom := _round_vec(
+				center + Vector2(0.0, TILE_HALF_H)
+			)
+			var left := _round_vec(
+				center + Vector2(-TILE_HALF_W, 0.0)
+			)
+
+			var cache_index: int = (
+				source.y * terrain.width + source.x
+			)
+			var top_color: Color = (
+				terrain_color_cache[cache_index]
+				if (
+					cache_index >= 0
+					and cache_index < terrain_color_cache.size()
+				)
+				else _terrain_top_color(source, height_value)
+			)
+			var delta: float = terrain.height_delta_at_grid(
+				source.x,
+				source.y
+			)
+			if delta > 0.035:
+				top_color = top_color.lerp(
+					Color(0.62, 0.46, 0.24),
+					clampf(delta * 1.4, 0.10, 0.48)
+				)
+			elif delta < -0.035:
+				top_color = top_color.lerp(
+					Color(0.22, 0.15, 0.10),
+					clampf(-delta * 1.8, 0.12, 0.58)
+				)
+
+			if rx + 1 < dims.x:
+				var n1: Vector2i = _rotated_to_source(
+					rx + 1,
+					ry
+				)
+				var nh1: float = terrain.height_at_grid(
+					n1.x,
+					n1.y
+				)
+				if height_value > nh1 + 0.015:
+					var drop1: float = maxf(
+						1.0,
+						roundf(
+							(height_value - nh1)
+							* HEIGHT_PIXELS
+						)
+					)
+					_batch_quad(
+						points,
+						colors,
+						indices,
+						right,
+						bottom,
+						bottom + Vector2(0.0, drop1),
+						right + Vector2(0.0, drop1),
+						_side_color(top_color, 0.72)
+					)
+
+			if ry + 1 < dims.y:
+				var n2: Vector2i = _rotated_to_source(
+					rx,
+					ry + 1
+				)
+				var nh2: float = terrain.height_at_grid(
+					n2.x,
+					n2.y
+				)
+				if height_value > nh2 + 0.015:
+					var drop2: float = maxf(
+						1.0,
+						roundf(
+							(height_value - nh2)
+							* HEIGHT_PIXELS
+						)
+					)
+					_batch_quad(
+						points,
+						colors,
+						indices,
+						bottom,
+						left,
+						left + Vector2(0.0, drop2),
+						bottom + Vector2(0.0, drop2),
+						_side_color(top_color, 0.58)
+					)
+
+			_batch_quad(
+				points,
+				colors,
+				indices,
+				top,
+				right,
+				bottom,
+				left,
+				top_color
+			)
+			tile_count += 1
+
+			var mark: int = (
+				terrain_mark_cache[cache_index]
+				if (
+					cache_index >= 0
+					and cache_index < terrain_mark_cache.size()
+				)
+				else 0
+			)
+			if mark > 0:
+				var mark_color := Color(0.25, 0.50, 0.22, 0.82)
+				var mark_center := center + Vector2(0.0, -0.5)
+				if mark == 3:
+					mark_color = Color(0.72, 0.24, 0.10, 0.86)
+					mark_center += Vector2(0.0, -0.5)
+				elif mark == 2:
+					mark_color = Color(0.40, 0.25, 0.12, 0.90)
+					mark_center += Vector2(0.0, 0.5)
+				_batch_quad(
+					mark_points,
+					mark_colors,
+					mark_indices,
+					_round_vec(mark_center + Vector2(-1.0, -0.5)),
+					_round_vec(mark_center + Vector2(1.0, -0.5)),
+					_round_vec(mark_center + Vector2(1.0, 0.5)),
+					_round_vec(mark_center + Vector2(-1.0, 0.5)),
+					mark_color
+				)
+
+	var terrain_rid: RID = terrain_batch_layer.get_canvas_item()
+	var mark_rid: RID = terrain_mark_layer.get_canvas_item()
+	RenderingServer.canvas_item_clear(terrain_rid)
+	RenderingServer.canvas_item_clear(mark_rid)
+
+	if not indices.is_empty():
+		RenderingServer.canvas_item_add_triangle_array(
+			terrain_rid,
+			indices,
+			points,
+			colors
+		)
+	if not mark_indices.is_empty():
+		RenderingServer.canvas_item_add_triangle_array(
+			mark_rid,
+			mark_indices,
+			mark_points,
+			mark_colors
+		)
+
+	last_visible_tiles = tile_count
+	last_terrain_triangles = indices.size() / 3
+	last_terrain_build_ms = (
+		float(Time.get_ticks_usec() - started) / 1000.0
+	)
+
+
+func _batch_quad(
+	points: PackedVector2Array,
+	colors: PackedColorArray,
+	indices: PackedInt32Array,
+	a: Vector2,
+	b: Vector2,
+	c: Vector2,
+	d: Vector2,
+	color: Color
+) -> void:
+	var base: int = points.size()
+	points.append(a)
+	points.append(b)
+	points.append(c)
+	points.append(d)
+	colors.append(color)
+	colors.append(color)
+	colors.append(color)
+	colors.append(color)
+	indices.append(base)
+	indices.append(base + 1)
+	indices.append(base + 2)
+	indices.append(base)
+	indices.append(base + 2)
+	indices.append(base + 3)
+
+
+func _project_rotated_grid_unscaled(
+	grid: Vector2,
+	height_value: float
+) -> Vector2:
+	var dims: Vector2i = _rotated_dimensions()
+	var cx: float = float(dims.x - 1) * 0.5
+	var cy: float = float(dims.y - 1) * 0.5
+	var dx: float = grid.x - cx
+	var dy: float = grid.y - cy
+	return Vector2(
+		(dx - dy) * TILE_HALF_W,
+		(dx + dy) * TILE_HALF_H
+		- (height_value - 0.60) * HEIGHT_PIXELS
+	)
 
 
 func _draw_isometric_terrain() -> void:
@@ -804,15 +1078,9 @@ func _project_rotated_grid(
 	grid: Vector2,
 	height_value: float
 ) -> Vector2:
-	var dims: Vector2i = _rotated_dimensions()
-	var cx: float = float(dims.x - 1) * 0.5
-	var cy: float = float(dims.y - 1) * 0.5
-	var dx: float = grid.x - cx
-	var dy: float = grid.y - cy
-	var unscaled := Vector2(
-		(dx - dy) * TILE_HALF_W,
-		(dx + dy) * TILE_HALF_H
-		- (height_value - 0.60) * HEIGHT_PIXELS
+	var unscaled: Vector2 = _project_rotated_grid_unscaled(
+		grid,
+		height_value
 	)
 	return (
 		get_viewport_rect().size * 0.5
@@ -926,6 +1194,7 @@ func _zoom_at(
 func _rotate_view(step: int) -> void:
 	rotation_quarter = posmod(rotation_quarter + step, 4)
 	_recompute_fit_keep_zoom()
+	_rebuild_terrain_batch()
 	if follow_selected:
 		_update_selected_follow()
 	if telemetry != null:
@@ -1051,6 +1320,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_R:
 				_start_seed(current_seed)
 				_refresh_terrain_visual_cache()
+				_rebuild_terrain_batch()
 				_fit_view()
 			KEY_N:
 				current_seed += 1
@@ -1058,6 +1328,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if telemetry != null:
 					telemetry.mark_event("seed_changes")
 				_refresh_terrain_visual_cache()
+				_rebuild_terrain_batch()
 				_fit_view()
 			KEY_Q:
 				_rotate_view(-1)
@@ -1145,7 +1416,7 @@ func _select_at_screen(screen_position: Vector2) -> void:
 		telemetry.mark_event("selection_attempts")
 	var best_agent: Variant = null
 	var best_kind: String = ""
-	var best_distance_sq: float = 22.0 * 22.0
+	var best_distance_sq: float = 28.0 * 28.0
 
 	for record in _selection_groups():
 		var kind: String = String(record[0])
@@ -1294,7 +1565,7 @@ func _menu_panel_rect() -> Rect2:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	return Rect2(
 		Vector2(viewport_size.x - MENU_WIDTH - 12.0, 46.0),
-		Vector2(MENU_WIDTH, 236.0)
+		Vector2(MENU_WIDTH, 267.0)
 	)
 
 
@@ -1320,6 +1591,7 @@ func _draw_menu_panel() -> void:
 		"NEW SEED",
 		"PERF  " + ("ON" if metrics_visible else "OFF"),
 		"HELP  " + ("ON" if help_visible else "OFF"),
+		"EXIT TO DESKTOP",
 	]
 	for i in range(labels.size()):
 		var row := Rect2(
@@ -1469,9 +1741,9 @@ func _draw_metrics_panel() -> void:
 	)
 	_ui_text(
 		panel.position + Vector2(10.0, 37.0),
-		"sim %.2fms   tiles %d   agents %d" % [
+		"sim %.2fms   terrain batch %.2fms   agents %d" % [
 			last_sim_step_ms,
-			last_visible_tiles,
+			last_terrain_build_ms,
 			_total_agent_count(),
 		],
 		11,
@@ -1479,10 +1751,11 @@ func _draw_metrics_panel() -> void:
 	)
 	_ui_text(
 		panel.position + Vector2(10.0, 56.0),
-		"soil %.2f / %.2f   fragments %d" % [
+		"tiles %d   tris %d   soil %.2f / %.2f" % [
+			last_visible_tiles,
+			last_terrain_triangles,
 			float(terrain.excavated_total),
 			float(terrain.deposited_total),
-			terrain.capability_fragments.size(),
 		],
 		11,
 		Color(0.72, 0.70, 0.58)
@@ -1543,11 +1816,16 @@ func _handle_ui_click(position: Vector2) -> bool:
 			if telemetry != null:
 				telemetry.mark_event("seed_changes")
 			_refresh_terrain_visual_cache()
+			_rebuild_terrain_batch()
 			_fit_view()
 		4:
 			metrics_visible = not metrics_visible
 		5:
 			help_visible = not help_visible
+		6:
+			if telemetry != null:
+				telemetry.finalize()
+			get_tree().quit()
 	return true
 
 
@@ -1613,6 +1891,7 @@ func _draw_help() -> void:
 
 func _on_viewport_resized() -> void:
 	_recompute_fit_keep_zoom()
+	_update_terrain_layer_transform()
 
 
 func _toggle_fullscreen() -> void:

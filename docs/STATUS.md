@@ -416,3 +416,26 @@ Correction:
 - the Godot version regex is now valid and the publisher file is no longer
   duplicated/truncated;
 - the previously recorded local session report is still reusable after pulling.
+
+
+## Telemetry-driven terrain batching — session 2bbc866ed0204f23
+The first real #66 session made the renderer bottleneck measurable:
+- full-biome view: ~2776-2860 terrain tiles, ~4700-4840 draw calls,
+  ~78-83 ms of immediate terrain drawing, 5-7 FPS;
+- close view: ~480-535 tiles, ~950-1030 draw calls, ~23-25 ms drawing,
+  11-13 FPS;
+- simulation cost stayed comparatively stable at ~13-19 ms/tick.
+
+Correction:
+- terrain tops + exposed height faces are now emitted as one retained
+  RenderingServer triangle array instead of thousands of CanvasItem polygon
+  commands;
+- ecological tile marks are emitted as a second triangle-array batch;
+- camera pan/zoom/follow now transform the retained batch instead of rebuilding
+  terrain geometry;
+- geometry is rebuilt only for quarter-turn rotation or the 4 Hz terrain/ecology
+  refresh;
+- performance telemetry now records terrain batch rebuild time + triangle count;
+- session publisher Markdown interpolation/code fencing fixed;
+- menu gains EXIT TO DESKTOP;
+- click selection radius increased from 22 px to 28 px.

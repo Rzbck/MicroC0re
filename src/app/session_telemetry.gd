@@ -60,11 +60,13 @@ func record_frame(
 	delta: float,
 	sim_step_ms: float,
 	draw_ms: float,
+	terrain_build_ms: float,
 	sim: Variant,
 	terrain: Variant,
 	camera_zoom: float,
 	rotation_quarter: int,
-	visible_tiles: int
+	visible_tiles: int,
+	terrain_triangles: int
 ) -> void:
 	var frame_ms: float = maxf(0.0, delta * 1000.0)
 	frame_ms_sum += frame_ms
@@ -104,6 +106,7 @@ func record_frame(
 			sim_ms_sum / float(maxi(1, sim_sample_count))
 		),
 		"draw_ms": _round3(draw_ms),
+		"terrain_build_ms": _round3(terrain_build_ms),
 		"draw_calls": int(
 			Performance.get_monitor(
 				Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME
@@ -118,6 +121,7 @@ func record_frame(
 		"decomposers": sim.decomposers.size(),
 		"hyphae": sim.hyphae.size(),
 		"visible_tiles": visible_tiles,
+		"terrain_triangles": terrain_triangles,
 		"terrain_revision": int(terrain.revision),
 		"soil_excavated": _round3(float(terrain.excavated_total)),
 		"soil_deposited": _round3(float(terrain.deposited_total)),
@@ -149,9 +153,7 @@ func _write_report(complete: bool) -> void:
 		"schema": SCHEMA_VERSION,
 		"session_id": session_id,
 		"build_sha": build_sha,
-		"godot": String(
-			Engine.get_version_info().get("string", "unknown")
-		),
+		"godot": _godot_version(),
 		"os_family": _os_family(),
 		"gpu_vendor": _gpu_vendor(),
 		"renderer": _renderer_name(),
@@ -191,6 +193,16 @@ func _safe_build_sha(value: String) -> String:
 		if not character in "0123456789abcdef":
 			return "unknown"
 	return cleaned
+
+
+func _godot_version() -> String:
+	var info: Dictionary = Engine.get_version_info()
+	return "%d.%d.%d.%s" % [
+		int(info.get("major", 0)),
+		int(info.get("minor", 0)),
+		int(info.get("patch", 0)),
+		String(info.get("status", "unknown")),
+	]
 
 
 func _os_family() -> String:
