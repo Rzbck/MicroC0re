@@ -398,3 +398,12 @@ Correction:
 - public GitHub publication is opt-in and posts only a strict allowlist to #66;
   usernames, hostnames, IP/MAC, paths, locale/location, exact GPU model and raw
   logs are never included.
+
+
+## Telemetry publisher hotfix
+- fixed the PowerShell Godot-version allowlist regex: the hyphen inside the
+  character class formed an invalid reverse range (`.-+`) on Windows
+  PowerShell;
+- existing local `.microcore/telemetry/last-session.json` reports remain
+  valid and can be published after pulling this commit without replaying the
+  session.
