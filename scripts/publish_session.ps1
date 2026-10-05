@@ -109,7 +109,14 @@ foreach ($s in @($raw.samples)) {
 }
 
 $safeLongSamples = @()
+$hasLongSamples = (
+    [int]$raw.schema -ge 2
+    -and $null -ne $raw.PSObject.Properties["long_samples"]
+    -and $null -ne $raw.long_samples
+)
+if ($hasLongSamples) {
 foreach ($s in @($raw.long_samples)) {
+    if ($null -eq $s) { continue }
     $e = $s.events
     $safeLongSamples += [ordered]@{
         t_s = I $s.t_s
@@ -164,6 +171,7 @@ foreach ($s in @($raw.long_samples)) {
             disturbance_organic = I $e.disturbance_organic
         }
     }
+}
 }
 
 $frameValues = @($safeSamples | ForEach-Object { [double]$_.frame_ms_max })
