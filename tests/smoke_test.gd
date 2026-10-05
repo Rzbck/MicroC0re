@@ -394,6 +394,34 @@ func _init() -> void:
 	if int(cached_cell.phenotype_species_cache) != recomputed_species:
 		errors.append("performance: phenotype species cache stored wrong value")
 
+	# Basal decomposer dormancy is inherited/trait-driven and reversible.
+	var dormancy_probe = PetriSimulationScript.new(73015)
+	dormancy_probe.seed_demo(0)
+	if dormancy_probe.decomposers.is_empty() or dormancy_probe.hyphae.is_empty():
+		errors.append("ecology: dormancy probe seed guilds missing")
+	else:
+		var dormant_yeast = dormancy_probe.decomposers[0]
+		dormant_yeast.energy = 0.7
+		dormancy_probe.detritus.fill(0.0)
+		dormancy_probe._advance_decomposers(1.0)
+		if not bool(dormant_yeast.dormant):
+			errors.append("ecology: decomposer failed to enter resource dormancy")
+		dormancy_probe.detritus.fill(0.20)
+		dormancy_probe._advance_decomposers(1.0)
+		if bool(dormant_yeast.dormant):
+			errors.append("ecology: decomposer failed to wake on detritus")
+
+		var dormant_hypha = dormancy_probe.hyphae[0]
+		dormant_hypha.energy = 1.0
+		dormancy_probe.detritus.fill(0.0)
+		dormancy_probe._advance_hyphae(1.0)
+		if not bool(dormant_hypha.dormant):
+			errors.append("ecology: hypha failed to enter quiescence")
+		dormancy_probe.detritus.fill(0.20)
+		dormancy_probe._advance_hyphae(1.0)
+		if bool(dormant_hypha.dormant):
+			errors.append("ecology: hypha failed to wake on detritus")
+
 	# Trophic capacity regression: safety ceilings are guards, not population
 	# targets. Predator carrying capacities must respond to prey abundance.
 	var capacity_probe = PetriSimulationScript.new(73004)

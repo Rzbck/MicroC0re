@@ -20,6 +20,8 @@ var lysis_progress: float = 0.0
 var budding: bool = false
 var budding_progress: float = 0.0
 var cooldown: float = 0.0
+var dormant: bool = false
+var dormant_time: float = 0.0
 
 var engulfed_by_id: int = -1
 var engulf_progress: float = 0.0
@@ -30,6 +32,7 @@ var gene_mineralize: float = 1.0
 var gene_growth: float = 1.0
 var gene_size: float = 1.0
 var gene_metabolism: float = 1.0
+var gene_spore: float = 1.0
 var mutation_rate: float = 0.045
 var lineage_hue: float = 0.09
 var visual_phase: float = 0.0
@@ -67,6 +70,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_growth = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.70, 1.45)
 	gene_size = clampf(1.0 + p_rng.randfn(0.0, 0.06), 0.78, 1.35)
 	gene_metabolism = clampf(1.0 + p_rng.randfn(0.0, 0.05), 0.75, 1.35)
+	gene_spore = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.55, 1.80)
 	mutation_rate = clampf(0.065 + p_rng.randfn(0.0, 0.011), 0.020, 0.16)
 	lineage_hue = wrapf(0.08 + p_rng.randfn(0.0, 0.030), 0.0, 1.0)
 	visual_phase = p_rng.randf_range(0.0, TAU)
@@ -99,6 +103,9 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	gene_metabolism = _mutate(
 		float(parent.gene_metabolism), 0.040, 0.65, 1.45, mutation_rate, p_rng
 	)
+	gene_spore = _mutate(
+		float(parent.gene_spore), 0.055, 0.55, 1.80, mutation_rate, p_rng
+	)
 	lineage_hue = wrapf(
 		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.016 + mutation_rate * 0.035),
 		0.0,
@@ -122,8 +129,22 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	terrain_action = "none"
 
 
+func enter_dormancy() -> void:
+	if dying or consumed or engulfed_by_id >= 0:
+		return
+	dormant = true
+	dormant_time = 0.0
+	budding = false
+	budding_progress = 0.0
+
+
+func wake_from_dormancy() -> void:
+	dormant = false
+	dormant_time = 0.0
+
+
 func begin_budding() -> void:
-	if dying or budding or consumed or engulfed_by_id >= 0:
+	if dying or dormant or budding or consumed or engulfed_by_id >= 0:
 		return
 	budding = true
 	budding_progress = 0.0
@@ -134,6 +155,8 @@ func begin_lysis() -> void:
 		return
 	dying = true
 	alive = false
+	dormant = false
+	dormant_time = 0.0
 	budding = false
 	budding_progress = 0.0
 	lysis_progress = 0.0

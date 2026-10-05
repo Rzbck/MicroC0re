@@ -44,6 +44,7 @@ Biome → organisms:
 - habitat affinity bends movement;
 - anoxia costs energy according to tolerance;
 - producer/biofilm/detrital niches reward matching traits;
+- low detritus can push decomposers into spores and hyphal colonies into quiescence; renewed detritus wakes them locally without creating a new generation;
 - habitat state alters substrate diggability;
 - biome state alters slope stability.
 

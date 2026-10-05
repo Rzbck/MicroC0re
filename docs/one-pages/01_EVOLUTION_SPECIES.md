@@ -46,6 +46,7 @@ Dormant banks:
 - scarce prey raises predator competition cost;
 - abundant bacterial species face frequency-dependent pressure;
 - habitat traits bias local movement and energetic success;
+- decomposers evolve `gene_spore` and hyphae evolve `gene_quiescence`: stronger persistence lowers dormant maintenance and extends starvation survival, but still has finite reserves;
 - morphology/color are anchored to stable species with within-species lineage variation.
 
 ## Metrics

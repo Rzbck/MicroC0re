@@ -356,6 +356,11 @@ var decomposer_energy_yield: float = 4.2
 var decomposer_maintenance: float = 0.032
 var decomposer_budding_energy: float = 5.2
 var decomposer_budding_duration: float = 0.85
+var decomposer_dormancy_entry_detritus: float = 0.020
+var decomposer_dormancy_wake_detritus: float = 0.050
+var decomposer_dormancy_energy: float = 1.45
+var decomposer_dormant_maintenance_factor: float = 0.075
+var decomposer_dormancy_base_limit: float = 210.0
 
 # True bounded hyphal decomposers. Colonies grow a small branching node graph
 # toward detrital substrate and secrete a local extracellular enzyme field.
@@ -368,6 +373,11 @@ var hypha_growth_step: float = 1.65
 var hypha_tip_detritus_rate: float = 0.050
 var hypha_maintenance_per_node: float = 0.0017
 var hypha_sporulation_energy: float = 9.2
+var hypha_dormancy_entry_detritus: float = 0.018
+var hypha_dormancy_wake_detritus: float = 0.048
+var hypha_dormancy_energy: float = 2.2
+var hypha_dormant_maintenance_factor: float = 0.055
+var hypha_dormancy_base_limit: float = 300.0
 
 
 func _init(seed_value: int = 1) -> void:
@@ -1211,6 +1221,41 @@ func _advance_decomposers(dt: float) -> void:
 		)
 
 		var position: Vector2 = Vector2(yeast.position)
+		var local_detritus: float = float(detritus.sample_nearest_world(position))
+		var spore_trait: float = clampf(float(yeast.gene_spore), 0.55, 1.80)
+
+		if bool(yeast.dormant):
+			yeast.dormant_time = float(yeast.dormant_time) + dt
+			yeast.energy = maxf(
+				0.0,
+				float(yeast.energy)
+				- decomposer_maintenance
+				* float(yeast.gene_metabolism)
+				* decomposer_dormant_maintenance_factor
+				/ spore_trait
+				* dt
+			)
+			if local_detritus >= decomposer_dormancy_wake_detritus / sqrt(spore_trait):
+				yeast.wake_from_dormancy()
+				_event_inc("wake_decomposer")
+			elif (
+				float(yeast.energy) <= 0.0
+				or float(yeast.dormant_time)
+					>= decomposer_dormancy_base_limit * spore_trait
+			):
+				yeast.begin_lysis()
+			next_decomposers.append(yeast)
+			continue
+
+		if (
+			local_detritus < decomposer_dormancy_entry_detritus / spore_trait
+			and float(yeast.energy) <= decomposer_dormancy_energy * spore_trait
+		):
+			yeast.enter_dormancy()
+			_event_inc("dormancy_decomposer")
+			next_decomposers.append(yeast)
+			continue
+
 		var consumed_detritus: float = float(
 			detritus.take_nearest_world(
 				position,
@@ -1370,6 +1415,22 @@ func _constrain_small_organism(organism: Variant) -> void:
 	organism.position = position
 
 
+func _hypha_best_detritus(colony: Variant) -> float:
+	var best: float = 0.0
+	for tip_index in colony.tips:
+		if int(tip_index) < 0 or int(tip_index) >= colony.nodes.size():
+			continue
+		best = maxf(
+			best,
+			float(
+				detritus.sample_nearest_world(
+					colony.nodes[int(tip_index)]
+				)
+			)
+		)
+	return best
+
+
 func _advance_hyphae(dt: float) -> void:
 	var next_hyphae: Array = []
 	var available_colonies: int = maxi(
@@ -1393,6 +1454,45 @@ func _advance_hyphae(dt: float) -> void:
 
 		colony.age = float(colony.age) + dt
 		colony.cooldown = maxf(0.0, float(colony.cooldown) - dt)
+		var best_detritus: float = _hypha_best_detritus(colony)
+		var quiescence_trait: float = clampf(
+			float(colony.gene_quiescence),
+			0.55,
+			1.80
+		)
+
+		if bool(colony.dormant):
+			colony.dormant_time = float(colony.dormant_time) + dt
+			colony.energy = maxf(
+				0.0,
+				float(colony.energy)
+				- hypha_maintenance_per_node
+				* float(colony.nodes.size())
+				* hypha_dormant_maintenance_factor
+				/ quiescence_trait
+				* dt
+			)
+			if best_detritus >= hypha_dormancy_wake_detritus / sqrt(quiescence_trait):
+				colony.wake_from_dormancy()
+				_event_inc("wake_hypha")
+			elif (
+				float(colony.energy) <= 0.0
+				or float(colony.dormant_time)
+					>= hypha_dormancy_base_limit * quiescence_trait
+			):
+				colony.begin_lysis()
+			next_hyphae.append(colony)
+			continue
+
+		if (
+			best_detritus < hypha_dormancy_entry_detritus / quiescence_trait
+			and float(colony.energy) <= hypha_dormancy_energy * quiescence_trait
+		):
+			colony.enter_dormancy()
+			_event_inc("dormancy_hypha")
+			next_hyphae.append(colony)
+			continue
+
 		colony.visual_phase = wrapf(float(colony.visual_phase) + dt * 0.45, 0.0, TAU)
 		colony.growth_accumulator = float(colony.growth_accumulator) + dt
 
@@ -3417,10 +3517,12 @@ func phenotype_species_id(agent: Variant, family_code: int) -> int:
 			signature = _species_mix(signature, _species_bin(float(agent.gene_detritus), 0.50, 1.85))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_mineralize), 0.50, 1.85))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_growth), 0.55, 1.70))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_spore), 0.55, 1.80))
 		6:
 			signature = _species_mix(signature, _species_bin(float(agent.gene_branch), 0.45, 1.85))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_enzyme), 0.50, 1.75))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_efficiency), 0.55, 1.65))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_quiescence), 0.55, 1.80))
 
 	if family_code == 0:
 		agent.phenotype_species_cache = signature
@@ -5232,6 +5334,10 @@ func _reset_ecology_events() -> void:
 		"repro_algae": 0,
 		"repro_decomposers": 0,
 		"repro_hyphae": 0,
+		"dormancy_decomposer": 0,
+		"wake_decomposer": 0,
+		"dormancy_hypha": 0,
+		"wake_hypha": 0,
 		"refugia_bacteria": 0,
 		"refugia_protozoa": 0,
 		"refugia_ciliates": 0,

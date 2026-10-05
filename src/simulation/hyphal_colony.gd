@@ -19,6 +19,8 @@ var lysis_progress: float = 0.0
 var cooldown: float = 0.0
 var visual_phase: float = 0.0
 var growth_accumulator: float = 0.0
+var dormant: bool = false
+var dormant_time: float = 0.0
 
 var nodes: Array[Vector2] = []
 var parents: Array[int] = []
@@ -28,6 +30,7 @@ var gene_growth: float = 1.0
 var gene_branch: float = 1.0
 var gene_enzyme: float = 1.0
 var gene_efficiency: float = 1.0
+var gene_quiescence: float = 1.0
 var mutation_rate: float = 0.040
 var lineage_hue: float = 0.10
 
@@ -60,6 +63,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	gene_branch = clampf(1.0 + p_rng.randfn(0.0, 0.10), 0.55, 1.60)
 	gene_enzyme = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.62, 1.50)
 	gene_efficiency = clampf(1.0 + p_rng.randfn(0.0, 0.07), 0.70, 1.45)
+	gene_quiescence = clampf(1.0 + p_rng.randfn(0.0, 0.08), 0.55, 1.80)
 	mutation_rate = clampf(0.060 + p_rng.randfn(0.0, 0.009), 0.020, 0.15)
 	lineage_hue = wrapf(0.10 + p_rng.randfn(0.0, 0.025), 0.0, 1.0)
 
@@ -87,6 +91,9 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	gene_efficiency = _mutate(
 		float(parent.gene_efficiency), 0.050, 0.55, 1.60, mutation_rate, p_rng
 	)
+	gene_quiescence = _mutate(
+		float(parent.gene_quiescence), 0.055, 0.55, 1.80, mutation_rate, p_rng
+	)
 	lineage_hue = wrapf(
 		float(parent.lineage_hue) + p_rng.randfn(0.0, 0.014 + mutation_rate * 0.032),
 		0.0,
@@ -106,6 +113,20 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	burrow_depth = 0.0
 	terrain_action_clock = 0.0
 	terrain_action = "none"
+
+
+func enter_dormancy() -> void:
+	if dying:
+		return
+	dormant = true
+	dormant_time = 0.0
+	growth_accumulator = 0.0
+
+
+func wake_from_dormancy() -> void:
+	dormant = false
+	dormant_time = 0.0
+	growth_accumulator = 0.0
 
 
 func add_node(parent_index: int, node_position: Vector2) -> int:
@@ -141,6 +162,8 @@ func begin_lysis() -> void:
 		return
 	dying = true
 	alive = false
+	dormant = false
+	dormant_time = 0.0
 	lysis_progress = 0.0
 
 
