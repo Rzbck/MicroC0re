@@ -25,6 +25,25 @@ $optInPath = Join-Path $localDir "telemetry-opt-in"
 
 New-Item -ItemType Directory -Path $telemetryDir -Force | Out-Null
 
+# Preserve the previous run before SessionTelemetry.begin() overwrites
+# last-session.json. This matters especially for overnight ecology runs.
+if (Test-Path $reportPath) {
+    $archiveDir = Join-Path $telemetryDir "archive"
+    New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $archivePath = Join-Path $archiveDir ("session-" + $stamp + ".json")
+    Copy-Item -Path $reportPath -Destination $archivePath -Force
+
+    # Keep the archive bounded.
+    $archives = @(
+        Get-ChildItem -Path $archiveDir -Filter "session-*.json" -File |
+        Sort-Object LastWriteTime -Descending
+    )
+    if ($archives.Count -gt 24) {
+        $archives | Select-Object -Skip 24 | Remove-Item -Force
+    }
+}
+
 $env:MICROCORE_SESSION_REPORT = $reportPath
 
 try {
