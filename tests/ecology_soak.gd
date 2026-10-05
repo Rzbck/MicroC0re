@@ -57,7 +57,7 @@ func _init() -> void:
 		if elapsed + 0.0001 >= next_report:
 			var biome: Dictionary = terrain.biome_metrics()
 			print(
-				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d sp=%d eco=%d gen=%d refuge=%d biome=%d/%d/%d/%d/%d/%d soil=%.1f/%.1f"
+				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d sp=%d eco=%d gen=%d refuge=%d biome=%d/%d/%d/%d/%d/%d fieldMax=%.3f/%.3f/%.3f/%.3f/%.3f soil=%.1f/%.1f"
 				% [
 					int(round(elapsed)), sim.bacteria.size(), sim.protozoa.size(),
 					sim.ciliates.size(), sim.flagellates.size(), sim.microalgae.size(),
@@ -72,6 +72,11 @@ func _init() -> void:
 					int(biome.get("fungal", 0)),
 					int(biome.get("anoxic", 0)),
 					int(biome.get("disturbed", 0)),
+					float(sim.eps.max_value()),
+					float(sim.quorum_signal.max_value()),
+					float(sim.detritus.max_value()),
+					float(sim.fungal_enzyme.max_value()),
+					float(sim.waste.max_value()),
 					float(terrain.excavated_total), float(terrain.deposited_total),
 				]
 			)

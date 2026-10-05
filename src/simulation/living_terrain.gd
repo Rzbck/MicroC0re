@@ -51,6 +51,8 @@ var biome_transition_pressure: PackedFloat32Array = PackedFloat32Array()
 var biome_ages: PackedFloat32Array = PackedFloat32Array()
 var biome_transitions_total: int = 0
 var _biome_accumulator: float = 0.0
+var _biome_field_indices: PackedInt32Array = PackedInt32Array()
+var _biome_field_signature: Vector3i = Vector3i.ZERO
 
 # Bounded mobile physical cassettes. When an organism disappears, one sampled
 # capability module can remain in the environment for a short time. Any current
@@ -284,38 +286,72 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 
 
 
-func _candidate_biome_state(sim: Variant, x: int, y: int) -> int:
-	var world: Vector2 = world_position_for_grid(x, y)
-	var producer: float = float(sim.producer_biomass.sample_nearest_world(world))
-	var eps_value: float = float(sim.eps.sample_nearest_world(world))
-	var detritus_value: float = float(sim.detritus.sample_nearest_world(world))
-	var fungal_value: float = float(sim.fungal_enzyme.sample_nearest_world(world))
-	var oxygen_value: float = float(sim.oxygen.sample_nearest_world(world))
-	var waste_value: float = float(sim.waste.sample_nearest_world(world))
-	var quorum_value: float = float(sim.quorum_signal.sample_nearest_world(world))
-	var disturbed: float = absf(height_delta_at_grid(x, y))
+func _ensure_biome_field_indices(sim: Variant) -> void:
+	var field_width: int = int(sim.nutrient.width)
+	var field_height: int = int(sim.nutrient.height)
+	var field_cell_milli: int = roundi(float(sim.nutrient.cell_size) * 1000.0)
+	var signature := Vector3i(field_width, field_height, field_cell_milli)
+	if (
+		_biome_field_indices.size() == width * height
+		and _biome_field_signature == signature
+	):
+		return
 
-	if oxygen_value < 0.11 and (waste_value > 0.06 or detritus_value > 0.07):
+	_biome_field_signature = signature
+	_biome_field_indices.resize(width * height)
+	var inverse_cell: float = 1.0 / maxf(0.0001, float(sim.nutrient.cell_size))
+	for y in range(height):
+		var fy: int = clampi(
+			floori(float(y) * CELL_SIZE * inverse_cell),
+			0,
+			field_height - 1
+		)
+		for x in range(width):
+			var fx: int = clampi(
+				floori(float(x) * CELL_SIZE * inverse_cell),
+				0,
+				field_width - 1
+			)
+			_biome_field_indices[_index(x, y)] = fy * field_width + fx
+
+
+func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
+	var field_index: int = int(_biome_field_indices[terrain_index])
+	var producer: float = float(sim.producer_biomass.values[field_index])
+	var eps_value: float = float(sim.eps.values[field_index])
+	var detritus_value: float = float(sim.detritus.values[field_index])
+	var fungal_value: float = float(sim.fungal_enzyme.values[field_index])
+	var oxygen_value: float = float(sim.oxygen.values[field_index])
+	var waste_value: float = float(sim.waste.values[field_index])
+	var quorum_value: float = float(sim.quorum_signal.values[field_index])
+	var disturbed: float = absf(
+		float(heights[terrain_index]) - float(baseline_heights[terrain_index])
+	)
+
+	# These are regime thresholds, not visual-only labels. Hysteresis below
+	# still requires a signal to persist before the substrate changes state.
+	if oxygen_value < 0.16 and (waste_value > 0.035 or detritus_value > 0.045):
 		return BIOME_ANOXIC
-	if fungal_value > 0.035 or (fungal_value > 0.010 and detritus_value > 0.10):
+	if fungal_value > 0.012 or (fungal_value > 0.0045 and detritus_value > 0.055):
 		return BIOME_FUNGAL
-	if eps_value > 0.10 or (eps_value > 0.055 and quorum_value > 0.08):
+	if eps_value > 0.025 or (eps_value > 0.012 and quorum_value > 0.025):
 		return BIOME_BIOFILM
-	if producer > 0.12 and oxygen_value > 0.14:
+	if producer > 0.070 and oxygen_value > 0.12:
 		return BIOME_PRODUCER
-	if detritus_value > 0.075:
+	if detritus_value > 0.040:
 		return BIOME_DETRITAL
-	if disturbed > 0.30:
+	if disturbed > 0.22:
 		return BIOME_DISTURBED
 	return BIOME_OPEN
 
 
 func _advance_biome_succession(sim: Variant, dt: float) -> void:
+	_ensure_biome_field_indices(sim)
 	for y in range(height):
 		for x in range(width):
 			var index: int = _index(x, y)
 			var current: int = int(biome_states[index])
-			var candidate: int = _candidate_biome_state(sim, x, y)
+			var candidate: int = _candidate_biome_state(sim, index)
 			biome_ages[index] = float(biome_ages[index]) + dt
 
 			if candidate == current:
