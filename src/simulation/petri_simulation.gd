@@ -144,6 +144,7 @@ var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
 var _bacteria_dense_index_by_id: Dictionary = {}
 var bacteria_hot_store: Variant = BacteriaHotStoreScript.new()
+var _bacteria_hot_store_dirty: bool = true
 var _edible_by_id: Dictionary = {}
 var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
 var _ecotype_counts: PackedInt32Array = PackedInt32Array()
@@ -418,6 +419,7 @@ func _init(seed_value: int = 1) -> void:
 func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
 	bacteria_hot_store.clear()
+	_bacteria_hot_store_dirty = true
 	_bacteria_dense_index_by_id.clear()
 	protozoa.clear()
 	ciliates.clear()
@@ -770,10 +772,8 @@ func step(dt: float) -> void:
 
 		# Hot-path rule: do not rebuild/copy the population array on ordinary
 		# ticks. Cells mutate in place; only completed death/division triggers
-		# one stable compaction pass at the end of the tick.
-		if bacteria_hot_store.size() != bacteria.size():
-			_rebuild_bacteria_hot_store()
-
+		# one stable compaction pass at the end of the tick. The persistent
+		# render SoA is synchronized lazily outside this biological hot loop.
 		for cell_index in range(bacteria.size()):
 			var cell: Variant = bacteria[cell_index]
 			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
@@ -783,7 +783,6 @@ func step(dt: float) -> void:
 				continue
 
 			if int(cell.engulfed_by_id) >= 0:
-				_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if bool(cell.dying):
@@ -792,8 +791,6 @@ func step(dt: float) -> void:
 					bacteria_identity_changed = true
 					cell.alive = false
 					_recycle_dead_cell(cell)
-				else:
-					_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			var run_metabolism: bool = (
@@ -809,7 +806,6 @@ func step(dt: float) -> void:
 				_advance_cell_motion_only(cell, agent_dt)
 
 			if bool(cell.dying):
-				_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if bool(cell.dividing):
@@ -829,15 +825,12 @@ func step(dt: float) -> void:
 						cell.dividing = false
 						cell.division_progress = 0.0
 						cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
-						_sync_bacteria_hot_cell(cell_index)
-				else:
-					_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if _ready_to_begin_division(cell):
 				cell.begin_division()
-			_sync_bacteria_hot_cell(cell_index)
 
+		_bacteria_hot_store_dirty = true
 		if bacteria_identity_changed:
 			_compact_bacteria_population(pending_births)
 			_rebuild_bacteria_id_map()
@@ -902,7 +895,7 @@ func _compact_bacteria_population(pending_births: Array) -> void:
 	if not pending_births.is_empty():
 		bacteria.append_array(pending_births)
 		pending_births.clear()
-	_rebuild_bacteria_hot_store()
+	_bacteria_hot_store_dirty = true
 
 
 func _chemistry_dt_for_population() -> float:
@@ -3447,7 +3440,7 @@ func _sync_bacteria_hot_cell(index: int) -> void:
 
 
 func _sync_bacteria_hot_object(cell: Variant) -> void:
-	if cell == null:
+	if cell == null or _bacteria_hot_store_dirty:
 		return
 	var dense_index: int = int(
 		_bacteria_dense_index_by_id.get(int(cell.id), -1)
@@ -3460,10 +3453,14 @@ func _rebuild_bacteria_hot_store() -> void:
 	bacteria_hot_store.resize(bacteria.size())
 	for i in range(bacteria.size()):
 		_sync_bacteria_hot_cell(i)
+	_bacteria_hot_store_dirty = false
 
 
 func bacteria_render_snapshot() -> Dictionary:
-	if bacteria_hot_store.size() != bacteria.size():
+	if (
+		_bacteria_hot_store_dirty
+		or bacteria_hot_store.size() != bacteria.size()
+	):
 		_rebuild_bacteria_hot_store()
 	return bacteria_hot_store.render_snapshot()
 
@@ -4565,7 +4562,7 @@ func _restore_refugium(kind: int, parent: Variant) -> bool:
 		5: _event_inc("refugia_hyphae")
 		6:
 			_event_inc("refugia_bacteria")
-			_rebuild_bacteria_hot_store()
+			_bacteria_hot_store_dirty = true
 			_rebuild_bacteria_id_map()
 	if "cooldown" in child:
 		child.cooldown = 2.5
@@ -4811,7 +4808,7 @@ func _resolve_all_contacts() -> void:
 		_resolve_density_contacts()
 		for dense_index in range(bacteria.size()):
 			_constrain_to_world(bacteria[dense_index])
-			_sync_bacteria_hot_cell(dense_index)
+		_bacteria_hot_store_dirty = true
 		return
 
 	mechanics_mode_last = 0
@@ -4868,7 +4865,7 @@ func _resolve_all_contacts() -> void:
 
 	for exact_index in range(bacteria.size()):
 		_constrain_to_world(bacteria[exact_index])
-		_sync_bacteria_hot_cell(exact_index)
+	_bacteria_hot_store_dirty = true
 
 
 func _density_neighbor_visit_cap() -> int:
@@ -4990,8 +4987,6 @@ func _resolve_density_contacts() -> void:
 func _rebuild_spatial_grid() -> void:
 	_grid_head.fill(-1)
 	var count: int = bacteria.size()
-	if bacteria_hot_store.size() != count:
-		_rebuild_bacteria_hot_store()
 	_grid_next.resize(count)
 	_grid_next.fill(-1)
 	_mech_positions.resize(count)
@@ -5000,14 +4995,14 @@ func _rebuild_spatial_grid() -> void:
 	_max_half_body_length = 0.0
 
 	for i in range(count):
-		var position: Vector2 = bacteria_hot_store.positions[i]
-		var state: int = int(bacteria_hot_store.states[i])
+		var cell: Variant = bacteria[i]
+		var position: Vector2 = Vector2(cell.position)
 		_mech_positions[i] = position
-		_mech_radii[i] = float(bacteria_hot_store.radii[i])
+		_mech_radii[i] = float(cell.radius)
 		var active: bool = (
-			(state & int(BacteriaHotStoreScript.STATE_DYING)) == 0
-			and (state & int(BacteriaHotStoreScript.STATE_CONSUMED)) == 0
-			and (state & int(BacteriaHotStoreScript.STATE_ENGULFED)) == 0
+			not bool(cell.dying)
+			and not bool(cell.consumed)
+			and int(cell.engulfed_by_id) < 0
 		)
 		_mech_active[i] = 1 if active else 0
 		if not active:
@@ -5015,7 +5010,7 @@ func _rebuild_spatial_grid() -> void:
 
 		_max_half_body_length = maxf(
 			_max_half_body_length,
-			float(bacteria_hot_store.lengths[i]) * 0.5
+			float(cell.length) * 0.5
 		)
 		var x: int = clampi(
 			floori(position.x / SPATIAL_BUCKET_SIZE),
@@ -5030,7 +5025,6 @@ func _rebuild_spatial_grid() -> void:
 		var cell_index: int = y * GRID_WIDTH + x
 		_grid_next[i] = _grid_head[cell_index]
 		_grid_head[cell_index] = i
-
 
 func _resolve_pair(a: Variant, b: Variant) -> void:
 	var position_a: Vector2 = Vector2(a.position)

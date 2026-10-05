@@ -299,10 +299,15 @@ func _init() -> void:
 	var hot_births: Array = []
 	hot_probe._compact_bacteria_population(hot_births)
 	hot_probe._rebuild_bacteria_id_map()
+	if not hot_probe._bacteria_hot_store_dirty:
+		errors.append("performance: hot-store compaction failed to invalidate snapshot")
+	hot_probe.bacteria_render_snapshot()
+	if hot_probe._bacteria_hot_store_dirty:
+		errors.append("performance: hot-store render snapshot stayed dirty")
 	if hot_probe.bacteria_hot_store.size() != hot_probe.bacteria.size():
-		errors.append("performance: hot-store size diverged after compaction")
+		errors.append("performance: hot-store size diverged after lazy compaction sync")
 	elif int(hot_probe.bacteria_hot_store.ids[1]) != int(hot_probe.bacteria[1].id):
-		errors.append("performance: hot-store compaction alignment failed")
+		errors.append("performance: hot-store lazy compaction alignment failed")
 
 	# Far-render bacteria are exported as packed dense state rather than
 	# requiring the renderer to traverse RefCounted cell objects.
