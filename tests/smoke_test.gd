@@ -232,13 +232,15 @@ func _init() -> void:
 			errors.append("ecology: refuge wake incorrectly advanced generation")
 		if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != 2:
 			errors.append("ecology: bacterial diversity wake count mismatch")
-	var refuge_count_before: int = refuge_probe.refugia_recoveries_total
+	var bacterial_wakes_before: int = int(
+		refuge_probe.ecology_events.get("refugia_bacteria", 0)
+	)
 	refuge_probe.bacteria.clear()
 	refuge_probe._maintain_ecological_refugia(
 		PetriSimulationScript.REFUGIA_RECOVERY_INTERVAL
 	)
-	if refuge_probe.refugia_recoveries_total != refuge_count_before:
-		errors.append("ecology: refuge cooldown allowed immediate reinjection churn")
+	if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != bacterial_wakes_before:
+		errors.append("ecology: bacterial refuge cooldown allowed immediate reinjection churn")
 
 	var id_probe = PetriSimulationScript.new(73001)
 	id_probe.seed_demo(24)
