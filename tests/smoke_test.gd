@@ -154,6 +154,25 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Multi-species seed-bank regression: guild crashes must not collapse all
+	# dormant diversity to one remembered clone.
+	var guild_bank_probe = PetriSimulationScript.new(73003)
+	guild_bank_probe.seed_demo(24)
+	guild_bank_probe._refresh_refugia_memory()
+	if guild_bank_probe._refugia_guild_banks[3].size() < 2:
+		errors.append("ecology: algal refugia failed to retain multiple species")
+	if guild_bank_probe._refugia_guild_banks[4].size() < 2:
+		errors.append("ecology: decomposer refugia failed to retain multiple species")
+	guild_bank_probe.protozoa.clear()
+	guild_bank_probe.ciliates.clear()
+	guild_bank_probe.microalgae.clear()
+	guild_bank_probe._try_wake_guild_bank(
+		3,
+		PetriSimulationScript.REFUGIA_BASAL_DIVERSITY_WAKE
+	)
+	if guild_bank_probe.microalgae.size() < 2:
+		errors.append("ecology: algal extinction did not restore dormant species diversity")
+
 	# Refugia regression: a fully lost bacterial guild must be recoverable from
 	# the seed bank, and germination must not fake a reproductive generation.
 	var refuge_probe = PetriSimulationScript.new(73002)

@@ -68,6 +68,8 @@ const REFUGIA_HYPHA_MIN := 1
 const REFUGIA_RECOVERY_INTERVAL := 10.0
 const REFUGIA_WAKE_COOLDOWN := 180.0
 const REFUGIA_BACTERIA_BANK_LIMIT := 8
+const REFUGIA_GUILD_BANK_LIMIT := 6
+const REFUGIA_BASAL_DIVERSITY_WAKE := 2
 
 const DISTURBANCE_RESOURCE_PULSE := 0
 const DISTURBANCE_WASHOUT := 1
@@ -138,6 +140,8 @@ var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
 var _ecotype_counts: PackedInt32Array = PackedInt32Array()
 var _refugia_bacteria: Array = []
 var _refugia_bacteria_cursor: int = 0
+var _refugia_guild_banks: Array = [[], [], [], [], [], []]
+var _refugia_guild_cursors: PackedInt32Array = PackedInt32Array()
 var _refugia_next_wake: PackedFloat32Array = PackedFloat32Array()
 var _refugia_protozoan: Variant = null
 var _refugia_ciliate: Variant = null
@@ -374,6 +378,8 @@ func _init(seed_value: int = 1) -> void:
 	_ecotype_counts.fill(0)
 	_refugia_next_wake.resize(7)
 	_refugia_next_wake.fill(0.0)
+	_refugia_guild_cursors.resize(6)
+	_refugia_guild_cursors.fill(0)
 	_direction_lut.resize(DIRECTION_LUT_SIZE)
 	for i in range(DIRECTION_LUT_SIZE):
 		var lut_angle: float = (
@@ -410,6 +416,9 @@ func seed_demo(count: int = 36) -> void:
 	_ecotype_counts.fill(0)
 	_refugia_bacteria.clear()
 	_refugia_bacteria_cursor = 0
+	for bank in _refugia_guild_banks:
+		bank.clear()
+	_refugia_guild_cursors.fill(0)
 	_refugia_next_wake.fill(0.0)
 	_refugia_protozoan = null
 	_refugia_ciliate = null
@@ -4199,20 +4208,60 @@ func _rebuild_id_maps() -> void:
 	_rebuild_edible_id_map()
 
 
-func _best_refugium(group: Array, current: Variant) -> Variant:
-	var best: Variant = current
-	var best_score: float = -INF
+func _refugia_organism_score(organism: Variant) -> float:
+	return float(organism.energy) + float(organism.generation) * 0.040
+
+
+func _refresh_guild_refugia(group: Array, kind: int) -> void:
+	var bank: Array = _refugia_guild_banks[kind]
+	var family_code: int = kind + 1
 	for organism in group:
 		if organism == null or bool(organism.dying):
 			continue
 		if "consumed" in organism and bool(organism.consumed):
 			continue
-		var score: float = float(organism.energy)
-		if score > best_score:
-			best_score = score
-			best = organism
-	return best
+		if "engulfed_by_id" in organism and int(organism.engulfed_by_id) >= 0:
+			continue
 
+		var species_id: int = phenotype_species_id(organism, family_code)
+		var matched_index: int = -1
+		for i in range(bank.size()):
+			if phenotype_species_id(bank[i], family_code) == species_id:
+				matched_index = i
+				break
+		if matched_index >= 0:
+			if _refugia_organism_score(organism) > _refugia_organism_score(bank[matched_index]):
+				bank[matched_index] = organism
+			continue
+
+		if bank.size() < REFUGIA_GUILD_BANK_LIMIT:
+			bank.append(organism)
+			continue
+
+		# A genuinely new, later-evolved species may enter the finite seed bank
+		# by displacing the weakest archived phenotype.
+		var weakest_index: int = 0
+		var weakest_score: float = _refugia_organism_score(bank[0])
+		for i in range(1, bank.size()):
+			var score: float = _refugia_organism_score(bank[i])
+			if score < weakest_score:
+				weakest_score = score
+				weakest_index = i
+		if _refugia_organism_score(organism) > weakest_score:
+			bank[weakest_index] = organism
+
+
+func _next_guild_refugia_templates(kind: int, requested: int) -> Array:
+	var result: Array = []
+	var bank: Array = _refugia_guild_banks[kind]
+	if bank.is_empty() or requested <= 0:
+		return result
+	var take: int = mini(requested, bank.size())
+	var cursor: int = int(_refugia_guild_cursors[kind])
+	for offset in range(take):
+		result.append(bank[posmod(cursor + offset, bank.size())])
+	_refugia_guild_cursors[kind] = cursor + take
+	return result
 
 func _refugia_cell_score(cell: Variant) -> float:
 	return (
@@ -4258,12 +4307,12 @@ func _refresh_bacterial_refugia() -> void:
 
 func _refresh_refugia_memory() -> void:
 	_refresh_bacterial_refugia()
-	_refugia_protozoan = _best_refugium(protozoa, _refugia_protozoan)
-	_refugia_ciliate = _best_refugium(ciliates, _refugia_ciliate)
-	_refugia_flagellate = _best_refugium(flagellates, _refugia_flagellate)
-	_refugia_microalga = _best_refugium(microalgae, _refugia_microalga)
-	_refugia_decomposer = _best_refugium(decomposers, _refugia_decomposer)
-	_refugia_hypha = _best_refugium(hyphae, _refugia_hypha)
+	_refresh_guild_refugia(protozoa, 0)
+	_refresh_guild_refugia(ciliates, 1)
+	_refresh_guild_refugia(flagellates, 2)
+	_refresh_guild_refugia(microalgae, 3)
+	_refresh_guild_refugia(decomposers, 4)
+	_refresh_guild_refugia(hyphae, 5)
 
 
 func _refugia_position(parent: Variant, margin: float) -> Vector2:
@@ -4387,17 +4436,60 @@ func _refugia_can_wake(kind: int) -> bool:
 	return false
 
 
-func _try_wake_refugium(kind: int, parent: Variant) -> void:
+func _try_wake_refugium(kind: int, parent: Variant) -> bool:
 	if parent == null or not _refugia_can_wake(kind):
+		return false
+	if simulation_time < float(_refugia_next_wake[kind]):
+		return false
+	if not _restore_refugium(kind, parent):
+		return false
+	_refugia_next_wake[kind] = (
+		simulation_time
+		+ REFUGIA_WAKE_COOLDOWN * rng.randf_range(0.85, 1.20)
+	)
+	return true
+
+
+func _try_wake_guild_bank(kind: int, requested: int) -> void:
+	if not _refugia_can_wake(kind):
 		return
 	if simulation_time < float(_refugia_next_wake[kind]):
 		return
-	if _restore_refugium(kind, parent):
+	var templates: Array = _next_guild_refugia_templates(kind, requested)
+	if templates.is_empty():
+		return
+
+	var woke_any: bool = false
+	for parent in templates:
+		if _restore_refugium(kind, parent):
+			woke_any = true
+	if woke_any:
 		_refugia_next_wake[kind] = (
 			simulation_time
 			+ REFUGIA_WAKE_COOLDOWN * rng.randf_range(0.85, 1.20)
 		)
 
+
+func _try_wake_bacterial_bank(requested: int) -> void:
+	if _refugia_bacteria.is_empty() or not _refugia_can_wake(6):
+		return
+	if simulation_time < float(_refugia_next_wake[6]):
+		return
+
+	var take: int = mini(requested, _refugia_bacteria.size())
+	var woke_any: bool = false
+	for offset in range(take):
+		var parent: Variant = _refugia_bacteria[
+			posmod(_refugia_bacteria_cursor + offset, _refugia_bacteria.size())
+		]
+		if _restore_refugium(6, parent):
+			woke_any = true
+	_refugia_bacteria_cursor += take
+	if woke_any:
+		_refugia_next_wake[6] = (
+			simulation_time
+			+ REFUGIA_WAKE_COOLDOWN * rng.randf_range(0.85, 1.20)
+		)
 
 func _maintain_ecological_refugia(dt: float) -> void:
 	_refresh_refugia_memory()
@@ -4408,24 +4500,20 @@ func _maintain_ecological_refugia(dt: float) -> void:
 
 	# Refugia preserve lineages through true active-population extinction.
 	# They do not hold populations at an artificial floor.
-	if bacteria.size() < REFUGIA_BACTERIA_MIN and not _refugia_bacteria.is_empty():
-		var template: Variant = _refugia_bacteria[
-			posmod(_refugia_bacteria_cursor, _refugia_bacteria.size())
-		]
-		_refugia_bacteria_cursor += 1
-		_try_wake_refugium(6, template)
+	if bacteria.size() < REFUGIA_BACTERIA_MIN:
+		_try_wake_bacterial_bank(2)
 	if protozoa.size() < REFUGIA_PROTOZOA_MIN:
-		_try_wake_refugium(0, _refugia_protozoan)
+		_try_wake_guild_bank(0, 1)
 	if ciliates.size() < REFUGIA_CILIATE_MIN:
-		_try_wake_refugium(1, _refugia_ciliate)
+		_try_wake_guild_bank(1, 1)
 	if flagellates.size() < REFUGIA_FLAGELLATE_MIN:
-		_try_wake_refugium(2, _refugia_flagellate)
+		_try_wake_guild_bank(2, 1)
 	if microalgae.size() < REFUGIA_MICROALGA_MIN:
-		_try_wake_refugium(3, _refugia_microalga)
+		_try_wake_guild_bank(3, REFUGIA_BASAL_DIVERSITY_WAKE)
 	if decomposers.size() < REFUGIA_DECOMPOSER_MIN:
-		_try_wake_refugium(4, _refugia_decomposer)
+		_try_wake_guild_bank(4, REFUGIA_BASAL_DIVERSITY_WAKE)
 	if hyphae.size() < REFUGIA_HYPHA_MIN:
-		_try_wake_refugium(5, _refugia_hypha)
+		_try_wake_guild_bank(5, REFUGIA_BASAL_DIVERSITY_WAKE)
 
 
 func _apply_founder_niche(agent: Variant, family_code: int, index: int) -> void:
