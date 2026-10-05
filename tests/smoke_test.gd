@@ -208,6 +208,23 @@ func _init() -> void:
 	if worst_drift_error > 0.035:
 		errors.append("performance: drift LUT approximation exceeded motion tolerance")
 
+	# Motion helper remains a deterministic reference for dense-path edge
+	# cases (dormancy and phage lysis) after the hot loop is inlined.
+	var inline_motion_probe = PetriSimulationScript.new(73018)
+	inline_motion_probe.seed_demo(4)
+	var inline_cell = inline_motion_probe.bacteria[0]
+	inline_cell.dormant = true
+	var dormant_position: Vector2 = Vector2(inline_cell.position)
+	inline_motion_probe._advance_cell_motion_only(inline_cell, 0.125)
+	if Vector2(inline_cell.position).distance_to(dormant_position) > 0.0001:
+		errors.append("performance: motion reference moved dormant bacterium")
+	inline_cell.dormant = false
+	inline_cell.phage_infected = true
+	inline_cell.phage_progress = 0.999
+	inline_motion_probe._advance_cell_motion_only(inline_cell, 0.125)
+	if not bool(inline_cell.dying):
+		errors.append("performance: motion reference lost phage lysis transition")
+
 	# Direct cohort routing must remain equivalent to the legacy helper.
 	var routing_probe = PetriSimulationScript.new(73011)
 	routing_probe.seed_demo(16)

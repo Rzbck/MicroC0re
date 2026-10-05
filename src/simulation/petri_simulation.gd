@@ -781,6 +781,11 @@ func step(dt: float) -> void:
 			bacteria_population_limit - bacteria.size()
 		)
 		var bacteria_identity_changed: bool = false
+		var motion_drift_scale: float = 0.16 * agent_dt
+		var phage_progress_step: float = (
+			agent_dt / maxf(0.001, phage_latent_period)
+		)
+		var phage_energy_cost_step: float = phage_infection_cost * agent_dt
 
 		# Hot-path rule: do not rebuild/copy the population array on ordinary
 		# ticks. Cells mutate in place; only completed death/division triggers
@@ -819,7 +824,91 @@ func step(dt: float) -> void:
 			if run_metabolism:
 				_advance_cell(cell, agent_dt)
 			else:
-				_advance_cell_motion_only(cell, agent_dt)
+				# Inline dominant dense path: at ultra density four cells out
+				# of five skip metabolism. Avoid thousands of GDScript calls.
+				cell.age = float(cell.age) + agent_dt
+				var skip_motion: bool = false
+				if bool(cell.dormant):
+					cell.dormant_time = float(cell.dormant_time) + agent_dt
+					skip_motion = true
+				elif bool(cell.phage_infected):
+					cell.phage_progress = minf(
+						1.0,
+						float(cell.phage_progress) + phage_progress_step
+					)
+					cell.energy = maxf(
+						0.0,
+						float(cell.energy) - phage_energy_cost_step
+					)
+					if float(cell.phage_progress) >= 1.0:
+						cell.phage_triggered_lysis = true
+						cell.begin_lysis()
+						skip_motion = true
+
+				if not skip_motion:
+					var motion_position: Vector2 = Vector2(cell.position)
+					var motion_field_index: int = _field_index_for_world(
+						motion_position
+					)
+					var motion_eps: float = float(
+						eps.values[motion_field_index]
+					)
+					var motion_energy_factor: float = clampf(
+						float(cell.energy) * 0.625,
+						0.18,
+						1.0
+					)
+					var motion_division_factor: float = (
+						0.16 if bool(cell.dividing) else 1.0
+					)
+					var motion_speed: float = (
+						run_speed
+						* float(cell.motion_speed_base)
+						* motion_energy_factor
+						* motion_division_factor
+					)
+					if float(cell.expression_matrix) > 0.08:
+						var motion_quorum: float = float(
+							quorum_signal.values[motion_field_index]
+						)
+						motion_speed *= lerpf(
+							1.0,
+							0.56,
+							clampf(motion_quorum * 8.0, 0.0, 1.0)
+							* clampf(
+								float(cell.expression_matrix),
+								0.0,
+								1.0
+							)
+						)
+
+					var motion_drift_phase: int = (
+						(
+							int(cell.id) * 17
+							+ _agent_tick * 11
+						) * DRIFT_LUT_PHASE_STEP
+					) % DRIFT_LUT_SIZE
+					cell.angle = wrapf(
+						float(cell.angle)
+						+ float(_drift_lut[motion_drift_phase])
+						* motion_drift_scale,
+						-PI,
+						PI
+					)
+					var motion_heading: Vector2 = _direction_for_angle(
+						float(cell.angle)
+					)
+					var motion_scale: float = (
+						agent_dt / (1.0 + motion_eps * 0.85)
+					)
+					cell.position = (
+						motion_position
+						+ motion_heading * motion_speed * motion_scale
+						+ _water_flow_for_field_index(
+							motion_field_index
+						) * motion_scale
+					)
+					_constrain_to_world(cell)
 
 			if bool(cell.dying):
 				continue
@@ -978,7 +1067,7 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 	var field_index: int = _field_index_for_world(cell_position)
 	var local_eps: float = float(eps.values[field_index])
 	var energy_speed_factor: float = clampf(
-		float(cell.energy) / 1.6,
+		float(cell.energy) * 0.625,
 		0.18,
 		1.0
 	)
@@ -1004,11 +1093,11 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 	var drift_turn: float = float(_drift_lut[drift_phase]) * 0.16 * dt
 	cell.angle = wrapf(float(cell.angle) + drift_turn, -PI, PI)
 	var heading: Vector2 = _direction_for_angle(float(cell.angle))
-	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)
+	var motion_scale: float = dt / (1.0 + local_eps * 0.85)
 	cell.position = (
 		cell_position
-		+ heading * speed * eps_drag * dt
-		+ _water_flow_for_field_index(field_index) * dt * eps_drag
+		+ heading * speed * motion_scale
+		+ _water_flow_for_field_index(field_index) * motion_scale
 	)
 	_constrain_to_world(cell)
 
