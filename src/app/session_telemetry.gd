@@ -1,9 +1,11 @@
 class_name SessionTelemetry
 extends RefCounted
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
 const SAMPLE_INTERVAL := 2.0
 const MAX_SAMPLES := 900
+const LONG_SAMPLE_INTERVAL := 60
+const MAX_LONG_SAMPLES := 10080
 
 var report_path: String = ""
 var session_id: String = ""
@@ -17,6 +19,7 @@ var frame_count: int = 0
 var sim_ms_sum: float = 0.0
 var sim_sample_count: int = 0
 var samples: Array = []
+var long_samples: Array = []
 var counters := {
 	"rotations": 0,
 	"zooms": 0,
@@ -160,6 +163,38 @@ func record_frame(
 	if samples.size() > MAX_SAMPLES:
 		samples.pop_front()
 
+	var should_store_long: bool = (
+		long_samples.is_empty()
+		or int(sample["t_s"]) - int(long_samples[-1]["t_s"]) >= LONG_SAMPLE_INTERVAL
+	)
+	if should_store_long:
+		var events: Dictionary = sim.ecology_event_metrics()
+		long_samples.append({
+			"t_s": int(sample["t_s"]),
+			"agents": int(sample["agents"]),
+			"bacteria": int(sample["bacteria"]),
+			"protozoa": int(sample["protozoa"]),
+			"ciliates": int(sample["ciliates"]),
+			"flagellates": int(sample["flagellates"]),
+			"algae": int(sample["algae"]),
+			"decomposers": int(sample["decomposers"]),
+			"hyphae": int(sample["hyphae"]),
+			"actual_speed": float(sample["actual_speed"]),
+			"soil_excavated": float(sample["soil_excavated"]),
+			"soil_deposited": float(sample["soil_deposited"]),
+			"ecotypes": int(sample["ecotypes"]),
+			"lineage_bins": int(sample["lineage_bins"]),
+			"max_generation": int(sample["max_generation"]),
+			"structural_mutations": int(sample["structural_mutations"]),
+			"hgt_events": int(sample["hgt_events"]),
+			"transformations": int(sample["transformations"]),
+			"capability_mix_events": int(sample["capability_mix_events"]),
+			"refugia_recoveries": int(sample["refugia_recoveries"]),
+			"events": events,
+		})
+		if long_samples.size() > MAX_LONG_SAMPLES:
+			long_samples.pop_front()
+
 	frame_ms_sum = 0.0
 	frame_ms_max = 0.0
 	frame_count = 0
@@ -188,6 +223,7 @@ func _write_report(complete: bool) -> void:
 		"complete": complete,
 		"counters": counters.duplicate(true),
 		"samples": samples,
+		"long_samples": long_samples,
 	}
 	var file := FileAccess.open(report_path, FileAccess.WRITE)
 	if file == null:

@@ -141,6 +141,7 @@ var _refugia_decomposer: Variant = null
 var _refugia_hypha: Variant = null
 var _refugia_accumulator: float = 0.0
 var refugia_recoveries_total: int = 0
+var ecology_events: Dictionary = {}
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
 var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
 var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
@@ -407,6 +408,7 @@ func seed_demo(count: int = 36) -> void:
 	_refugia_hypha = null
 	_refugia_accumulator = 0.0
 	refugia_recoveries_total = 0
+	_reset_ecology_events()
 	simulation_time = 0.0
 	_chemistry_accumulator = 0.0
 	_slow_biome_accumulator = 0.0
@@ -1067,6 +1069,7 @@ func _advance_microalgae(dt: float) -> void:
 
 
 func _divide_microalga(parent: Variant) -> Array:
+	_event_inc("repro_algae")
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis * float(parent.radius) * 0.72
 	var daughter_energy: float = float(parent.energy) * 0.46
@@ -1222,6 +1225,7 @@ func _advance_decomposers(dt: float) -> void:
 
 
 func _bud_decomposer(parent: Variant) -> Array:
+	_event_inc("repro_decomposers")
 	var old_energy: float = float(parent.energy)
 	var axis: Vector2 = Vector2.RIGHT.rotated(
 		float(parent.angle) + rng.randf_range(-0.7, 0.7)
@@ -1474,6 +1478,7 @@ func _advance_fungal_decomposition(dt: float) -> void:
 
 
 func _sporulate_hypha(parent: Variant) -> Variant:
+	_event_inc("repro_hyphae")
 	if parent.tips.is_empty():
 		return null
 	var tip_index: int = int(parent.tips[posmod(parent.id + parent.generation, parent.tips.size())])
@@ -1656,6 +1661,7 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 		defense_factor,
 		dt
 	):
+		_event_inc("escape_flagellate")
 		prey.engulfed_by_id = -1
 		prey.engulf_progress = 0.0
 		var escape_axis: Vector2 = (
@@ -1683,6 +1689,7 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 	)
 
 	if progress >= 1.0:
+		_record_predation("flagellate", prey)
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
@@ -1700,6 +1707,7 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 
 
 func _divide_flagellate(parent: Variant) -> Array:
+	_event_inc("repro_flagellates")
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.72
 	var daughter_energy: float = float(parent.energy) * 0.44
@@ -2049,6 +2057,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		defense_factor,
 		dt
 	):
+		_event_inc("escape_proto")
 		prey.engulfed_by_id = -1
 		prey.engulf_progress = 0.0
 		var escape_axis: Vector2 = (
@@ -2080,6 +2089,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 	proto.angle = wrapf(float(proto.angle) + wobble * dt, -PI, PI)
 
 	if progress >= 1.0:
+		_record_predation("proto", prey)
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
@@ -2101,6 +2111,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 
 
 func _divide_protozoan(parent: Variant) -> Array:
+	_event_inc("repro_protozoa")
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.65
 	var daughter_energy: float = float(parent.energy) * 0.44
@@ -2380,6 +2391,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		defense_factor,
 		dt
 	):
+		_event_inc("escape_ciliate")
 		prey.engulfed_by_id = -1
 		prey.engulf_progress = 0.0
 		var escape_axis: Vector2 = (
@@ -2413,6 +2425,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 	)
 
 	if progress >= 1.0:
+		_record_predation("ciliate", prey)
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
@@ -2434,6 +2447,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 
 
 func _divide_ciliate(parent: Variant) -> Array:
+	_event_inc("repro_ciliates")
 	var axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var offset: Vector2 = axis.orthogonal() * float(parent.radius) * 0.70
 	var daughter_energy: float = float(parent.energy) * 0.44
@@ -3242,6 +3256,7 @@ func _refresh_population_metadata() -> int:
 
 
 func _divide(parent: Variant) -> Array:
+	_event_inc("repro_bacteria")
 	var parent_axis: Vector2 = Vector2.RIGHT.rotated(float(parent.angle))
 	var parent_length: float = float(parent.length)
 	var daughter_energy: float = float(parent.energy) * 0.475
@@ -3314,6 +3329,7 @@ func _trigger_disturbance(event_index: int) -> void:
 
 	match event_type:
 		DISTURBANCE_RESOURCE_PULSE:
+			_event_inc("disturbance_resource")
 			# A local dissolved-resource pulse creates a bloom opportunity.
 			nutrient.add_radial_world(
 				position,
@@ -3332,6 +3348,7 @@ func _trigger_disturbance(event_index: int) -> void:
 			)
 
 		DISTURBANCE_WASHOUT:
+			_event_inc("disturbance_washout")
 			# Local shear/fresh-water turnover removes attached material rather
 			# than deleting organisms. Detached biomass becomes detrital resource,
 			# creating a scavenger/decomposer opportunity after the disturbance.
@@ -3372,6 +3389,7 @@ func _trigger_disturbance(event_index: int) -> void:
 			)
 
 		DISTURBANCE_ORGANIC_FALL:
+			_event_inc("disturbance_organic")
 			# A bounded particulate pulse favors decomposers/scavengers and then
 			# cross-feeders as mineralization/exudation proceeds.
 			detritus.add_radial_world(
@@ -4180,6 +4198,13 @@ func _restore_refugium(kind: int, parent: Variant) -> void:
 			hyphae.append(child)
 	if child != null:
 		refugia_recoveries_total += 1
+		match kind:
+			0: _event_inc("refugia_protozoa")
+			1: _event_inc("refugia_ciliates")
+			2: _event_inc("refugia_flagellates")
+			3: _event_inc("refugia_algae")
+			4: _event_inc("refugia_decomposers")
+			5: _event_inc("refugia_hyphae")
 		if "cooldown" in child:
 			child.cooldown = 2.5
 
@@ -4612,6 +4637,72 @@ func max_generation() -> int:
 	for cell in bacteria:
 		result = maxi(result, int(cell.generation))
 	return result
+
+func _reset_ecology_events() -> void:
+	ecology_events = {
+		"pred_proto_bacteria": 0,
+		"pred_proto_ciliate": 0,
+		"pred_proto_flagellate": 0,
+		"pred_proto_algae": 0,
+		"pred_proto_decomposer": 0,
+		"pred_ciliate_bacteria": 0,
+		"pred_ciliate_flagellate": 0,
+		"pred_ciliate_algae": 0,
+		"pred_ciliate_decomposer": 0,
+		"pred_flagellate_bacteria": 0,
+		"escape_proto": 0,
+		"escape_ciliate": 0,
+		"escape_flagellate": 0,
+		"repro_bacteria": 0,
+		"repro_protozoa": 0,
+		"repro_ciliates": 0,
+		"repro_flagellates": 0,
+		"repro_algae": 0,
+		"repro_decomposers": 0,
+		"repro_hyphae": 0,
+		"refugia_protozoa": 0,
+		"refugia_ciliates": 0,
+		"refugia_flagellates": 0,
+		"refugia_algae": 0,
+		"refugia_decomposers": 0,
+		"refugia_hyphae": 0,
+		"disturbance_resource": 0,
+		"disturbance_washout": 0,
+		"disturbance_organic": 0,
+	}
+
+
+func _event_inc(name: String, amount: int = 1) -> void:
+	ecology_events[name] = int(ecology_events.get(name, 0)) + amount
+
+
+func ecology_event_metrics() -> Dictionary:
+	return ecology_events.duplicate(true)
+
+
+func _prey_event_kind(prey: Variant) -> String:
+	if prey == null:
+		return "unknown"
+	var prey_script: Variant = prey.get_script()
+	if prey_script == BacteriumScript:
+		return "bacteria"
+	if prey_script == CiliateScript:
+		return "ciliate"
+	if prey_script == FlagellateScript:
+		return "flagellate"
+	if prey_script == MicroalgaScript:
+		return "algae"
+	if prey_script == DecomposerYeastScript:
+		return "decomposer"
+	return "unknown"
+
+
+func _record_predation(predator: String, prey: Variant) -> void:
+	var prey_kind: String = _prey_event_kind(prey)
+	var key: String = "pred_%s_%s" % [predator, prey_kind]
+	if ecology_events.has(key):
+		_event_inc(key)
+
 
 func evolution_metrics() -> Dictionary:
 	var ecotypes: Dictionary = {}
