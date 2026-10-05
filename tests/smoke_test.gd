@@ -52,6 +52,26 @@ func _init() -> void:
 	if lysis_fx == null or lysis_fx.get_width() <= 0:
 		errors.append("render: lysis effect asset missing")
 
+	# Terrain physical evaluation is cohort-based from medium density upward.
+	var terrain_stride_sim = PetriSimulationScript.new(19188)
+	terrain_stride_sim.seed_demo(12)
+	var terrain_stride_probe = LivingTerrainScript.new(
+		19188,
+		Vector2(terrain_stride_sim.world_size)
+	)
+	if terrain_stride_probe._terrain_bacteria_stride(terrain_stride_sim) != 1:
+		errors.append("performance: small terrain cohort stride mismatch")
+	while terrain_stride_sim.bacteria.size() < LivingTerrainScript.TERRAIN_MEDIUM_THRESHOLD:
+		terrain_stride_sim.bacteria.append(
+			BacteriumScript.new(
+				940000 + terrain_stride_sim.bacteria.size(),
+				Vector2(30.0, 30.0),
+				0.0
+			)
+		)
+	if terrain_stride_probe._terrain_bacteria_stride(terrain_stride_sim) != 2:
+		errors.append("performance: medium terrain cohort stride mismatch")
+
 	# Seasonal living cover progresses through ecological stages and rocks
 	# remain persistent substrate.
 	var cover_sim = PetriSimulationScript.new(19189)

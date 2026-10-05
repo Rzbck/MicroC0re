@@ -868,8 +868,10 @@ func _terrain_agent_dt(sim: Variant) -> float:
 func _terrain_bacteria_stride(sim: Variant) -> int:
 	var count: int = sim.bacteria.size()
 	if count >= TERRAIN_ULTRA_THRESHOLD:
-		return 4
+		return 5
 	if count >= TERRAIN_MASS_THRESHOLD:
+		return 3
+	if count >= TERRAIN_MEDIUM_THRESHOLD:
 		return 2
 	return 1
 

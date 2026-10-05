@@ -48,6 +48,8 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 
 ## Current tranche
 
+- Living-terrain physical evaluation now starts bacterial cohorting at the medium-density threshold (350+): 1/2 medium, 1/3 mass, 1/5 ultra, with compensated dt. This directly targets the high `earth_ms` seen around 1.2k–1.5k agents without deleting terraforming behavior.
+
 - Dense bacterial terrain updates are deterministic cohorts: every organism keeps its terrain/biome behavior, but expensive physical evaluation is distributed in time with compensated `dt`.
 - Phenotype-species identity is now cold cached state on bacteria and is invalidated only by phenotype/genome changes. Hot population/render loops no longer repeatedly classify unchanged cells.
 - Water flow is materialized as a packed per-field Vector2 cache; bacterial movement consumes the already-known field index instead of repeating world→grid conversion in the hot loop.
