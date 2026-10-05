@@ -48,6 +48,6 @@ Dormant banks:
 
 ## Metrics
 
-Track: species per guild, exact ecotypes, lineage bins, max true generation, mutation/HGT/transformation, reproduction per guild, predation edges, prey escape, refuge wakes.
+Track: species per guild, exact ecotypes, lineage bins, max true generation, mutation/HGT/transformation, reproduction per guild, predation edges, prey escape, refuge wakes, and **predator population / trophic carrying capacity** over time.
 
 **Current target:** many genotypes, fewer readable species, no predator pinned to a safety ceiling.

@@ -82,6 +82,9 @@ foreach ($s in @($raw.samples)) {
         protozoa = I $s.protozoa
         ciliates = I $s.ciliates
         flagellates = I $s.flagellates
+        capacity_protozoa = I $s.capacity_protozoa
+        capacity_ciliates = I $s.capacity_ciliates
+        capacity_flagellates = I $s.capacity_flagellates
         algae = I $s.algae
         decomposers = I $s.decomposers
         hyphae = I $s.hyphae
@@ -109,6 +112,7 @@ foreach ($s in @($raw.samples)) {
         biome_fungal = I $s.biome_fungal
         biome_anoxic = I $s.biome_anoxic
         biome_disturbed = I $s.biome_disturbed
+        biome_recently_modified = I $s.biome_recently_modified
         biome_transitions = I $s.biome_transitions
         lineage_bins = I $s.lineage_bins
         max_generation = I $s.max_generation
@@ -140,6 +144,9 @@ foreach ($s in @($raw.long_samples)) {
         protozoa = I $s.protozoa
         ciliates = I $s.ciliates
         flagellates = I $s.flagellates
+        capacity_protozoa = I $s.capacity_protozoa
+        capacity_ciliates = I $s.capacity_ciliates
+        capacity_flagellates = I $s.capacity_flagellates
         algae = I $s.algae
         decomposers = I $s.decomposers
         hyphae = I $s.hyphae
@@ -161,6 +168,7 @@ foreach ($s in @($raw.long_samples)) {
         biome_fungal = I $s.biome_fungal
         biome_anoxic = I $s.biome_anoxic
         biome_disturbed = I $s.biome_disturbed
+        biome_recently_modified = I $s.biome_recently_modified
         biome_transitions = I $s.biome_transitions
         lineage_bins = I $s.lineage_bins
         max_generation = I $s.max_generation
@@ -363,6 +371,23 @@ if ($historySamples.Count -gt 0) {
 }
 $diversityText = $diversityLines -join [Environment]::NewLine
 
+$trophicLines = New-Object System.Collections.Generic.List[string]
+$trophicLines.Add("t_s proto/pCap cil/cCap fla/fCap recentModified")
+if ($historySamples.Count -gt 0) {
+    $trophicStride = [Math]::Max(1, [int][Math]::Ceiling($historySamples.Count / 120.0))
+    for ($i = 0; $i -lt $historySamples.Count; $i += $trophicStride) {
+        $s = $historySamples[$i]
+        $trophicLines.Add((
+            "{0} {1}/{2} {3}/{4} {5}/{6} {7}" -f
+            (I $s.t_s),(I $s.protozoa),(I $s.capacity_protozoa),
+            (I $s.ciliates),(I $s.capacity_ciliates),
+            (I $s.flagellates),(I $s.capacity_flagellates),
+            (I $s.biome_recently_modified)
+        ))
+    }
+}
+$trophicText = $trophicLines -join [Environment]::NewLine
+
 $summary = @"
 ### Session $sessionId
 
@@ -393,7 +418,8 @@ Ecological history: $historyStart s → $historyEnd s ($([Math]::Round($historyC
 
 Evolution final/peak: species $(FinalValue "species")/$([Math]::Round((Percentile $speciesValues 1.0),0)), ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
 Terraforming final: excavated $([Math]::Round((N $lastSample.soil_excavated),2)), deposited $([Math]::Round((N $lastSample.soil_deposited),2)).  
-Biome final: producer $(FinalValue "biome_producer"), biofilm $(FinalValue "biome_biofilm"), detrital $(FinalValue "biome_detrital"), fungal $(FinalValue "biome_fungal"), anoxic $(FinalValue "biome_anoxic"), disturbed $(FinalValue "biome_disturbed"), transitions $(FinalValue "biome_transitions").  
+Biome final: producer $(FinalValue "biome_producer"), biofilm $(FinalValue "biome_biofilm"), detrital $(FinalValue "biome_detrital"), fungal $(FinalValue "biome_fungal"), anoxic $(FinalValue "biome_anoxic"), disturbed $(FinalValue "biome_disturbed"), recently modified $(FinalValue "biome_recently_modified"), transitions $(FinalValue "biome_transitions").  
+Trophic final: protozoa $(FinalValue "protozoa")/$(FinalValue "capacity_protozoa"), ciliates $(FinalValue "ciliates")/$(FinalValue "capacity_ciliates"), flagellates $(FinalValue "flagellates")/$(FinalValue "capacity_flagellates").  
 Interactions final: proto predation $(PredProto $historyLast), ciliate predation $(PredCiliate $historyLast), flagellate predation $(PredFlagellate $historyLast), prey escapes $(EscapeTotal $historyLast).  
 Reproduction final: bacteria $(EventValue $historyLast "repro_bacteria"), protozoa $(EventValue $historyLast "repro_protozoa"), ciliates $(EventValue $historyLast "repro_ciliates"), flagellates $(EventValue $historyLast "repro_flagellates"), algae $(EventValue $historyLast "repro_algae"), decomposers $(EventValue $historyLast "repro_decomposers"), hyphae $(EventValue $historyLast "repro_hyphae").  
 Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
@@ -412,6 +438,15 @@ $timelineText
 
 ```text
 $diversityText
+```
+
+</details>
+
+<details>
+<summary>Predator carrying-capacity timeline (≤120 rows)</summary>
+
+```text
+$trophicText
 ```
 
 </details>

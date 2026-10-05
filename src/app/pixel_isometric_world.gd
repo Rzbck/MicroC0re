@@ -2080,8 +2080,8 @@ func _draw_inspector() -> void:
 func _draw_metrics_panel() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var panel := Rect2(
-		Vector2(12.0, viewport_size.y - 128.0),
-		Vector2(430.0, 110.0)
+		Vector2(12.0, viewport_size.y - 147.0),
+		Vector2(430.0, 129.0)
 	)
 	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
 	_ui_text(
@@ -2135,17 +2135,31 @@ func _draw_metrics_panel() -> void:
 	var biome: Dictionary = biome_metrics_cache
 	_ui_text(
 		panel.position + Vector2(10.0, 94.0),
-		"biome P%d B%d D%d F%d A%d X%d  transitions %d" % [
+		"biome P%d B%d D%d F%d A%d X%d mod%d tr%d" % [
 			int(biome.get("producer", 0)),
 			int(biome.get("biofilm", 0)),
 			int(biome.get("detrital", 0)),
 			int(biome.get("fungal", 0)),
 			int(biome.get("anoxic", 0)),
 			int(biome.get("disturbed", 0)),
+			int(biome.get("recently_modified", 0)),
 			int(biome.get("transitions", 0)),
 		],
 		11,
 		Color(0.62, 0.80, 0.66)
+	)
+	_ui_text(
+		panel.position + Vector2(10.0, 113.0),
+		"trophic pro %d/%d  cil %d/%d  fla %d/%d" % [
+			sim.protozoa.size(),
+			sim._protozoan_carrying_capacity(),
+			sim.ciliates.size(),
+			sim._ciliate_carrying_capacity(),
+			sim.flagellates.size(),
+			sim._flagellate_carrying_capacity(),
+		],
+		11,
+		Color(0.83, 0.67, 0.58)
 	)
 
 func _handle_ui_click(position: Vector2) -> bool:
