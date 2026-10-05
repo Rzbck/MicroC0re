@@ -103,6 +103,8 @@ var far_agent_accumulator: float = 0.0
 var last_far_agent_count: int = 0
 var evolution_metrics_cache: Dictionary = {}
 var biome_metrics_cache: Dictionary = {}
+var hydrology_metrics_cache: Dictionary = {}
+var cover_metrics_cache: Dictionary = {}
 var evolution_metrics_accumulator: float = 0.0
 
 
@@ -281,6 +283,8 @@ func _process(delta: float) -> void:
 			evolution_metrics_accumulator = fmod(evolution_metrics_accumulator, 0.5)
 			evolution_metrics_cache = sim.evolution_metrics()
 			biome_metrics_cache = terrain.biome_metrics()
+			hydrology_metrics_cache = terrain.hydrology_metrics()
+			cover_metrics_cache = terrain.cover_metrics()
 
 	_update_terrain_layer_transform()
 
@@ -311,6 +315,7 @@ func _draw() -> void:
 		return
 
 	var draw_start_usec: int = Time.get_ticks_usec()
+	_draw_water_sparkles()
 	_draw_capability_fragments()
 	_draw_agents()
 	_draw_selected_detail_overlay()
@@ -495,6 +500,9 @@ func _rebuild_terrain_batch() -> void:
 			)
 			if mark > 0:
 				var mark_center := center + Vector2(0.0, -0.5)
+				var flora_variant: float = float(
+					posmod(cache_index * 37 + current_seed * 11, 3)
+				)
 				if mark <= 3:
 					var mark_color := Color(0.25, 0.50, 0.22, 0.82)
 					if mark == 3:
@@ -522,51 +530,75 @@ func _rebuild_terrain_batch() -> void:
 						Color(0.28, 0.58, 0.24, 0.92)
 					)
 				elif mark == 5:
-					# Shrub: dark base + lighter crown.
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-2.1, -1.3)),
-						_round_vec(mark_center + Vector2(2.1, -1.3)),
-						_round_vec(mark_center + Vector2(1.7, 0.3)),
-						_round_vec(mark_center + Vector2(-1.7, 0.3)),
-						Color(0.18, 0.43, 0.20, 0.96)
-					)
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-1.3, -2.0)),
-						_round_vec(mark_center + Vector2(1.3, -2.0)),
-						_round_vec(mark_center + Vector2(1.1, -0.8)),
-						_round_vec(mark_center + Vector2(-1.1, -0.8)),
-						Color(0.32, 0.62, 0.26, 0.96)
-					)
+					var shrub_spread: float = 2.4 + flora_variant * 0.35
+					var shrub_dark: Color = _season_palette(Color(0.16, 0.42, 0.18), 0.55)
+					var shrub_light: Color = _season_palette(Color(0.34, 0.64, 0.27), 0.62)
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-2.6, 0.0)),
+						_round_vec(mark_center + Vector2(2.6, 0.0)),
+						_round_vec(mark_center + Vector2(1.8, 0.8)),
+						_round_vec(mark_center + Vector2(-1.8, 0.8)),
+						Color(0.03, 0.05, 0.03, 0.30))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-shrub_spread, -1.5)),
+						_round_vec(mark_center + Vector2(shrub_spread, -1.5)),
+						_round_vec(mark_center + Vector2(1.9, 0.3)),
+						_round_vec(mark_center + Vector2(-1.9, 0.3)),
+						shrub_dark)
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.6, -2.5 - flora_variant * 0.25)),
+						_round_vec(mark_center + Vector2(1.6, -2.5 - flora_variant * 0.25)),
+						_round_vec(mark_center + Vector2(1.25, -0.8)),
+						_round_vec(mark_center + Vector2(-1.25, -0.8)),
+						shrub_light)
 				elif mark == 6:
-					# Tree: tiny pixel trunk + canopy, still batched.
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-0.55, -3.0)),
-						_round_vec(mark_center + Vector2(0.55, -3.0)),
+					var tree_height: float = 5.4 + flora_variant * 0.7
+					var canopy_w: float = 3.3 + flora_variant * 0.35
+					var canopy_dark: Color = _season_palette(Color(0.12, 0.38, 0.16), 0.78)
+					var canopy_light: Color = _season_palette(Color(0.26, 0.58, 0.22), 0.86)
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-3.2, 0.1)),
+						_round_vec(mark_center + Vector2(3.2, 0.1)),
+						_round_vec(mark_center + Vector2(2.0, 1.1)),
+						_round_vec(mark_center + Vector2(-2.0, 1.1)),
+						Color(0.03, 0.04, 0.025, 0.34))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-0.65, -tree_height + 2.0)),
+						_round_vec(mark_center + Vector2(0.65, -tree_height + 2.0)),
 						_round_vec(mark_center + Vector2(0.55, 0.4)),
 						_round_vec(mark_center + Vector2(-0.55, 0.4)),
-						Color(0.36, 0.23, 0.12, 1.0)
-					)
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-2.5, -4.2)),
-						_round_vec(mark_center + Vector2(2.5, -4.2)),
-						_round_vec(mark_center + Vector2(2.0, -1.5)),
-						_round_vec(mark_center + Vector2(-2.0, -1.5)),
-						Color(0.18, 0.48, 0.20, 0.98)
-					)
+						Color(0.38, 0.24, 0.12, 1.0))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-canopy_w, -tree_height)),
+						_round_vec(mark_center + Vector2(canopy_w, -tree_height)),
+						_round_vec(mark_center + Vector2(canopy_w * 0.78, -tree_height + 2.8)),
+						_round_vec(mark_center + Vector2(-canopy_w * 0.78, -tree_height + 2.8)),
+						canopy_dark)
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-canopy_w * 0.62, -tree_height - 1.4)),
+						_round_vec(mark_center + Vector2(canopy_w * 0.62, -tree_height - 1.4)),
+						_round_vec(mark_center + Vector2(canopy_w * 0.48, -tree_height + 0.5)),
+						_round_vec(mark_center + Vector2(-canopy_w * 0.48, -tree_height + 0.5)),
+						canopy_light)
 				elif mark == 7:
-					# Rock: compact grey diamond.
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(0.0, -1.6)),
-						_round_vec(mark_center + Vector2(2.0, -0.2)),
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-2.4, 0.2)),
+						_round_vec(mark_center + Vector2(2.4, 0.2)),
+						_round_vec(mark_center + Vector2(1.5, 0.9)),
+						_round_vec(mark_center + Vector2(-1.5, 0.9)),
+						Color(0.025, 0.03, 0.028, 0.34))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(0.0, -2.0 - flora_variant * 0.25)),
+						_round_vec(mark_center + Vector2(2.3, -0.25)),
 						_round_vec(mark_center + Vector2(0.0, 1.0)),
-						_round_vec(mark_center + Vector2(-2.0, -0.2)),
-						Color(0.42, 0.44, 0.40, 0.96)
-					)
+						_round_vec(mark_center + Vector2(-2.3, -0.25)),
+						Color(0.39, 0.43, 0.40, 0.98))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-0.3, -1.75)),
+						_round_vec(mark_center + Vector2(1.45, -0.35)),
+						_round_vec(mark_center + Vector2(0.3, 0.0)),
+						_round_vec(mark_center + Vector2(-1.25, -0.45)),
+						Color(0.56, 0.59, 0.54, 0.88))
 
 	var terrain_rid: RID = terrain_batch_layer.get_canvas_item()
 	var mark_rid: RID = terrain_mark_layer.get_canvas_item()
@@ -786,6 +818,20 @@ func _draw_terrain_tile(
 		)
 
 
+func _season_palette(color: Color, strength: float) -> Color:
+	if terrain == null:
+		return color
+	match int(terrain.season_index):
+		0:
+			return color.lerp(Color(0.30, 0.52, 0.28), strength * 0.38)
+		1:
+			return color.lerp(Color(0.62, 0.48, 0.22), strength * 0.28)
+		2:
+			return color.lerp(Color(0.64, 0.34, 0.16), strength * 0.52)
+		_:
+			return color.lerp(Color(0.40, 0.49, 0.52), strength * 0.55)
+
+
 func _terrain_top_color(
 	source: Vector2i,
 	height_value: float
@@ -812,7 +858,7 @@ func _terrain_top_color(
 			Color(0.12, 0.38, 0.43),
 			clampf(water_depth * 0.55, 0.0, 0.48)
 		)
-		return water
+		return _season_palette(water, 0.10)
 
 	var base := Color(0.34, 0.28, 0.18)
 	base = base.lerp(
@@ -853,6 +899,8 @@ func _terrain_top_color(
 			base = base.lerp(Color(0.08, 0.13, 0.14), 0.58)
 		LivingTerrainScript.BIOME_DISTURBED:
 			base = base.lerp(Color(0.52, 0.31, 0.14), 0.34)
+
+	base = _season_palette(base, 0.18)
 
 	var activity_strength: float = terrain.terrain_activity_strength_at_grid(
 		source.x,
@@ -1199,6 +1247,156 @@ func _append_agent_entries(
 		})
 
 
+func _species_shape_scale(kind: String, agent: Variant) -> Vector2:
+	if sim == null:
+		return Vector2.ONE
+	var family_code: int = _species_family_code(kind)
+	var species_id: int = sim.phenotype_species_id(agent, family_code)
+	match posmod(species_id * 17 + family_code * 11, 6):
+		0:
+			return Vector2(1.18, 0.88)
+		1:
+			return Vector2(0.90, 1.14)
+		2:
+			return Vector2(1.10, 1.04)
+		3:
+			return Vector2(0.96, 0.92)
+		4:
+			return Vector2(1.06, 0.86)
+		_:
+			return Vector2.ONE
+
+
+func _draw_species_marks(
+	kind: String,
+	agent: Variant,
+	screen: Vector2,
+	sprite_size: Vector2
+) -> void:
+	if sim == null or user_zoom < 0.82:
+		return
+	var family_code: int = _species_family_code(kind)
+	var species_id: int = sim.phenotype_species_id(agent, family_code)
+	var variant: int = posmod(species_id * 29 + family_code * 7, 5)
+	var accent: Color = _lineage_color(
+		sim.species_visual_hue(agent, family_code)
+	).lightened(0.18)
+	accent.a = 0.90
+	var px: float = maxf(1.0, roundf(_camera_zoom()))
+	var heading: Vector2 = _project_heading(float(agent.angle))
+	var side := Vector2(-heading.y, heading.x)
+	var front: Vector2 = _round_vec(
+		screen + heading * sprite_size.x * 0.28
+	)
+	match variant:
+		0:
+			draw_rect(Rect2(front, Vector2(px, px)), accent, true)
+		1:
+			draw_rect(Rect2(_round_vec(screen + side * sprite_size.y * 0.25), Vector2(px, px)), accent, true)
+			draw_rect(Rect2(_round_vec(screen - side * sprite_size.y * 0.25), Vector2(px, px)), accent, true)
+		2:
+			draw_line(
+				_round_vec(screen - side * px * 2.0),
+				_round_vec(screen + side * px * 2.0),
+				accent,
+				px,
+				false
+			)
+		3:
+			draw_rect(Rect2(_round_vec(front - side * px), Vector2(px * 2.0, px)), accent, true)
+		_:
+			draw_rect(Rect2(_round_vec(screen - heading * px * 2.0), Vector2(px, px)), accent, true)
+
+
+func _draw_agent_interaction_fx(
+	kind: String,
+	agent: Variant,
+	screen: Vector2,
+	sprite_size: Vector2
+) -> void:
+	var px: float = maxf(1.0, roundf(_camera_zoom()))
+	if "feeding_target_id" in agent and int(agent.feeding_target_id) >= 0:
+		var target: Variant = sim.find_edible_by_id(int(agent.feeding_target_id))
+		if target != null:
+			var target_position: Vector2 = Vector2(target.position)
+			var target_screen: Vector2 = _round_vec(
+				_project_world(target_position, terrain.sample_height_nearest(target_position))
+			)
+			var feed_color: Color = _agent_tint(kind, agent).lightened(0.20)
+			feed_color.a = 0.68
+			draw_line(screen, target_screen, feed_color, px, false)
+			var midpoint: Vector2 = _round_vec((screen + target_screen) * 0.5)
+			draw_rect(
+				Rect2(midpoint - Vector2.ONE * px, Vector2.ONE * px * 2.0),
+				Color(0.92, 0.72, 0.34, 0.78),
+				true
+			)
+
+	var reproducing: bool = (
+		("dividing" in agent and bool(agent.dividing))
+		or ("reproducing" in agent and bool(agent.reproducing))
+		or ("budding" in agent and bool(agent.budding))
+	)
+	if reproducing:
+		var pulse: float = 0.5 + 0.5 * sin(
+			visual_time * 7.0 + float(int(agent.id) % 31)
+		)
+		var radius: float = sprite_size.x * (0.44 + pulse * 0.08)
+		var pulse_color := Color(0.66, 0.92, 0.62, 0.34 + pulse * 0.26)
+		draw_arc(screen, radius, 0.0, TAU, 12, pulse_color, px, false)
+
+	if "dying" in agent and bool(agent.dying):
+		var progress: float = (
+			float(agent.lysis_progress)
+			if "lysis_progress" in agent
+			else 0.5
+		)
+		var burst: float = px * (2.0 + progress * 5.0)
+		var death_color := Color(0.90, 0.34, 0.20, 0.76)
+		for i in range(4):
+			var angle: float = float(i) * TAU / 4.0 + float(int(agent.id) % 13) * 0.17
+			var q: Vector2 = _round_vec(
+				screen + Vector2(cos(angle), sin(angle)) * burst
+			)
+			draw_rect(Rect2(q, Vector2(px, px)), death_color, true)
+
+
+func _draw_water_sparkles() -> void:
+	if terrain == null:
+		return
+	var px: float = maxf(1.0, roundf(_camera_zoom()))
+	var tick: int = int(floor(visual_time * 4.0))
+	for y in range(0, terrain.height, 4):
+		var offset: int = posmod(y + tick, 4)
+		for x in range(offset, terrain.width, 4):
+			var depth: float = terrain.water_depth_at_grid(x, y)
+			if depth < 0.035:
+				continue
+			var phase: float = fposmod(
+				visual_time * 0.85 + float(x) * 0.31 + float(y) * 0.47,
+				1.0
+			)
+			if phase < 0.56:
+				continue
+			var world: Vector2 = terrain.world_position_for_grid(x, y)
+			var screen: Vector2 = _round_vec(
+				_project_world(
+					world,
+					terrain.height_at_grid(x, y) + depth * 0.06
+				)
+			)
+			var flux: float = terrain.water_flux_at_grid(x, y)
+			var span: float = px * (1.5 + clampf(flux * 28.0, 0.0, 2.5))
+			var alpha: float = 0.20 + (phase - 0.56) * 0.55
+			draw_line(
+				screen - Vector2(span, 0.0),
+				screen + Vector2(span, 0.0),
+				Color(0.46, 0.88, 0.92, alpha),
+				px,
+				false
+			)
+
+
 func _draw_agent_sprite(
 	kind: String,
 	agent: Variant,
@@ -1221,7 +1419,26 @@ func _draw_agent_sprite(
 		if "gene_size" in agent
 		else 1.0
 	)
-	var size: Vector2 = texture.get_size() * base_scale * morph_scale
+	var size: Vector2 = (
+		texture.get_size()
+		* base_scale
+		* morph_scale
+		* _species_shape_scale(kind, agent)
+	)
+	var dormant_state: bool = (
+		"dormant" in agent and bool(agent.dormant)
+	)
+	var life_wave: float = (
+		0.0
+		if dormant_state
+		else sin(
+			visual_time * 4.2
+			+ float(int(agent.id) % 97) * 0.19
+		)
+	)
+	size.x *= 1.0 + life_wave * 0.025
+	size.y *= 1.0 - life_wave * 0.018
+	screen.y -= roundf(life_wave * minf(1.0, _camera_zoom() * 0.35))
 	if (
 		kind == "yeast"
 		and "dormant" in agent
@@ -1260,6 +1477,8 @@ func _draw_agent_sprite(
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	_draw_capability_marks(agent, screen, size)
+	_draw_species_marks(kind, agent, screen, size)
+	_draw_agent_interaction_fx(kind, agent, screen, size)
 
 
 func _agent_texture(kind: String, agent: Variant) -> Texture2D:
@@ -2302,8 +2521,8 @@ func _draw_inspector() -> void:
 func _draw_metrics_panel() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var panel := Rect2(
-		Vector2(12.0, viewport_size.y - 147.0),
-		Vector2(430.0, 129.0)
+		Vector2(12.0, viewport_size.y - 166.0),
+		Vector2(448.0, 148.0)
 	)
 	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
 	_ui_text(
@@ -2383,6 +2602,22 @@ func _draw_metrics_panel() -> void:
 		],
 		11,
 		Color(0.83, 0.67, 0.58)
+	)
+	var hydro: Dictionary = hydrology_metrics_cache
+	var cover: Dictionary = cover_metrics_cache
+	_ui_text(
+		panel.position + Vector2(10.0, 132.0),
+		"%s water %d wet %d  grass %d shrub %d tree %d rock %d" % [
+			String(terrain.season_name()).to_upper(),
+			int(hydro.get("water_cells", 0)),
+			int(hydro.get("wet_cells", 0)),
+			int(cover.get("grass", 0)),
+			int(cover.get("shrub", 0)),
+			int(cover.get("tree", 0)),
+			int(cover.get("rock", 0)),
+		],
+		11,
+		Color(0.66, 0.78, 0.86)
 	)
 
 func _handle_ui_click(position: Vector2) -> bool:

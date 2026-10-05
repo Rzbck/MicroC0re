@@ -22,6 +22,8 @@ flowchart LR
 
 Species color is stable enough to follow through time; lineage hue adds bounded variation. Size follows inherited morphology.
 
+Stable species IDs also select a bounded silhouette aspect variant and pixel body mark, so species differ in shape as well as hue. Detailed organisms have low-amplitude breathing/bobbing; feeding, reproduction and lysis receive explicit links/pulses/fragments. Water uses sparse animated specular streaks driven by real depth/flux. Shrubs, trees and rocks use larger layered pixel silhouettes with shadows and seasonal palette changes.
+
 ## Acceleration rule
 
 x4/x8 may reduce rendering cost only when population/zoom actually requires it. At ordinary populations, acceleration no longer automatically sacrifices the pixel-art silhouettes. The fitted camera uses relative user zoom for LOD decisions so resolution/window size cannot accidentally force coarse glyphs.

@@ -220,6 +220,12 @@ func moisture_at_grid(x: int, y: int) -> float:
 	return float(soil_moisture[_index(sx, sy)])
 
 
+func water_flux_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return float(water_flux[_index(sx, sy)])
+
+
 func sample_water_depth(position: Vector2) -> float:
 	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
 	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)

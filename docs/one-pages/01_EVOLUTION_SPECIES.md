@@ -47,7 +47,8 @@ Dormant banks:
 - abundant bacterial species face frequency-dependent pressure;
 - habitat traits bias local movement and energetic success;
 - decomposers evolve `gene_spore` and hyphae evolve `gene_quiescence`: stronger persistence lowers dormant maintenance and extends starvation survival, but still has finite reserves;
-- morphology/color are anchored to stable species with within-species lineage variation.
+- morphology/color are anchored to stable species with within-species lineage variation;
+- phenotype species now use four trait bands instead of three, while dominant-species reproduction is penalized earlier and rare phenotypes receive stronger bounded relief. This exposes more of the underlying ecotype diversity as persistent visible coexistence.
 
 ## Metrics
 

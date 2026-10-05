@@ -3647,7 +3647,7 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		/ float(maxi(1, bacteria.size()))
 	)
 	var lineage_pressure: float = clampf(
-		(lineage_fraction - 0.11) / 0.39,
+		(lineage_fraction - 0.085) / 0.33,
 		0.0,
 		1.0
 	)
@@ -3660,18 +3660,18 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		/ float(maxi(1, bacteria.size()))
 	)
 	var ecotype_pressure: float = clampf(
-		(ecotype_fraction - 0.075) / 0.30,
+		(ecotype_fraction - 0.050) / 0.24,
 		0.0,
 		1.0
 	)
-	var rare_ecotype_relief: float = 0.10 if ecotype_fraction < 0.025 else 0.0
+	var rare_ecotype_relief: float = 0.16 if ecotype_fraction < 0.022 else 0.0
 
 	var required_energy: float = base_division_energy * (
 		0.82
 		+ 0.18 * float(cell.gene_size)
 		+ global_pressure * global_pressure * 0.42
 		+ lineage_pressure * lineage_pressure * 0.62
-		+ ecotype_pressure * ecotype_pressure * 0.95
+		+ ecotype_pressure * ecotype_pressure * 1.12
 		- rare_ecotype_relief
 	)
 	return (
@@ -3699,7 +3699,7 @@ func _species_bin(value: float, minimum: float, maximum: float) -> int:
 		0.0,
 		0.9999
 	)
-	return floori(normalized * 3.0)
+	return floori(normalized * 4.0)
 
 
 func _species_mix(signature: int, value: int) -> int:

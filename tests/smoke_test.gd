@@ -602,6 +602,19 @@ func _init() -> void:
 		if bool(dormant_hypha.dormant):
 			errors.append("ecology: hypha failed to wake on detritus")
 
+	# Presentation-facing phenotype species now use four deterministic bands.
+	var species_bin_probe = PetriSimulationScript.new(73019)
+	if species_bin_probe._species_bin(0.55, 0.55, 1.75) != 0:
+		errors.append("evolution: species bin lower bound mismatch")
+	if species_bin_probe._species_bin(1.74, 0.55, 1.75) != 3:
+		errors.append("evolution: species bin upper bound should use four bins")
+
+	var flux_probe = LivingTerrainScript.new(73020, Vector2(30.0, 30.0))
+	flux_probe.water_flux.fill(0.0)
+	flux_probe.water_flux[0] = 0.25
+	if absf(flux_probe.water_flux_at_grid(0, 0) - 0.25) > 0.0001:
+		errors.append("render: terrain water flux accessor mismatch")
+
 	# Trophic capacity regression: safety ceilings are guards, not population
 	# targets. Predator carrying capacities must respond to prey abundance.
 	var capacity_probe = PetriSimulationScript.new(73004)
