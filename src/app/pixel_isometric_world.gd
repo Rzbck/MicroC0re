@@ -23,9 +23,12 @@ const MAX_USER_ZOOM := 5.0
 const TERRAIN_VISUAL_REFRESH := 1.0
 const MENU_WIDTH := 220.0
 const INSPECTOR_WIDTH := 276.0
-const SIMULATION_FRAME_BUDGET_MS := 16.0
-const SIMULATION_FAST_BUDGET_PER_X_MS := 8.0
-const SIMULATION_MAX_FRAME_BUDGET_MS := 80.0
+# Rendering/input stays responsive during fast-forward. Requested x4/x8 is not
+# allowed to monopolize 80-150 ms of a single frame; achieved speed remains
+# measured separately and may be lower until the core is fast enough.
+const SIMULATION_FRAME_BUDGET_MS := 13.0
+const SIMULATION_FAST_BUDGET_PER_X_MS := 0.35
+const SIMULATION_MAX_FRAME_BUDGET_MS := 15.0
 const SIMULATION_WALL_DELTA_CAP := 0.25
 # Detailed pixel-art is the default presentation. Coarse batched glyphs are a
 # last-resort scalability mode, not something x4/x8 enables at ordinary counts.

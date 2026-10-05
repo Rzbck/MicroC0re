@@ -47,6 +47,7 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 - pretending requested x8 equals achieved x8.
 
 ## Current tranche
+- Fast-forward now has a hard 15 ms main-thread simulation budget per rendered frame (previously up to 80 ms). This prioritizes responsive 60 Hz presentation; the overlay continues to report requested vs actually achieved simulation speed, so x8 is never faked.
 
 - Living-terrain physical evaluation now starts bacterial cohorting at the medium-density threshold (350+): 1/2 medium, 1/3 mass, 1/5 ultra, with compensated dt. This directly targets the high `earth_ms` seen around 1.2k–1.5k agents without deleting terraforming behavior.
 
