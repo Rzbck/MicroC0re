@@ -1,5 +1,5 @@
 ; Engine configuration file.
-; MicroC0re — generated bootstrap configuration.
+; MicroC0re — pixel microscope prototype.
 
 config_version=5
 
@@ -12,14 +12,15 @@ run/main_scene="res://src/app/main.tscn"
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
-window/size/window_width_override=1280
-window/size/window_height_override=720
+window/size/mode=3
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/stretch/scale_mode="fractional"
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="mobile"
 textures/default_filters/use_nearest_mipmap_filter=false
 textures/canvas_textures/default_texture_filter=0
 2d/snap/snap_2d_vertices_to_pixel=false

@@ -1,0 +1,169 @@
+name: Godot Smoke
+
+on:
+  push:
+    branches:
+      - main
+      - rebuild/pixel-microscope-v0.2
+    paths:
+      - "project.godot"
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/headless.yml"
+  pull_request:
+    paths:
+      - "project.godot"
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - ".github/workflows/headless.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: microcore-godot-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Godot 4.7.1 smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Check PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $files = @(
+            "scripts/run_simulation.ps1",
+            "scripts/publish_session.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }
+
+      - name: Import project
+        run: godot --headless --path . --import --quit
+
+      - name: Check simulation parser directly
+        run: godot --headless --path . --script src/simulation/petri_simulation.gd --check-only
+
+      - name: Check pixel-isometric renderer parser directly
+        run: godot --headless --path . --script src/app/pixel_isometric_world.gd --check-only
+
+      - name: Run deterministic smoke test
+        id: smoke_test
+        shell: pwsh
+        run: |
+          # Launch the smoke wrapper in a child PowerShell process. The wrapper
+          # intentionally calls exit; invoking it directly would terminate this
+          # capture step before smoke-output.txt can be written.
+          $output = & pwsh -NoProfile -File ./scripts/run_headless.ps1 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $output | Set-Content -Path smoke-output.txt -Encoding utf8
+          exit $code
+
+      - name: Publish smoke failure diagnostics
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $interesting = @(Get-Content smoke-output.txt | Where-Object {
+            $_ -match 'ERROR|SCRIPT ERROR|Parse Error|smoke FAIL|performance:|terrain:|ecology:|population guard:|determinism:| at: '
+          })
+          if ($interesting.Count -eq 0) {
+            $interesting = @(Get-Content smoke-output.txt | Select-Object -Last 40)
+          }
+          $body = @(
+            ('### CI smoke failure ' + $env:GITHUB_SHA)
+            ''
+            '```text'
+          )
+          $body += $interesting | Select-Object -First 80
+          $body += '```'
+          $body | Set-Content smoke-failure.md -Encoding utf8
+          gh issue comment 67 --body-file smoke-failure.md
+
+      - name: Run 10-minute ecology soak
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        run: |
+          $output = & godot --headless --path . --script tests/ecology_soak.gd 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $lines = @($output | Where-Object { $_ -match '^ecology_soak' })
+          $body = @(
+            ('### CI ecology soak ' + $env:GITHUB_SHA)
+            ''
+            'Ten simulated minutes with ecological seed-bank guards:'
+            ''
+            '```text'
+          )
+          $body += $lines
+          $body += '```'
+          $body | Set-Content -Path ecology-soak.md -Encoding utf8
+          exit $code
+
+      - name: Publish ecology soak to issue 67
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 67 --body-file ecology-soak.md
+
+      - name: Run 5k CPU scale benchmark
+        shell: pwsh
+        run: |
+          $output = & godot --headless --path . --script tests/perf_benchmark.gd 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $lines = @($output | Where-Object { $_ -match '^population=' })
+          $body = @(
+            ('### CI scale benchmark ' + $env:GITHUB_SHA)
+            ''
+            'Living-world CPU benchmark (core simulation + living terrain):'
+            ''
+            '```text'
+          )
+          $body += $lines
+          $body += '```'
+          $body | Set-Content -Path perf-benchmark.md -Encoding utf8
+          if ($code -ne 0) {
+            exit $code
+          }
+
+      - name: Publish scale benchmark to issue 67
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 67 --body-file perf-benchmark.md

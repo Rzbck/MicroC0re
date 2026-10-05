@@ -31,7 +31,9 @@ The viewer should be able to:
 - immediately read different organisms/lineages at normal zoom;
 - see deliberate pixel-level structure at close zoom;
 - observe interactions that persist long enough to understand: growth, fission, adhesion, feeding, lysis, later predation/engulfment;
-- watch the system evolve without needing a debug explanation.
+- watch the system evolve without needing a debug explanation;
+- inspect an individual organism and understand how its lineage/traits differ;
+- witness both vertical mutation and horizontal acquisition of mobile traits.
 
 The simulation remains continuous and deterministic where intended. The **presentation** is pixel art.
 
@@ -39,13 +41,27 @@ The simulation remains continuous and deterministic where intended. The **presen
 
 Until Epic #14 is complete, work in this order:
 
-1. **#17 Performance / profiling / LOD**
-2. **#16 Camera / infinite-feel background / zoom**
-3. **#15 True pixel-art pipeline + art bible**
-4. **#18 Readable organic animation / interactions**
-5. Resume deeper ecology only after the visual/performance gate passes.
+1. **#17 Performance / profiling / overload behavior**
+2. **#59 Smooth LOD transitions / readable overview silhouettes**
+3. **#18 + #45 Readable organic animation / feeding / death / recycling**
+4. **#57 GPU-resident biome fields**, after the visible baseline is readable and benchmarked
+5. Small ecology slices may proceed only when they materially improve visible interactions and stay inside the measured performance budget.
 
-This priority order is intentional: do not add expensive visual detail before we know the render budget.
+The 2026-10-03 live RTX review explicitly rejected the current interaction readability and hard LOD transitions. Do not treat technically present feeding/death states as finished merely because smoke tests pass.
+
+This priority order is intentional: do not add expensive visual detail or unbounded species systems before we know the render budget.
+
+## GPU-first desktop rule
+
+The desktop performance target is now **GPU-first where the work is massively parallel**.
+
+- Forward+ / RenderingDevice is the primary desktop renderer.
+- Use GPU instancing for large visible populations.
+- Move continuum chemistry and later agent hot loops to compute shaders when the state can remain GPU-resident.
+- Keep CPU reference/headless modes for correctness and CI.
+- Do not force CPU use merely for architectural simplicity.
+- Equally, do not introduce a per-tick full GPU readback: synchronization can erase the GPU advantage.
+- Issue #27 owns the GPU migration.
 
 ## Non-negotiable performance contract
 
@@ -57,10 +73,10 @@ For the agreed baseline scene on the maintainer workstation:
 - off-screen organisms must be culled;
 - far/mid/near/macro zoom levels must use explicit LOD;
 - distant organisms must not pay the cost of close-up appendage/detail rendering;
-- large populations should use batched/cached sprite approaches where appropriate;
+- large populations should use GPU instancing/bulk buffers where appropriate;
 - do not claim an optimization worked without measured before/after numbers.
 
-Simulation tick rate and render FPS are separate concerns. A 120 Hz simulation is not evidence of 120 FPS rendering.
+Simulation tick rate and render FPS are separate concerns. Current contract: biology at deterministic 60 Hz, chemistry at 30 Hz, presentation targeting 120+ FPS. A high simulation tick rate is not evidence of fluid rendering.
 
 ## Pixel-art contract
 
@@ -92,11 +108,28 @@ Required:
 - optional repeated/procedural microscope microtexture outside the active Petri region;
 - zoom toward cursor;
 - stable pan at every zoom;
-- dynamic fit view;
-- a much wider zoom-out range than the current prototype;
+- **overview-or-zoom-in only**: the minimum zoom must cover the viewport with simulated world;
+- camera position must be clamped so panning never exposes outside-world space;
+- F returns to the overview;
 - close zoom for pixel/sprite inspection.
 
 "World is finite" is acceptable. "Outside world is accidental grey" is not.
+
+## UI / inspection contract
+
+The simulation view should read as artwork first, not as a developer dashboard.
+
+A click is also a microscope focus action: the selected organism should be centered and followed while it moves. Manual pan or Fit exits follow mode. The compact inspector must remain a small annotation card rather than occupying a major fraction of the scene.
+
+Required:
+- no permanent FPS/debug/status block in the microscope view;
+- no F1 debug overlay as the primary interface;
+- Escape opens a real pause menu;
+- clicking an organism opens a left-side detail inspector;
+- the inspector shows identity, lineage, generation, energy/state and heritable traits;
+- bacterial mobile DNA / HGT state should be visible in the inspector;
+- clicking empty world or pressing Escape closes the inspector;
+- diagnostic profiling remains available through development tools/benchmarks, not permanent screen clutter.
 
 ## Organism design contract
 
@@ -106,7 +139,8 @@ Initial sprite/morphology families should include:
 - rod / bacillus;
 - coccus / clustered coccus;
 - curved / vibrio-like;
-- later an amoeboid/protist class for true engulfment/deformation behavior.
+- amoeboid/protist predator for true engulfment/deformation;
+- ciliate-like grazer for fast top-down control.
 
 At close zoom, morphology may expose:
 - wall/membrane;
@@ -138,14 +172,35 @@ Later:
 - biofilm matrix/adhesion;
 - predatory bacterial attacks;
 - amoeboid/protist engulfment;
+- ciliate grazing;
+- bacteriophage infection/lysis later;
 - artificial-life fusion only when clearly documented as fictional rather than ordinary bacterial biology.
 
 Important interactions should persist long enough to observe. Avoid `collision -> delete`.
 
+## Living biome direction
+
+Epic #38 is now an active product direction alongside the visual rebuild.
+
+The biome presentation must be **game-art material driven, not a heatmap or animated wallpaper**. A dedicated low-contrast water shader forms the base. A separate biome-material shader reads slow simulation masks and reveals sparse local material on the same 0.25-world-unit pixel grid as organism sprites. Field evolution and organism activity control those masks; the shader never invents ecology. #61 owns presentation; #57 owns the later GPU-resident path.
+
+The simulated world should evolve into an aquatic micro-ecosystem with:
+- oxygen, light, detritus, EPS, damage cues and water flow;
+- producer, heterotroph, scavenger and biofilm niches;
+- protist grazing and later multi-trophic predation;
+- visible death/recycling;
+- cross-feeding and niche construction;
+- explicit producer/decomposer exudate niches and density-responsive biofilm engineering;
+- reversible dormancy / seed-bank behavior under resource collapse;
+- succession/dormancy;
+- later phages, fungi and larger microfauna.
+
+Read `docs/BIOME.md` before ecology/environment changes.
+
 ## What agents should NOT do right now
 
-Until Epic #14 is through its gate, do not:
-- add lots of new species just to make the screen busier;
+While Epic #14 remains open, do not:
+- add cosmetic species just to make the screen busier; new guilds are allowed when they occupy a real niche defined in `docs/BIOME.md`;
 - add expensive shaders/effects before profiling;
 - keep extending procedural line/circle organism art as the final style;
 - add complex predation that has no visual state machine;
@@ -176,3 +231,18 @@ Epic #14 is ready to unblock deeper ecology when:
 - Simulation performance: #9
 - Ecology research: #10
 - Evolution: #13
+
+
+### Visual-language gate — 2026-10-03
+
+Do not add another ecological guild until the existing ecosystem passes the
+new readability gate:
+
+- integer-scaled root viewport at default presentation;
+- one shared 0.25-world-unit source-pixel scale;
+- binary/dithered LOD handoff with no translucent double bodies;
+- stable 8-direction presentation until authored directional sprites exist;
+- interactions staged by simulation progress;
+- biome represented as coherent material clusters rather than per-pixel noise;
+- an observer can identify at least three cause/effect ecological chains without
+  opening the inspector.

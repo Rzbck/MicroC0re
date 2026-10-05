@@ -38,7 +38,10 @@ We use real mathematical structures where they help:
 Every approximation should be documented. Parameters are considered **uncalibrated** until validation work explicitly says otherwise.
 
 See:
+- **[AI handoff](docs/HANDOFF.md)** — session bootstrap, GitHub Project workflow and connector rules
 - **[Current direction](docs/CURRENT_DIRECTION.md)** — read this first; it overrides stale visual priorities
+- **[Living biome](docs/BIOME.md)** — aquatic ecosystem fields, guilds, recycling and ecology roadmap
+- **[Project status](docs/STATUS.md)** — IN PROGRESS / REVIEW / TODO / BACKLOG map
 - [Research references](docs/RESEARCH.md)
 - [Mathematical model](docs/MATH.md)
 - [Biology model](docs/BIOLOGY.md)
@@ -46,6 +49,8 @@ See:
 - [Validation strategy](docs/VALIDATION.md)
 - [Evolution model](docs/EVOLUTION.md)
 - [Art direction](docs/ART_DIRECTION.md)
+- [Performance budget](docs/PERFORMANCE.md)
+- [Optimization architecture](docs/OPTIMIZATION_STRATEGY.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Repository layout
@@ -106,7 +111,7 @@ The local executable path is **not** stored in project settings.
 
 ## Status
 
-**Current gate: Epic #14 — Visual Rebuild v0.2.**
+**Current gate: Epic #14 — Visual Rebuild v0.2. First implementation pass: draft PR #19.**
 
 The first visible renderer is intentionally considered a rejected debug baseline: it exposed grey outside the world, dropped to ~5–8 FPS at close zoom in the observed test, and read as vector/procedural rather than true pixel art. Agents should read `docs/CURRENT_DIRECTION.md` before adding features.
 

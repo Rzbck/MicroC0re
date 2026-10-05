@@ -1,14 +1,1140 @@
 extends SceneTree
 
 const PetriSimulationScript = preload("res://src/simulation/petri_simulation.gd")
+const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
+const PhysicalCapabilityGenomeScript = preload("res://src/simulation/physical_capability_genome.gd")
+const LivingTerrainScript = preload("res://src/simulation/living_terrain.gd")
+const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
+const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
+const PhageCloudScript = preload("res://src/simulation/phage_cloud.gd")
+const BacteriumScript = preload("res://src/simulation/bacterium.gd")
+# Compile the visible app stack during every headless smoke run so renderer
+# script parse errors cannot survive until the manual GUI test.
+const PixelMicroscopeScript = preload("res://src/app/pixel_microscope.gd")
+const IsometricEcosystemScript = preload("res://src/app/isometric_ecosystem.gd")
+const PixelIsometricWorldScript = preload("res://src/app/pixel_isometric_world.gd")
+const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
+const PixelAtlasScript = preload("res://src/app/pixel_microbe_atlas.gd")
+const FarMultiMeshRendererScript = preload("res://src/app/far_multimesh_renderer.gd")
+const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
+const CiliateScript = preload("res://src/simulation/ciliate.gd")
+const FlagellateScript = preload("res://src/simulation/flagellate.gd")
+const MicroalgaScript = preload("res://src/simulation/microalga.gd")
+const DecomposerYeastScript = preload("res://src/simulation/decomposer_yeast.gd")
+const HyphalColonyScript = preload("res://src/simulation/hyphal_colony.gd")
+const PixelProtozoaAtlasScript = preload("res://src/app/pixel_protozoa_atlas.gd")
+const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
+const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
+const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
+const BiomeMaterialRendererScript = preload("res://src/app/biome_material_renderer.gd")
+const WaterBackgroundShader = preload("res://src/app/shaders/water_background.gdshader")
+const BiomeMaterialShader = preload("res://src/app/shaders/biome_material.gdshader")
+const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
+const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
+const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
+const PixelPhageAtlasScript = preload("res://src/app/pixel_phage_atlas.gd")
+const PixelTerrainPropAtlasScript = preload("res://src/app/pixel_terrain_prop_atlas.gd")
 
 const STEPS := 600
-const DT := 1.0 / 120.0
+const DT := 1.0 / 60.0
 
 
 func _init() -> void:
+	var errors := PackedStringArray()
+	_validate_preloaded_scripts(errors)
+
+	if WaterBackgroundShader == null or BiomeMaterialShader == null:
+		errors.append("render: biome shader resources failed to preload")
+
+	var terrain_prop_assets = PixelTerrainPropAtlasScript.new()
+	for prop_kind in range(PixelTerrainPropAtlasScript.PROP_COUNT):
+		var prop_texture: Texture2D = terrain_prop_assets.get_texture(
+			prop_kind,
+			prop_kind,
+			prop_kind
+		)
+		if (
+			prop_texture == null
+			or prop_texture.get_width() != PixelTerrainPropAtlasScript.WIDTH
+			or prop_texture.get_height() != PixelTerrainPropAtlasScript.HEIGHT
+		):
+			errors.append("render: terrain prop atlas texture missing")
+			break
+
+	var effect_assets = PixelEffectAtlasScript.new()
+	var lysis_fx: Texture2D = effect_assets.get_texture(
+		PixelEffectAtlasScript.EFFECT_LYSIS, 2
+	)
+	if lysis_fx == null or lysis_fx.get_width() <= 0:
+		errors.append("render: lysis effect asset missing")
+
+	# Terrain physical evaluation is cohort-based from medium density upward.
+	var terrain_stride_sim = PetriSimulationScript.new(19188)
+	terrain_stride_sim.seed_demo(12)
+	var terrain_stride_probe = LivingTerrainScript.new(
+		19188,
+		Vector2(terrain_stride_sim.world_size)
+	)
+	if terrain_stride_probe._terrain_bacteria_stride(terrain_stride_sim) != 1:
+		errors.append("performance: small terrain cohort stride mismatch")
+	while terrain_stride_sim.bacteria.size() < LivingTerrainScript.TERRAIN_MEDIUM_THRESHOLD:
+		terrain_stride_sim.bacteria.append(
+			BacteriumScript.new(
+				940000 + terrain_stride_sim.bacteria.size(),
+				Vector2(30.0, 30.0),
+				0.0
+			)
+		)
+	if terrain_stride_probe._terrain_bacteria_stride(terrain_stride_sim) != 2:
+		errors.append("performance: medium terrain cohort stride mismatch")
+
+	# Seasonal living cover progresses through ecological stages and rocks
+	# remain persistent substrate.
+	var cover_sim = PetriSimulationScript.new(19189)
+	cover_sim.seed_demo(0)
+	var cover_probe = LivingTerrainScript.new(
+		19189,
+		Vector2(30.0, 30.0)
+	)
+	cover_probe.water_depths.fill(0.0)
+	cover_probe.soil_moisture.fill(0.55)
+	cover_probe.biome_disturbance.fill(0.0)
+	cover_probe.cover_states.fill(LivingTerrainScript.COVER_BARE)
+	cover_probe.cover_age.fill(0.0)
+	cover_probe.rockiness.fill(0.0)
+	cover_probe.season_warmth = 1.0
+	cover_probe.season_index = 0
+	cover_probe._advance_cover(cover_sim, 12.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_GRASS):
+		errors.append("terrain: living cover failed to establish grass")
+	cover_probe._advance_cover(cover_sim, 42.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_SHRUB):
+		errors.append("terrain: living cover failed to mature shrub")
+	cover_probe._advance_cover(cover_sim, 100.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_TREE):
+		errors.append("terrain: living cover failed to mature tree")
+	cover_probe.cover_states[0] = LivingTerrainScript.COVER_ROCK
+	cover_probe._advance_cover(cover_sim, 200.0)
+	if int(cover_probe.cover_states[0]) != LivingTerrainScript.COVER_ROCK:
+		errors.append("terrain: rock substrate was not persistent")
+
+	# Low-frequency hydrology: water must flow downhill and wet the soil
+	# without requiring a 60 Hz terrain simulation.
+	var water_probe = LivingTerrainScript.new(
+		19190,
+		Vector2(30.0, 30.0)
+	)
+	water_probe.heights.fill(1.0)
+	water_probe.water_depths.fill(0.0)
+	water_probe.soil_moisture.fill(0.0)
+	var water_source: int = 4 * water_probe.width + 4
+	var water_target: int = 4 * water_probe.width + 5
+	water_probe.heights[water_source] = 1.0
+	water_probe.heights[water_target] = 0.0
+	water_probe.water_depths[water_source] = 0.80
+	water_probe._advance_hydrology(0.5)
+	if float(water_probe.water_depths[water_target]) <= 0.0:
+		errors.append("terrain: water failed to flow to lower neighbour")
+	if float(water_probe.soil_moisture[water_target]) <= 0.0:
+		errors.append("terrain: flowed water failed to wet soil")
+	water_probe.climate_time = LivingTerrainScript.SEASON_CYCLE_SECONDS * 0.30
+	water_probe._advance_hydrology(0.5)
+	if water_probe.season_index != 1:
+		errors.append("terrain: seasonal climate phase mismatch")
+
+	# Terraforming attribution: agent-built and agent-dug cells keep a
+	# fading lineage-colored trace, while tiny edits do not automatically
+	# become ecological DISTURBED state.
+	var trace_probe = LivingTerrainScript.new(
+		19187,
+		Vector2(30.0, 30.0)
+	)
+	trace_probe.deposit(Vector2(15.0, 15.0), 0.45, 1.2, 0.25)
+	var trace_x: int = roundi(15.0 / LivingTerrainScript.CELL_SIZE)
+	var trace_y: int = roundi(15.0 / LivingTerrainScript.CELL_SIZE)
+	if trace_probe.terrain_activity_kind_at_grid(trace_x, trace_y) != LivingTerrainScript.TERRAIN_ACTIVITY_BUILD:
+		errors.append("terrain: builder trace kind missing")
+	if absf(trace_probe.terrain_activity_hue_at_grid(trace_x, trace_y) - 0.25) > 0.02:
+		errors.append("terrain: builder lineage trace hue missing")
+	trace_probe.excavate(Vector2(21.0, 15.0), 0.45, 1.2, 0.75)
+	var dig_x: int = roundi(21.0 / LivingTerrainScript.CELL_SIZE)
+	if trace_probe.terrain_activity_kind_at_grid(dig_x, trace_y) != LivingTerrainScript.TERRAIN_ACTIVITY_DIG:
+		errors.append("terrain: digger trace kind missing")
+
+	# Living-terrain regression: excavation/deposition must conserve material
+	# when the carried material is returned to the world.
+	var terrain_probe = LivingTerrainScript.new(
+		19191,
+		Vector2(192.0, 128.0)
+	)
+	var terrain_mass_before: float = terrain_probe.total_mass()
+	var removed_soil: float = terrain_probe.excavate(
+		Vector2(72.0, 54.0),
+		0.35,
+		2.2
+	)
+	if removed_soil <= 0.0:
+		errors.append("terrain: excavation failed to remove material")
+	var terrain_mass_after_dig: float = terrain_probe.total_mass()
+	if (
+		absf(
+			(terrain_mass_before - terrain_mass_after_dig)
+			- removed_soil
+		) > 0.0005
+	):
+		errors.append("terrain: excavation mass accounting drift")
+	var returned_soil: float = terrain_probe.deposit(
+		Vector2(81.0, 58.0),
+		removed_soil,
+		2.4
+	)
+	if absf(returned_soil - removed_soil) > 0.0005:
+		errors.append("terrain: deposition failed to return carried mass")
+	if absf(terrain_probe.total_mass() - terrain_mass_before) > 0.001:
+		errors.append("terrain: dig/deposit cycle did not conserve terrain mass")
+
+	var physical_rng := RandomNumberGenerator.new()
+	physical_rng.seed = 515151
+	var physical_parent = PhysicalCapabilityGenomeScript.new()
+	physical_parent.configure_founder(
+		physical_rng,
+		PhysicalCapabilityGenomeScript.PROFILE_DECOMPOSER
+	)
+	var physical_child = PhysicalCapabilityGenomeScript.new()
+	var saw_physical_structure: bool = false
+	for i in range(120):
+		physical_child.inherit_and_mutate(
+			physical_parent,
+			physical_rng,
+			0.20
+		)
+		if physical_child.modules.size() != physical_parent.modules.size():
+			saw_physical_structure = true
+			break
+	if (
+		physical_child.modules.size() < 3
+		or physical_child.modules.size() > 18
+	):
+		errors.append("evolution: physical capability genome escaped bounds")
+	if not saw_physical_structure:
+		errors.append("evolution: physical capability structural mutation absent")
+
+	var recipient_physical = PhysicalCapabilityGenomeScript.new()
+	recipient_physical.configure_founder(
+		physical_rng,
+		PhysicalCapabilityGenomeScript.PROFILE_PRODUCER
+	)
+	var donor_module := {
+		"kind": PhysicalCapabilityGenomeScript.CAP_DIG,
+		"strength": 1.7,
+		"sensor": PhysicalCapabilityGenomeScript.SENSOR_ALWAYS,
+		"threshold": 0.2,
+		"polarity": 1,
+		"innovation": 909090,
+	}
+	var module_count_before: int = recipient_physical.modules.size()
+	if not recipient_physical.integrate_module(
+		donor_module,
+		physical_rng
+	):
+		errors.append("evolution: cross-lineage physical module merge failed")
+	if recipient_physical.modules.size() < module_count_before:
+		errors.append("evolution: capability merge unexpectedly lost structure")
+
+		# Performance invariant: synchronous bacterial fission may never overshoot
+	# the CPU reference ceiling even if many mothers finish division together.
+	var cap_probe = PetriSimulationScript.new(880044)
+	cap_probe.bacteria_population_limit = 420
+	cap_probe.seed_demo(418)
+	for cell in cap_probe.bacteria:
+		cell.length = 8.0
+		cell.energy = 12.0
+		cell.begin_division()
+		cell.division_progress = 1.0
+	cap_probe.step(1.0 / 30.0)
+	if cap_probe.bacteria.size() > cap_probe.bacteria_population_limit:
+		errors.append("performance: bacterial division overshot safety ceiling")
+
+	# 	# Hot-path scalar nearest sampling must match the exact addressed cell.
+	var scalar_probe = ScalarFieldScript.new(8, 8, 2.0, 0.0)
+	scalar_probe.set_cell(3, 4, 0.75)
+	if absf(
+		scalar_probe.sample_nearest_world(Vector2(6.4, 8.6)) - 0.75
+	) > 0.0001:
+		errors.append("performance: nearest scalar-field sampling mismatch")
+
+	# Hot lookup helpers preserve the original field/direction mapping.
+	var lookup_probe = PetriSimulationScript.new(73014)
+	lookup_probe.seed_demo(4)
+	for lookup_position in [
+		Vector2(0.0, 0.0),
+		Vector2(17.9, 23.4),
+		Vector2(95.9, 63.9),
+		Vector2(191.9, 127.9),
+	]:
+		var ref_x: int = clampi(
+			floori(lookup_position.x / PetriSimulationScript.FIELD_CELL_SIZE),
+			0,
+			PetriSimulationScript.FIELD_WIDTH - 1
+		)
+		var ref_y: int = clampi(
+			floori(lookup_position.y / PetriSimulationScript.FIELD_CELL_SIZE),
+			0,
+			PetriSimulationScript.FIELD_HEIGHT - 1
+		)
+		if lookup_probe._field_index_for_world(lookup_position) != (
+			ref_y * PetriSimulationScript.FIELD_WIDTH + ref_x
+		):
+			errors.append("performance: fast field index diverged")
+			break
+	for lookup_angle in [-PI, -2.4, -0.2, 0.0, 1.7, PI - 0.0001]:
+		var reference_angle: float = wrapf(lookup_angle + PI, 0.0, TAU) / TAU
+		var reference_index: int = posmod(
+			floori(
+				reference_angle
+				* float(PetriSimulationScript.DIRECTION_LUT_SIZE)
+			),
+			PetriSimulationScript.DIRECTION_LUT_SIZE
+		)
+		if lookup_probe._direction_for_angle(lookup_angle) != lookup_probe._direction_lut[reference_index]:
+			errors.append("performance: fast direction LUT index diverged")
+			break
+
+	# Dense motion drift uses a deterministic sine LUT with bounded error.
+	var drift_probe = PetriSimulationScript.new(73012)
+	drift_probe.seed_demo(4)
+	var worst_drift_error: float = 0.0
+	for phase in range(0, 180, 7):
+		var drift_index: int = posmod(
+			phase * PetriSimulationScript.DRIFT_LUT_PHASE_STEP,
+			PetriSimulationScript.DRIFT_LUT_SIZE
+		)
+		var expected_drift: float = sin(float(phase) * 0.031)
+		worst_drift_error = maxf(
+			worst_drift_error,
+			absf(float(drift_probe._drift_lut[drift_index]) - expected_drift)
+		)
+	if worst_drift_error > 0.035:
+		errors.append("performance: drift LUT approximation exceeded motion tolerance")
+
+	# Motion helper remains a deterministic reference for dense-path edge
+	# cases (dormancy and phage lysis) after the hot loop is inlined.
+	var inline_motion_probe = PetriSimulationScript.new(73018)
+	inline_motion_probe.seed_demo(4)
+	var inline_cell = inline_motion_probe.bacteria[0]
+	inline_cell.dormant = true
+	var dormant_position: Vector2 = Vector2(inline_cell.position)
+	inline_motion_probe._advance_cell_motion_only(inline_cell, 0.125)
+	if Vector2(inline_cell.position).distance_to(dormant_position) > 0.0001:
+		errors.append("performance: motion reference moved dormant bacterium")
+	inline_cell.dormant = false
+	inline_cell.phage_infected = true
+	inline_cell.phage_progress = 0.999
+	inline_motion_probe._advance_cell_motion_only(inline_cell, 0.125)
+	if not bool(inline_cell.dying):
+		errors.append("performance: motion reference lost phage lysis transition")
+
+	# Sparse ecological steering points toward resources and away from damage.
+	var steering_probe = PetriSimulationScript.new(73021)
+	steering_probe.seed_demo(4)
+	var steering_cell = steering_probe.bacteria[0]
+	steering_cell.position = Vector2(96.0, 64.0)
+	steering_cell.expression_nutrient = 1.0
+	steering_cell.expression_exudate = 0.0
+	steering_cell.expression_detritus = 0.0
+	steering_cell.expression_matrix = 0.0
+	steering_cell.expression_photo = 0.0
+	steering_probe.nutrient.fill(0.0)
+	steering_probe.exudate.fill(0.0)
+	steering_probe.detritus.fill(0.0)
+	steering_probe.damage_cue.fill(0.0)
+	steering_probe.eps.fill(0.0)
+	var steering_index: int = steering_probe._field_index_for_world(
+		Vector2(steering_cell.position)
+	)
+	var steering_x: int = steering_index % PetriSimulationScript.FIELD_WIDTH
+	if steering_x < PetriSimulationScript.FIELD_WIDTH - 1:
+		steering_probe.nutrient.values[steering_index + 1] = 0.8
+	steering_probe._refresh_bacterial_steering(
+		steering_cell,
+		steering_index
+	)
+	if (
+		float(steering_cell.steering_strength) <= 0.0
+		or cos(float(steering_cell.steering_angle)) <= 0.55
+	):
+		errors.append("ecology: nutrient steering failed to point toward resource")
+
+	steering_probe.nutrient.fill(0.0)
+	steering_probe.damage_cue.fill(0.0)
+	if steering_x < PetriSimulationScript.FIELD_WIDTH - 1:
+		steering_probe.damage_cue.values[steering_index + 1] = 0.8
+	steering_probe._refresh_bacterial_steering(
+		steering_cell,
+		steering_index
+	)
+	if cos(float(steering_cell.steering_angle)) >= -0.55:
+		errors.append("ecology: damage steering failed to point away from stress")
+
+	# Direct cohort routing must remain equivalent to the legacy helper.
+	var routing_probe = PetriSimulationScript.new(73011)
+	routing_probe.seed_demo(16)
+	routing_probe._current_metabolic_stride = 5
+	routing_probe._agent_tick = 7
+	for routing_cell in routing_probe.bacteria:
+		var inline_route: bool = (
+			routing_probe._current_metabolic_stride <= 1
+			or posmod(
+				int(routing_cell.id) + routing_probe._agent_tick,
+				routing_probe._current_metabolic_stride
+			) == 0
+		)
+		if inline_route != routing_probe._should_run_metabolism(int(routing_cell.id)):
+			errors.append("performance: direct metabolic cohort routing diverged")
+			break
+
+	# Cached motility must equal the uncached phenotype formula and update
+	# after regulated expression changes.
+	var motion_probe = BacteriumScript.new(
+		930001,
+		Vector2(20.0, 20.0),
+		0.0
+	)
+	motion_probe.configure_founder(RandomNumberGenerator.new())
+	var uncached_motion: float = (
+		float(motion_probe.gene_speed)
+		* clampf(
+			1.0
+			- float(motion_probe.expression_matrix) * 0.17
+			- float(motion_probe.expression_photo) * 0.07
+			- float(motion_probe.expression_detritus) * 0.035,
+			0.52,
+			1.0
+		)
+		* (
+			0.66
+			+ 0.085 * float(motion_probe.flagella_count)
+			+ 0.15 * float(motion_probe.flagella_length)
+		)
+		/ (0.84 + 0.20 * float(motion_probe.gene_size))
+	)
+	if absf(float(motion_probe.motion_speed_base) - uncached_motion) > 0.0001:
+		errors.append("performance: cached bacterial motility diverged from phenotype formula")
+	var old_motion: float = float(motion_probe.motion_speed_base)
+	motion_probe.expression_matrix = 1.0
+	motion_probe.refresh_motion_speed_cache()
+	if float(motion_probe.motion_speed_base) >= old_motion:
+		errors.append("performance: motility cache ignored regulated matrix drag")
+
+	# Dense frequency metadata is sampled adaptively; the hard population
+	# ceiling remains exact because births use the packed population size.
+	var metadata_probe = PetriSimulationScript.new(73010)
+	metadata_probe.seed_demo(12)
+	if metadata_probe._population_metadata_stride() != 1:
+		errors.append("performance: small population metadata should remain exact")
+	while metadata_probe.bacteria.size() < PetriSimulationScript.AGENT_MASS_THRESHOLD:
+		metadata_probe.bacteria.append(
+			BacteriumScript.new(
+				910000 + metadata_probe.bacteria.size(),
+				Vector2(32.0, 32.0),
+				0.0
+			)
+		)
+	if metadata_probe._population_metadata_stride() != 2:
+		errors.append("performance: mass population metadata stride mismatch")
+	while metadata_probe.bacteria.size() < PetriSimulationScript.AGENT_ULTRA_THRESHOLD:
+		metadata_probe.bacteria.append(
+			BacteriumScript.new(
+				920000 + metadata_probe.bacteria.size(),
+				Vector2(36.0, 36.0),
+				0.0
+			)
+		)
+	if metadata_probe._population_metadata_stride() != 4:
+		errors.append("performance: ultra population metadata stride mismatch")
+
+	# Bacterial population compaction removes only dead/consumed cells,
+	# preserves survivor order and appends births once.
+	var compact_probe = PetriSimulationScript.new(73009)
+	compact_probe.seed_demo(6)
+	var survivor_a = compact_probe.bacteria[0]
+	var removed = compact_probe.bacteria[1]
+	var survivor_b = compact_probe.bacteria[2]
+	removed.consumed = true
+	var daughter = BacteriumScript.new(
+		990001,
+		Vector2(40.0, 40.0),
+		0.0
+	)
+	var births: Array = [daughter]
+	compact_probe._compact_bacteria_population(births)
+	if compact_probe.bacteria.size() != 6:
+		errors.append("performance: bacterial compaction produced wrong population size")
+	elif (
+		compact_probe.bacteria[0] != survivor_a
+		or compact_probe.bacteria[1] != survivor_b
+		or compact_probe.bacteria[-1] != daughter
+	):
+		errors.append("performance: bacterial compaction broke stable survivor order")
+	if not births.is_empty():
+		errors.append("performance: bacterial compaction failed to recycle birth buffer")
+
+	# Persistent bacterial hot store stays aligned with dense biological order.
+	var hot_probe = PetriSimulationScript.new(73013)
+	hot_probe.seed_demo(20)
+	if hot_probe.bacteria_hot_store.size() != hot_probe.bacteria.size():
+		errors.append("performance: hot-store size diverged after seed")
+	else:
+		for hot_i in range(hot_probe.bacteria.size()):
+			if (
+				int(hot_probe.bacteria_hot_store.ids[hot_i])
+				!= int(hot_probe.bacteria[hot_i].id)
+			):
+				errors.append("performance: hot-store stable ID alignment failed")
+				break
+	var hot_first = hot_probe.bacteria[0]
+	hot_first.position += Vector2(3.0, 1.0)
+	hot_probe._sync_bacteria_hot_cell(0)
+	if hot_probe.bacteria_hot_store.positions[0].distance_to(
+		Vector2(hot_first.position)
+	) > 0.0001:
+		errors.append("performance: hot-store inline position sync failed")
+	var hot_dead = hot_probe.bacteria[1]
+	hot_dead.consumed = true
+	var hot_births: Array = []
+	hot_probe._compact_bacteria_population(hot_births)
+	hot_probe._rebuild_bacteria_id_map()
+	if not hot_probe._bacteria_hot_store_dirty:
+		errors.append("performance: hot-store compaction failed to invalidate snapshot")
+	hot_probe.bacteria_render_snapshot()
+	if hot_probe._bacteria_hot_store_dirty:
+		errors.append("performance: hot-store render snapshot stayed dirty")
+	if hot_probe.bacteria_hot_store.size() != hot_probe.bacteria.size():
+		errors.append("performance: hot-store size diverged after lazy compaction sync")
+	elif int(hot_probe.bacteria_hot_store.ids[1]) != int(hot_probe.bacteria[1].id):
+		errors.append("performance: hot-store lazy compaction alignment failed")
+
+	# Far-render bacteria are exported as packed dense state rather than
+	# requiring the renderer to traverse RefCounted cell objects.
+	var render_probe = PetriSimulationScript.new(73008)
+	render_probe.seed_demo(18)
+	var render_snapshot: Dictionary = render_probe.bacteria_render_snapshot()
+	var render_positions: PackedVector2Array = render_snapshot["positions"]
+	var render_angles: PackedFloat32Array = render_snapshot["angles"]
+	if render_positions.size() != render_probe.bacteria.size():
+		errors.append("performance: bacterial render snapshot count mismatch")
+	if render_angles.size() != render_positions.size():
+		errors.append("performance: bacterial render snapshot arrays diverged")
+	if (
+		not render_positions.is_empty()
+		and render_positions[0].distance_to(
+			Vector2(render_probe.bacteria[0].position)
+		) > 0.0001
+	):
+		errors.append("performance: bacterial render snapshot position mismatch")
+
+	# Packed field-flow cache must stay equivalent to position sampling.
+	var flow_probe = PetriSimulationScript.new(73007)
+	flow_probe.seed_demo(4)
+	flow_probe._refresh_environment_caches()
+	var flow_position := Vector2(77.25, 41.75)
+	var flow_index: int = flow_probe._field_index_for_world(flow_position)
+	if flow_probe._water_flow_for_field_index(flow_index).distance_to(
+		flow_probe.sample_water_flow(flow_position)
+	) > 0.0001:
+		errors.append("performance: packed field-flow cache diverged from world sampling")
+
+	# Cold phenotype classification cache: repeated reads should reuse the
+	# stable species ID, then recompute only after phenotype invalidation.
+	var species_cache_probe = PetriSimulationScript.new(73006)
+	species_cache_probe.seed_demo(12)
+	var cached_cell = species_cache_probe.bacteria[0]
+	var cached_species: int = species_cache_probe.phenotype_species_id(cached_cell, 0)
+	if bool(cached_cell.phenotype_species_dirty):
+		errors.append("performance: phenotype species cache did not settle")
+	if species_cache_probe.phenotype_species_id(cached_cell, 0) != cached_species:
+		errors.append("performance: phenotype species cache was unstable")
+	cached_cell.gene_size = 1.54
+	cached_cell.phenotype_species_dirty = true
+	var recomputed_species: int = species_cache_probe.phenotype_species_id(cached_cell, 0)
+	if bool(cached_cell.phenotype_species_dirty):
+		errors.append("performance: phenotype species cache failed to refresh")
+	if int(cached_cell.phenotype_species_cache) != recomputed_species:
+		errors.append("performance: phenotype species cache stored wrong value")
+
+	# Dormancy telemetry exposes current dormant populations independently
+	# from cumulative enter/wake events.
+	var dormancy_metrics_probe = PetriSimulationScript.new(73017)
+	dormancy_metrics_probe.seed_demo(0)
+	if not dormancy_metrics_probe.decomposers.is_empty():
+		dormancy_metrics_probe.decomposers[0].enter_dormancy()
+	if not dormancy_metrics_probe.hyphae.is_empty():
+		dormancy_metrics_probe.hyphae[0].enter_dormancy()
+	var dormancy_counts: Dictionary = dormancy_metrics_probe.dormancy_metrics()
+	if int(dormancy_counts.get("decomposers", 0)) != 1:
+		errors.append("telemetry: dormant decomposer count missing")
+	if int(dormancy_counts.get("hyphae", 0)) != 1:
+		errors.append("telemetry: dormant hypha count missing")
+
+	# Dormant basal guilds expose explicit state for renderer/telemetry.
+	var dormant_visual_probe = PetriSimulationScript.new(73016)
+	dormant_visual_probe.seed_demo(0)
+	if (
+		dormant_visual_probe.decomposers.is_empty()
+		or not ("dormant" in dormant_visual_probe.decomposers[0])
+	):
+		errors.append("render: decomposer dormancy state missing")
+	if (
+		dormant_visual_probe.hyphae.is_empty()
+		or not ("dormant" in dormant_visual_probe.hyphae[0])
+	):
+		errors.append("render: hyphal dormancy state missing")
+
+	# Basal decomposer dormancy is inherited/trait-driven and reversible.
+	var dormancy_probe = PetriSimulationScript.new(73015)
+	dormancy_probe.seed_demo(0)
+	if dormancy_probe.decomposers.is_empty() or dormancy_probe.hyphae.is_empty():
+		errors.append("ecology: dormancy probe seed guilds missing")
+	else:
+		var dormant_yeast = dormancy_probe.decomposers[0]
+		dormant_yeast.energy = 0.7
+		dormancy_probe.detritus.fill(0.0)
+		dormancy_probe._advance_decomposers(1.0)
+		if not bool(dormant_yeast.dormant):
+			errors.append("ecology: decomposer failed to enter resource dormancy")
+		dormancy_probe.detritus.fill(0.20)
+		dormancy_probe._advance_decomposers(1.0)
+		if bool(dormant_yeast.dormant):
+			errors.append("ecology: decomposer failed to wake on detritus")
+
+		var dormant_hypha = dormancy_probe.hyphae[0]
+		dormant_hypha.energy = 1.0
+		dormancy_probe.detritus.fill(0.0)
+		dormancy_probe._advance_hyphae(1.0)
+		if not bool(dormant_hypha.dormant):
+			errors.append("ecology: hypha failed to enter quiescence")
+		dormancy_probe.detritus.fill(0.20)
+		dormancy_probe._advance_hyphae(1.0)
+		if bool(dormant_hypha.dormant):
+			errors.append("ecology: hypha failed to wake on detritus")
+
+	# Presentation-facing phenotype species now use four deterministic bands.
+	var species_bin_probe = PetriSimulationScript.new(73019)
+	if species_bin_probe._species_bin(0.55, 0.55, 1.75) != 0:
+		errors.append("evolution: species bin lower bound mismatch")
+	if species_bin_probe._species_bin(1.74, 0.55, 1.75) != 3:
+		errors.append("evolution: species bin upper bound should use four bins")
+
+	var flux_probe = LivingTerrainScript.new(73020, Vector2(30.0, 30.0))
+	flux_probe.water_flux.fill(0.0)
+	flux_probe.water_flux[0] = 0.25
+	if absf(flux_probe.water_flux_at_grid(0, 0) - 0.25) > 0.0001:
+		errors.append("render: terrain water flux accessor mismatch")
+
+	var balance_probe = PetriSimulationScript.new(73021)
+	if (
+		balance_probe.ciliate_reproduction_energy
+		>= balance_probe.ciliate_energy_cap
+	):
+		errors.append("ecology: ciliate reproduction threshold exceeds energy cap")
+	if (
+		balance_probe.flagellate_reproduction_energy
+		>= balance_probe.flagellate_energy_cap
+	):
+		errors.append("ecology: flagellate reproduction threshold exceeds energy cap")
+	if (
+		balance_probe.protozoan_reproduction_energy
+		>= balance_probe.protozoan_energy_cap
+	):
+		errors.append("ecology: protozoan reproduction threshold exceeds energy cap")
+
+	flux_probe.water_depths[0] = 0.08
+	flux_probe.soil_moisture[0] = 0.55
+	balance_probe.producer_biomass.values[0] = 0.20
+	if (
+		flux_probe.habitat_state_at_grid(balance_probe, 0, 0)
+		!= LivingTerrainScript.HABITAT_MARSH
+	):
+		errors.append("biome: wet producer edge should derive a marsh habitat")
+
+	var hydro_equilibrium = LivingTerrainScript.new(
+		73022,
+		Vector2(30.0, 30.0)
+	)
+	hydro_equilibrium.water_depths.fill(0.50)
+	hydro_equilibrium.soil_moisture.fill(0.65)
+	var water_before: float = float(hydro_equilibrium.water_depths[0])
+	hydro_equilibrium._advance_hydrology(1.0)
+	if float(hydro_equilibrium.water_depths[0]) >= water_before:
+		errors.append("biome: excess surface water failed to infiltrate")
+
+	# Trophic capacity regression: safety ceilings are guards, not population
+	# targets. Predator carrying capacities must respond to prey abundance.
+	var capacity_probe = PetriSimulationScript.new(73004)
+	capacity_probe.seed_demo(72)
+	var low_flag_capacity: int = capacity_probe._flagellate_carrying_capacity()
+	var low_proto_capacity: int = capacity_probe._protozoan_carrying_capacity()
+	if low_flag_capacity >= PetriSimulationScript.FLAGELLATE_SAFETY_LIMIT:
+		errors.append("ecology: flagellate safety ceiling still acts as carrying capacity")
+	if low_proto_capacity >= PetriSimulationScript.PROTOZOAN_SAFETY_LIMIT:
+		errors.append("ecology: protozoan safety ceiling still acts as carrying capacity")
+	for extra in range(1200):
+		var prey = BacteriumScript.new(
+			900000 + extra,
+			Vector2(20.0 + float(extra % 80), 20.0 + float(extra % 40)),
+			0.0
+		)
+		capacity_probe.bacteria.append(prey)
+	if capacity_probe._flagellate_carrying_capacity() <= low_flag_capacity:
+		errors.append("ecology: flagellate capacity failed to follow prey abundance")
+	if capacity_probe._protozoan_carrying_capacity() <= low_proto_capacity:
+		errors.append("ecology: protozoan capacity failed to follow prey abundance")
+	capacity_probe.bacteria.resize(PetriSimulationScript.SAFETY_POPULATION_LIMIT)
+	var max_flag_capacity: int = capacity_probe._flagellate_carrying_capacity()
+	var max_ciliate_capacity: int = capacity_probe._ciliate_carrying_capacity()
+	var max_proto_capacity: int = capacity_probe._protozoan_carrying_capacity()
+	if max_flag_capacity >= PetriSimulationScript.FLAGELLATE_SAFETY_LIMIT:
+		errors.append("ecology: flagellate CPU guard is inside current trophic design range")
+	if max_ciliate_capacity >= PetriSimulationScript.CILIATE_SAFETY_LIMIT:
+		errors.append("ecology: ciliate CPU guard is inside current trophic design range")
+	if max_proto_capacity >= PetriSimulationScript.PROTOZOAN_SAFETY_LIMIT:
+		errors.append("ecology: protozoan CPU guard is inside current trophic design range")
+
+	# Basal seed-bank wake-up is niche-driven. Predators may coexist with dormant
+	# producers/decomposers instead of globally suppressing their germination.
+	var niche_wake_probe = PetriSimulationScript.new(73005)
+	niche_wake_probe.seed_demo(24)
+	niche_wake_probe.microalgae.clear()
+	niche_wake_probe.decomposers.clear()
+	niche_wake_probe.hyphae.clear()
+	niche_wake_probe.producer_biomass.fill(0.08)
+	niche_wake_probe.oxygen.fill(0.40)
+	niche_wake_probe.detritus.fill(0.10)
+	if not niche_wake_probe._refugia_can_wake(3):
+		errors.append("ecology: viable producer niche failed to wake algal refugia")
+	if not niche_wake_probe._refugia_can_wake(4):
+		errors.append("ecology: detrital niche failed to wake decomposer refugia")
+	if not niche_wake_probe._refugia_can_wake(5):
+		errors.append("ecology: detrital niche failed to wake fungal refugia")
+
+	# Multi-species seed-bank regression: guild crashes must not collapse all
+	# dormant diversity to one remembered clone.
+	var guild_bank_probe = PetriSimulationScript.new(73003)
+	guild_bank_probe.seed_demo(24)
+	guild_bank_probe._refresh_refugia_memory()
+	if guild_bank_probe._refugia_guild_banks[3].size() < 2:
+		errors.append("ecology: algal refugia failed to retain multiple species")
+	if guild_bank_probe._refugia_guild_banks[4].size() < 2:
+		errors.append("ecology: decomposer refugia failed to retain multiple species")
+	guild_bank_probe.protozoa.clear()
+	guild_bank_probe.ciliates.clear()
+	guild_bank_probe.microalgae.clear()
+	guild_bank_probe._try_wake_guild_bank(
+		3,
+		PetriSimulationScript.REFUGIA_BASAL_DIVERSITY_WAKE
+	)
+	if guild_bank_probe.microalgae.size() < 2:
+		errors.append("ecology: algal extinction did not restore dormant species diversity")
+
+	# Refugia regression: a fully lost bacterial guild must be recoverable from
+	# the seed bank, and germination must not fake a reproductive generation.
+	var refuge_probe = PetriSimulationScript.new(73002)
+	refuge_probe.seed_demo(12)
+	refuge_probe._refresh_refugia_memory()
+	var bank_generation: int = int(refuge_probe._refugia_bacteria[0].generation)
+	refuge_probe.bacteria.clear()
+	refuge_probe.protozoa.clear()
+	refuge_probe.ciliates.clear()
+	refuge_probe.flagellates.clear()
+	refuge_probe._maintain_ecological_refugia(
+		PetriSimulationScript.REFUGIA_RECOVERY_INTERVAL
+	)
+	if refuge_probe.bacteria.is_empty():
+		errors.append("ecology: bacterial seed bank failed to recover extinction")
+	else:
+		if int(refuge_probe.bacteria[0].generation) != bank_generation:
+			errors.append("ecology: refuge wake incorrectly advanced generation")
+		if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != 2:
+			errors.append("ecology: bacterial diversity wake count mismatch")
+	var bacterial_wakes_before: int = int(
+		refuge_probe.ecology_events.get("refugia_bacteria", 0)
+	)
+	refuge_probe.bacteria.clear()
+	refuge_probe._maintain_ecological_refugia(
+		PetriSimulationScript.REFUGIA_RECOVERY_INTERVAL
+	)
+	if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != bacterial_wakes_before:
+		errors.append("ecology: bacterial refuge cooldown allowed immediate reinjection churn")
+
+	var id_probe = PetriSimulationScript.new(73001)
+	id_probe.seed_demo(24)
+	id_probe.step(1.0 / 30.0)
+	id_probe._rebuild_spatial_grid()
+	if id_probe.bacteria.size() > 2:
+		id_probe.bacteria.pop_back()
+		id_probe._nearest_bacterium_spatial(Vector2(96.0, 64.0), 200.0)
+	if id_probe.bacteria.is_empty():
+		errors.append("performance: id-map probe lost all bacteria")
+	else:
+		var id_cell = id_probe.bacteria[0]
+		if id_probe.find_cell_by_id(int(id_cell.id)) != id_cell:
+			errors.append("performance: bacteria id cache lookup mismatch")
+
+		# High-density mechanics must switch to bounded density mode without
+	# producing non-finite positions.
+	var density_probe = PetriSimulationScript.new(771002)
+	density_probe.seed_demo(
+		PetriSimulationScript.EXACT_MECHANICS_LIMIT + 32
+	)
+	density_probe.step(1.0 / 30.0)
+	if int(density_probe.mechanics_mode_last) != 1:
+		errors.append("performance: high-density mechanics LOD did not engage")
+	for density_cell in density_probe.bacteria:
+		var density_position: Vector2 = Vector2(density_cell.position)
+		if not (
+			is_finite(density_position.x)
+			and is_finite(density_position.y)
+		):
+			errors.append("performance: density mechanics produced invalid position")
+			break
+
+		# Indexed scalar hot APIs must conserve local add/take semantics.
+	var indexed_probe = ScalarFieldScript.new(4, 4, 2.0, 0.0)
+	indexed_probe.add_index(5, 0.8)
+	var indexed_taken: float = indexed_probe.take_index(5, 0.3)
+	if (
+		absf(indexed_taken - 0.3) > 0.0001
+		or absf(float(indexed_probe.values[5]) - 0.5) > 0.0001
+	):
+		errors.append("performance: indexed scalar add/take mismatch")
+
+		# Regression: dense producer biomass must reduce local effective light.
+	# This is a biome feedback, not a renderer-only tint.
+	var shade_probe = PetriSimulationScript.new(99173)
+	var shade_position := Vector2(21.0, 21.0)
+	shade_probe.producer_biomass.fill(0.0)
+	var open_light: float = float(shade_probe.sample_light(shade_position))
+	# Fill the field so bilinear sampling observes a fully dense local patch
+	# instead of averaging one occupied cell with three empty neighbors.
+	shade_probe.producer_biomass.fill(1.0)
+	var shaded_light: float = float(shade_probe.sample_light(shade_position))
+	if shaded_light >= open_light * 0.80:
+		errors.append("biome: producer self-shading did not attenuate local light")
+	if shaded_light <= 0.0 or not is_finite(shaded_light):
+		errors.append("biome: producer self-shading produced invalid light")
+
+	# Regression: producer mats may grow/spread from real seeds, but an empty
+	# field must not spontaneously turn into full-screen producer wallpaper.
+	var mat_probe = PetriSimulationScript.new(77123)
+	mat_probe.producer_biomass.fill(0.0)
+	mat_probe.nutrient.fill(1.0)
+	mat_probe._advance_producer_mat(5.0)
+	if mat_probe.producer_biomass.total() > 0.000001:
+		errors.append("biome: empty producer field nucleated without a seed")
+	var mat_position := Vector2(48.0, 48.0)
+	mat_probe.producer_biomass.add_nearest_world(mat_position, 0.40)
+	var seeded_before: float = mat_probe.producer_biomass.total()
+	mat_probe._advance_producer_mat(1.0)
+	if mat_probe.producer_biomass.total() <= seeded_before:
+		errors.append("biome: seeded producer mat failed to grow")
+
+	# Habitat-choice regression: ecological traits must produce distinct niche
+	# preferences instead of every guild seeing the same terrain.
+	var affinity_sim = PetriSimulationScript.new(88229)
+	affinity_sim.seed_demo(12)
+	var affinity_terrain = LivingTerrainScript.new(
+		99109,
+		Vector2(affinity_sim.world_size)
+	)
+	var affinity_alga = affinity_sim.microalgae[0]
+	if affinity_terrain._biome_affinity(
+		affinity_alga,
+		LivingTerrainScript.BIOME_PRODUCER
+	) <= affinity_terrain._biome_affinity(
+		affinity_alga,
+		LivingTerrainScript.BIOME_ANOXIC
+	):
+		errors.append("biome: producer failed to prefer productive oxic habitat")
+	var affinity_decomposer = affinity_sim.decomposers[0]
+	if affinity_terrain._biome_affinity(
+		affinity_decomposer,
+		LivingTerrainScript.BIOME_DETRITAL
+	) <= affinity_terrain._biome_affinity(
+		affinity_decomposer,
+		LivingTerrainScript.BIOME_OPEN
+	):
+		errors.append("biome: decomposer failed to prefer detrital habitat")
+	var affinity_bacterium = affinity_sim.bacteria[0]
+	affinity_bacterium.gene_adhesion = 1.6
+	if affinity_terrain._biome_affinity(
+		affinity_bacterium,
+		LivingTerrainScript.BIOME_BIOFILM
+	) <= affinity_terrain._biome_affinity(
+		affinity_bacterium,
+		LivingTerrainScript.BIOME_OPEN
+	):
+		errors.append("biome: adherent bacterium failed to prefer biofilm habitat")
+
+	# Terraforming is a transient succession driver, not a permanent biome.
+	var recovery_sim = PetriSimulationScript.new(88228)
+	recovery_sim.seed_demo(0)
+	var recovery_terrain = LivingTerrainScript.new(
+		99108,
+		Vector2(recovery_sim.world_size)
+	)
+	recovery_sim.producer_biomass.fill(0.0)
+	recovery_sim.eps.fill(0.0)
+	recovery_sim.detritus.fill(0.0)
+	recovery_sim.fungal_enzyme.fill(0.0)
+	recovery_sim.waste.fill(0.0)
+	recovery_sim.quorum_signal.fill(0.0)
+	recovery_sim.oxygen.fill(0.42)
+	recovery_terrain.excavate(Vector2(80.0, 60.0), 1.2, 3.0)
+	recovery_terrain._advance_biome_succession(
+		recovery_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	if int(recovery_terrain.biome_metrics().get("disturbed", 0)) <= 0:
+		errors.append("biome: recent terraforming failed to create disturbed habitat")
+	for _decay_step in range(7):
+		recovery_terrain._advance_biome_succession(recovery_sim, 10.0)
+	if int(recovery_terrain.biome_metrics().get("disturbed", 0)) > 0:
+		errors.append("biome: old terraforming remained permanently disturbed")
+
+	# Persistent biome succession regression: producer fields should mature into
+	# producer habitat and later transition under anoxic waste pressure.
+	var biome_sim = PetriSimulationScript.new(88230)
+	biome_sim.seed_demo(0)
+	var biome_terrain = LivingTerrainScript.new(
+		99110,
+		Vector2(biome_sim.world_size)
+	)
+	biome_sim.producer_biomass.fill(0.80)
+	biome_sim.oxygen.fill(0.80)
+	biome_sim.detritus.fill(0.0)
+	biome_sim.eps.fill(0.0)
+	biome_sim.fungal_enzyme.fill(0.0)
+	biome_sim.waste.fill(0.0)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	var biome_counts: Dictionary = biome_terrain.biome_metrics()
+	if int(biome_counts.get("producer", 0)) <= 0:
+		errors.append("biome: producer habitat failed to establish")
+	biome_sim.producer_biomass.fill(0.0)
+	biome_sim.oxygen.fill(0.02)
+	biome_sim.waste.fill(0.30)
+	biome_sim.detritus.fill(0.12)
+	biome_terrain.water_depths.fill(0.18)
+	biome_terrain.soil_moisture.fill(0.72)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	biome_counts = biome_terrain.biome_metrics()
+	if int(biome_counts.get("anoxic", 0)) <= 0:
+		errors.append("biome: anoxic succession failed to replace producer habitat")
+
+	# Cross-feeding / dormancy regression.
+	var interaction_probe = PetriSimulationScript.new(88231)
+	interaction_probe.seed_demo(1)
+	var interaction_cell = interaction_probe.bacteria[0]
+	interaction_probe.nutrient.fill(0.0)
+	interaction_probe.exudate.fill(0.0)
+	interaction_cell.energy = 0.30
+	interaction_cell.dormant = false
+	interaction_probe._advance_cell(interaction_cell, DT)
+	if not bool(interaction_cell.dormant):
+		errors.append("ecology: starving bacterium failed to enter dormancy")
+	interaction_probe.exudate.add_radial_world(
+		Vector2(interaction_cell.position), 3.0, 0.80
+	)
+	interaction_probe._advance_cell(interaction_cell, DT)
+	if bool(interaction_cell.dormant):
+		errors.append("ecology: dormant bacterium failed to wake on exudate")
+	var exudate_before: float = interaction_probe.exudate.total()
+	interaction_probe._advance_cell(interaction_cell, 0.50)
+	if interaction_probe.exudate.total() >= exudate_before:
+		errors.append("ecology: bacterium failed to consume cross-feeding exudate")
+
+	# Succession/disturbance regression: pulses must alter local fields while
+	# washout removes attached material instead of creating/deleting organisms.
+	var succession_probe = PetriSimulationScript.new(7319)
+	succession_probe.seed_demo(0)
+	var nutrient_before_pulse: float = succession_probe.nutrient.total()
+	succession_probe._trigger_disturbance(
+		PetriSimulationScript.DISTURBANCE_RESOURCE_PULSE
+	)
+	if succession_probe.nutrient.total() <= nutrient_before_pulse:
+		errors.append("biome: resource disturbance failed to enrich nutrient")
+	succession_probe.producer_biomass.fill(0.60)
+	succession_probe.eps.fill(0.35)
+	var producer_before_washout: float = succession_probe.producer_biomass.total()
+	var eps_before_washout: float = succession_probe.eps.total()
+	succession_probe._trigger_disturbance(
+		PetriSimulationScript.DISTURBANCE_WASHOUT
+	)
+	if succession_probe.producer_biomass.total() >= producer_before_washout:
+		errors.append("biome: washout failed to reduce producer material")
+	if succession_probe.eps.total() >= eps_before_washout:
+		errors.append("biome: washout failed to reduce EPS")
+	if succession_probe.detritus.total() <= 0.0:
+		errors.append("biome: washout failed to create detrital opportunity")
+
+	# Natural transformation regression: lysis DNA is bounded and recombination
+	# changes a compatible trait without using plasmid-conjugation state.
+	var transform_probe = PetriSimulationScript.new(9301)
+	transform_probe.seed_demo(2)
+	var donor = transform_probe.bacteria[0]
+	var recipient = transform_probe.bacteria[1]
+	donor.gene_speed = 1.62
+	recipient.gene_speed = 0.72
+	recipient.gene_competence = 1.5
+	var dna = DNAFragmentScript.new(
+		1,
+		Vector2(recipient.position),
+		int(donor.lineage_id),
+		float(recipient.lineage_hue),
+		DNAFragmentScript.TRAIT_SPEED,
+		float(donor.gene_speed)
+	)
+	var speed_before: float = float(recipient.gene_speed)
+	transform_probe._integrate_dna_fragment(recipient, dna)
+	if float(recipient.gene_speed) <= speed_before:
+		errors.append("evolution: transformation failed to recombine trait")
+	transform_probe.dna_fragments.clear()
+	for i in range(90):
+		transform_probe._release_dna_fragments(donor)
+	if transform_probe.dna_fragments.size() > 64:
+		errors.append("evolution: extracellular DNA safety ceiling exceeded")
+
+	# Open-ended modular-genome regression: structural mutation stays bounded,
+	# expression is context-dependent, and donor modules can create a mosaic.
+	var genome_probe = EvolvableGenomeScript.new()
+	var genome_rng := RandomNumberGenerator.new()
+	genome_rng.seed = 771177
+	genome_probe.configure_founder(genome_rng)
+	var founder_modules: int = genome_probe.modules.size()
+	var child_genome = EvolvableGenomeScript.new()
+	var saw_structural_change: bool = false
+	for i in range(80):
+		child_genome.inherit_and_mutate(genome_probe, genome_rng, 0.18)
+		if child_genome.modules.size() != founder_modules:
+			saw_structural_change = true
+			break
+	if child_genome.modules.size() < 2 or child_genome.modules.size() > 14:
+		errors.append("evolution: modular genome escaped hard bounds")
+	if not saw_structural_change:
+		errors.append("evolution: structural mutation probe produced no module change")
+	var context_dark: Array = [1.0, 0.2, 0.1, 0.1, 0.0, 0.0, 0.0, 0.2, 0.5]
+	var context_light: Array = [1.0, 0.2, 0.1, 0.1, 1.0, 0.0, 0.0, 0.2, 0.5]
+	var photo_module := {
+		"kind": EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+		"strength": 1.2,
+		"sensor": EvolvableGenomeScript.SENSOR_LIGHT,
+		"threshold": 0.45,
+		"polarity": 1,
+		"innovation": 998877,
+	}
+	genome_probe.integrate_module(photo_module, genome_rng)
+	if (
+		genome_probe.expression(
+			EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+			context_light
+		)
+		<= genome_probe.expression(
+			EvolvableGenomeScript.MODULE_PHOTOTROPHY,
+			context_dark
+		)
+	):
+		errors.append("evolution: regulatory module ignored environmental context")
+
+	# Predator/prey coevolution regression: handling defence must emerge from
+	# visible costly traits and local matrix, not a hidden resistance variable.
+	var defence_probe = PetriSimulationScript.new(4417)
+	defence_probe.seed_demo(2)
+	var defended = defence_probe.bacteria[0]
+	defence_probe.eps.fill(0.0)
+	defended.gene_adhesion = 0.78
+	defended.gene_size = 0.92
+	defended.dormant = false
+	var baseline_defence: float = defence_probe._prey_handling_defense(defended)
+	defended.gene_adhesion = 1.70
+	defended.gene_size = 1.35
+	defence_probe.eps.add_radial_world(Vector2(defended.position), 4.0, 0.75)
+	var evolved_defence: float = defence_probe._prey_handling_defense(defended)
+	if evolved_defence <= baseline_defence:
+		errors.append("evolution: visible prey defence traits did not increase handling cost")
+
+	# Bacteriophage regression: infection is staged, lysis creates a viral
+	# burst/shunt, and the cloud representation remains hard bounded.
+	var phage_probe = PetriSimulationScript.new(64021)
+	phage_probe.seed_demo(1)
+	phage_probe.phage_clouds.clear()
+	var phage_host = phage_probe.bacteria[0]
+	var phage_packet = PhageCloudScript.new(
+		1,
+		Vector2(phage_host.position),
+		float(phage_host.lineage_hue),
+		1.0,
+		5.0,
+		0
+	)
+	phage_probe._infect_cell_with_phage(phage_host, phage_packet)
+	if not bool(phage_host.phage_infected):
+		errors.append("ecology: phage failed to infect compatible bacterium")
+	phage_host.phage_progress = 0.995
+	phage_probe._advance_cell(phage_host, phage_probe.phage_latent_period * 0.01)
+	if not bool(phage_host.dying) or not bool(phage_host.phage_triggered_lysis):
+		errors.append("ecology: latent phage infection failed to trigger lysis")
+	var viral_nutrient_before: float = phage_probe.nutrient.total()
+	phage_probe._recycle_dead_cell(phage_host)
+	if phage_probe.phage_clouds.is_empty():
+		errors.append("ecology: viral lysis failed to release a phage cloud")
+	if phage_probe.nutrient.total() <= viral_nutrient_before:
+		errors.append("ecology: viral shunt failed to return dissolved nutrient")
+	phage_probe.phage_clouds.clear()
+	for i in range(40):
+		phage_probe._spawn_phage_cloud(
+			Vector2(2.0 + float(i % 10) * 18.0, 4.0 + float(i / 10) * 24.0),
+			float(i) / 40.0,
+			0.20,
+			2.0,
+			0
+		)
+	if phage_probe.phage_clouds.size() > 24:
+		errors.append("population guard: phage cloud hard ceiling exceeded")
+
+	var capability_founder_probe = PetriSimulationScript.new(20261003)
+	capability_founder_probe.seed_demo(8)
+	for group in [
+		capability_founder_probe.bacteria,
+		capability_founder_probe.protozoa,
+		capability_founder_probe.ciliates,
+		capability_founder_probe.flagellates,
+		capability_founder_probe.microalgae,
+		capability_founder_probe.decomposers,
+		capability_founder_probe.hyphae,
+	]:
+		for agent in group:
+			if agent.physical_genome == null:
+				errors.append("evolution: founder missing shared physical genome")
+				break
+			if not "capability_mix_events" in agent:
+				errors.append("evolution: founder missing capability mix counter")
+				break
+
 	var first = PetriSimulationScript.new(424242)
 	var second = PetriSimulationScript.new(424242)
+	# Keep the deterministic smoke window at the historical small-population
+	# ceiling. The live app uses the 5k guard; scale belongs to perf_benchmark.
+	first.bacteria_population_limit = 420
+	second.bacteria_population_limit = 420
 	first.seed_demo(24)
 	second.seed_demo(24)
 
@@ -16,19 +1142,122 @@ func _init() -> void:
 		first.step(DT)
 		second.step(DT)
 
-	var errors := PackedStringArray()
+	# Regression: ciliate prey lookup must remain generic after capture.
+	# Otherwise algae/yeast can become permanently "engulfed" after the
+	# first frame because the feeding continuation only searches bacteria.
+	var trophic = PetriSimulationScript.new(5150)
+	trophic.seed_demo(0)
+	trophic.protozoa.clear()
+	trophic.decomposers.clear()
+	if trophic.ciliates.is_empty() or trophic.microalgae.is_empty():
+		errors.append("ecology: missing ciliate/alga regression fixtures")
+	else:
+		var grazer = trophic.ciliates[0]
+		var alga = trophic.microalgae[0]
+		grazer.position = Vector2(alga.position)
+		grazer.cooldown = 0.0
+		trophic._advance_ciliates(DT)
+		if int(grazer.feeding_target_id) != int(alga.id):
+			errors.append("ecology: ciliate failed to capture microalga")
+		else:
+			var before_progress: float = float(grazer.feeding_progress)
+			trophic._advance_ciliates(DT)
+			if float(grazer.feeding_progress) <= before_progress:
+				errors.append("ecology: ciliate lost non-bacterial prey after capture")
+			if int(alga.engulfed_by_id) != int(grazer.id):
+				errors.append("ecology: microalga capture ownership was lost")
 
 	if first.state_signature() != second.state_signature():
 		errors.append("determinism: identical seeds produced different signatures")
 
+	var evolution_probe: Dictionary = first.evolution_metrics()
+	if int(evolution_probe.get("species", 0)) < 4:
+		errors.append("evolution: phenotype species clustering produced too little diversity")
+	if int(evolution_probe.get("ecotypes", 0)) <= 0:
+		errors.append("evolution: ecotype telemetry reported no diversity")
+	if int(evolution_probe.get("max_generation", -1)) < 0:
+		errors.append("evolution: invalid max generation metric")
+
 	if first.bacteria.is_empty():
 		errors.append("population: all bacteria died during the smoke window")
+	if first.protozoa.is_empty():
+		errors.append("ecology: amoeboid predator guild disappeared during smoke")
+	if first.ciliates.is_empty():
+		errors.append("ecology: ciliate predator guild disappeared during smoke")
+	if first.flagellates.is_empty():
+		errors.append("ecology: flagellate grazer guild disappeared during smoke")
+	if first.microalgae.is_empty():
+		errors.append("ecology: explicit microalgae guild disappeared during smoke")
+	if first.decomposers.is_empty():
+		errors.append("ecology: decomposer guild disappeared during smoke")
+	if first.hyphae.is_empty():
+		errors.append("ecology: hyphal decomposer guild disappeared during smoke")
+	if first.bacteria.size() > first.bacteria_population_limit:
+		errors.append("population guard: bacterial hard ceiling exceeded")
+	if first.protozoa.size() > 18:
+		errors.append("population guard: protozoan hard ceiling exceeded")
+	if first.ciliates.size() > 16:
+		errors.append("population guard: ciliate hard ceiling exceeded")
+	if first.flagellates.size() > 28:
+		errors.append("population guard: flagellate hard ceiling exceeded")
+	if first.microalgae.size() > 64:
+		errors.append("population guard: microalgae hard ceiling exceeded")
+	if first.decomposers.size() > 48:
+		errors.append("population guard: decomposer hard ceiling exceeded")
+	if first.hyphae.size() > 6:
+		errors.append("population guard: hyphal colony ceiling exceeded")
+	if first.phage_clouds.size() > 24:
+		errors.append("population guard: phage cloud ceiling exceeded")
 
 	if first.nutrient.min_value() < -0.000001:
 		errors.append("nutrient: negative concentration detected")
 
 	if first.waste.min_value() < -0.000001:
 		errors.append("waste: negative concentration detected")
+	if first.oxygen.min_value() < -0.000001:
+		errors.append("biome: negative oxygen detected")
+	if first.detritus.min_value() < -0.000001:
+		errors.append("biome: negative detritus detected")
+	if first.eps.min_value() < -0.000001:
+		errors.append("biome: negative EPS detected")
+	if first.damage_cue.min_value() < -0.000001:
+		errors.append("biome: negative damage cue detected")
+	if first.producer_biomass.min_value() < -0.000001:
+		errors.append("biome: negative producer biomass detected")
+	if first.exudate.min_value() < -0.000001:
+		errors.append("biome: negative exudate detected")
+	if first.quorum_signal.min_value() < -0.000001:
+		errors.append("biome: negative quorum signal detected")
+	if first.fungal_enzyme.min_value() < -0.000001:
+		errors.append("biome: negative fungal enzyme detected")
+	if first.producer_biomass.total() <= 0.0:
+		errors.append("biome: producer mat disappeared")
+	if first.exudate.total() <= 0.0:
+		errors.append("ecology: cross-feeding exudate field remained empty")
+	if first.quorum_signal.total() <= 0.0:
+		errors.append("ecology: quorum signal field remained empty")
+	if first.fungal_enzyme.total() <= 0.0:
+		errors.append("ecology: fungal enzyme field remained empty")
+
+	for cloud in first.phage_clouds:
+		if not _finite_vector(cloud.position):
+			errors.append("ecology: non-finite phage cloud position %d" % cloud.id)
+		if (
+			not is_finite(float(cloud.concentration))
+			or float(cloud.concentration) < 0.0
+		):
+			errors.append("ecology: invalid phage cloud concentration %d" % cloud.id)
+
+	for colony in first.hyphae:
+		if not _finite_vector(colony.position) or not is_finite(float(colony.energy)):
+			errors.append("ecology: invalid hyphal colony state %d" % colony.id)
+		if colony.nodes.size() > 24:
+			errors.append("population guard: hyphal node ceiling exceeded")
+		if colony.nodes.size() != colony.parents.size():
+			errors.append("ecology: malformed hyphal graph %d" % colony.id)
+		for node in colony.nodes:
+			if not _finite_vector(Vector2(node)):
+				errors.append("ecology: non-finite hyphal node %d" % colony.id)
 
 	var ids := {}
 	var saw_genotype_variation: bool = false
@@ -45,6 +1274,45 @@ func _init() -> void:
 			errors.append("state: invalid length for cell %d" % cell.id)
 		if not is_finite(cell.energy) or cell.energy < 0.0:
 			errors.append("state: invalid energy for cell %d" % cell.id)
+		if (
+			not is_finite(float(cell.division_progress))
+			or float(cell.division_progress) < 0.0
+			or float(cell.division_progress) > 1.000001
+		):
+			errors.append("state: invalid division progress for cell %d" % cell.id)
+		if (
+			not is_finite(float(cell.lysis_progress))
+			or float(cell.lysis_progress) < 0.0
+			or float(cell.lysis_progress) > 1.000001
+		):
+			errors.append("state: invalid lysis progress for cell %d" % cell.id)
+
+		if int(cell.guild) < 0 or int(cell.guild) > 3:
+			errors.append("ecology: invalid bacterial guild for cell %d" % cell.id)
+		if cell.genome == null:
+			errors.append("evolution: cell missing modular genome %d" % cell.id)
+		elif cell.genome.modules.size() < 2 or cell.genome.modules.size() > 14:
+			errors.append("evolution: invalid genome module count for cell %d" % cell.id)
+		if int(cell.plasmid_mask) < 0 or int(cell.plasmid_mask) > 15:
+			errors.append("evolution: invalid plasmid mask for cell %d" % cell.id)
+		if not is_finite(float(cell.gene_dormancy)):
+			errors.append("ecology: invalid dormancy trait for cell %d" % cell.id)
+		if not is_finite(float(cell.gene_competence)):
+			errors.append("evolution: invalid competence trait for cell %d" % cell.id)
+		if (
+			float(cell.phage_progress) < 0.0
+			or float(cell.phage_progress) > 1.000001
+		):
+			errors.append("ecology: invalid phage infection progress for cell %d" % cell.id)
+		if float(cell.dormant_time) < 0.0 or not is_finite(float(cell.dormant_time)):
+			errors.append("ecology: invalid dormant timer for cell %d" % cell.id)
+		if int(cell.transfer_role) < 0 or int(cell.transfer_role) > 2:
+			errors.append("evolution: invalid transfer role for cell %d" % cell.id)
+		if (
+			float(cell.transfer_progress) < 0.0
+			or float(cell.transfer_progress) > 1.000001
+		):
+			errors.append("evolution: invalid transfer progress for cell %d" % cell.id)
 
 		if absf(float(cell.gene_speed) - 1.0) > 0.001:
 			saw_genotype_variation = true
@@ -52,14 +1320,91 @@ func _init() -> void:
 	if not saw_genotype_variation:
 		errors.append("genetics: founders did not expose any trait variation")
 
+	for proto in first.protozoa:
+		if not _finite_vector(proto.position) or not is_finite(proto.energy):
+			errors.append("ecology: invalid protozoan state %d" % proto.id)
+		if (
+			not is_finite(float(proto.lysis_progress))
+			or float(proto.lysis_progress) < 0.0
+			or float(proto.lysis_progress) > 1.000001
+		):
+			errors.append("ecology: invalid protozoan lysis state %d" % proto.id)
+	for ciliate in first.ciliates:
+		if not _finite_vector(ciliate.position) or not is_finite(ciliate.energy):
+			errors.append("ecology: invalid ciliate state %d" % ciliate.id)
+		if (
+			not is_finite(float(ciliate.lysis_progress))
+			or float(ciliate.lysis_progress) < 0.0
+			or float(ciliate.lysis_progress) > 1.000001
+		):
+			errors.append("ecology: invalid ciliate lysis state %d" % ciliate.id)
+		if (
+			not is_finite(float(ciliate.engulf_progress))
+			or float(ciliate.engulf_progress) < 0.0
+			or float(ciliate.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid ciliate engulf state %d" % ciliate.id)
+		if bool(ciliate.consumed) and int(ciliate.engulfed_by_id) >= 0:
+			errors.append("ecology: consumed ciliate still owned by predator %d" % ciliate.id)
+
+	for flagellate in first.flagellates:
+		if not _finite_vector(flagellate.position) or not is_finite(flagellate.energy):
+			errors.append("ecology: invalid flagellate state %d" % flagellate.id)
+		if (
+			float(flagellate.lysis_progress) < 0.0
+			or float(flagellate.lysis_progress) > 1.000001
+			or float(flagellate.feeding_progress) < 0.0
+			or float(flagellate.feeding_progress) > 1.000001
+			or float(flagellate.engulf_progress) < 0.0
+			or float(flagellate.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid flagellate transition state %d" % flagellate.id)
+
+	for alga in first.microalgae:
+		if not _finite_vector(alga.position) or not is_finite(alga.energy):
+			errors.append("ecology: invalid microalga state %d" % alga.id)
+		if (
+			float(alga.lysis_progress) < 0.0
+			or float(alga.lysis_progress) > 1.000001
+			or float(alga.reproduction_progress) < 0.0
+			or float(alga.reproduction_progress) > 1.000001
+			or float(alga.engulf_progress) < 0.0
+			or float(alga.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid microalga transition state %d" % alga.id)
+
+	for yeast in first.decomposers:
+		if not _finite_vector(yeast.position) or not is_finite(yeast.energy):
+			errors.append("ecology: invalid decomposer state %d" % yeast.id)
+		if (
+			float(yeast.lysis_progress) < 0.0
+			or float(yeast.lysis_progress) > 1.000001
+			or float(yeast.budding_progress) < 0.0
+			or float(yeast.budding_progress) > 1.000001
+			or float(yeast.engulf_progress) < 0.0
+			or float(yeast.engulf_progress) > 1.000001
+		):
+			errors.append("ecology: invalid decomposer transition state %d" % yeast.id)
+
 	if errors.is_empty():
 		print(
-			"MicroC0re smoke PASS | steps=%d cells=%d nutrient=%.3f waste=%.3f"
+			"MicroC0re smoke PASS | steps=%d bac=%d amoeba=%d ciliates=%d flagellates=%d algae=%d yeast=%d hyphae=%d phage=%d nutrient=%.3f oxygen=%.3f detritus=%.3f producer=%.3f exudate=%.3f quorum=%.3f"
 			% [
 				STEPS,
 				first.bacteria.size(),
+				first.protozoa.size(),
+				first.ciliates.size(),
+				first.flagellates.size(),
+				first.microalgae.size(),
+				first.decomposers.size(),
+				first.hyphae.size(),
+				first.phage_clouds.size(),
 				first.nutrient.total(),
-				first.waste.total(),
+				first.oxygen.total(),
+				first.detritus.total(),
+				first.producer_biomass.total(),
+				first.exudate.total(),
+				first.quorum_signal.total(),
 			]
 		)
 		quit(0)
@@ -67,6 +1412,47 @@ func _init() -> void:
 		for message in errors:
 			push_error(message)
 		quit(1)
+
+
+func _validate_preloaded_scripts(errors: PackedStringArray) -> void:
+	var required_scripts: Array = [
+		["petri_simulation", PetriSimulationScript],
+		["physical_capability_genome", PhysicalCapabilityGenomeScript],
+		["living_terrain", LivingTerrainScript],
+		["isometric_ecosystem", IsometricEcosystemScript],
+		["pixel_isometric_world", PixelIsometricWorldScript],
+		["session_telemetry", SessionTelemetryScript],
+		["evolvable_genome", EvolvableGenomeScript],
+		["dna_fragment", DNAFragmentScript],
+		["phage_cloud", PhageCloudScript],
+		["bacterium", BacteriumScript],
+		["pixel_microscope", PixelMicroscopeScript],
+		["pixel_microbe_atlas", PixelAtlasScript],
+		["far_multimesh_renderer", FarMultiMeshRendererScript],
+		["protozoan", ProtozoanScript],
+		["ciliate", CiliateScript],
+		["flagellate", FlagellateScript],
+		["microalga", MicroalgaScript],
+		["decomposer_yeast", DecomposerYeastScript],
+		["hyphal_colony", HyphalColonyScript],
+		["pixel_protozoa_atlas", PixelProtozoaAtlasScript],
+		["pixel_ciliate_atlas", PixelCiliateAtlasScript],
+		["pixel_flagellate_atlas", PixelFlagellateAtlasScript],
+		["pixel_ecology_atlas", PixelEcologyAtlasScript],
+		["biome_material_renderer", BiomeMaterialRendererScript],
+		["pixel_effect_atlas", PixelEffectAtlasScript],
+		["pixel_dna_atlas", PixelDNAAtlasScript],
+		["pixel_hypha_atlas", PixelHyphaAtlasScript],
+		["pixel_phage_atlas", PixelPhageAtlasScript],
+	]
+
+	for entry in required_scripts:
+		var script_name: String = String(entry[0])
+		var script: Variant = entry[1]
+		if script == null:
+			errors.append("preload: %s script is null" % script_name)
+		elif not script.can_instantiate():
+			errors.append("preload: %s script cannot instantiate" % script_name)
 
 
 func _finite_vector(value: Vector2) -> bool:

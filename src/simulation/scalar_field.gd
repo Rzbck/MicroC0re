@@ -6,6 +6,12 @@ var height: int
 var cell_size: float
 var values: PackedFloat32Array = PackedFloat32Array()
 var _scratch: PackedFloat32Array = PackedFloat32Array()
+var _left: PackedInt32Array = PackedInt32Array()
+var _right: PackedInt32Array = PackedInt32Array()
+var _up: PackedInt32Array = PackedInt32Array()
+var _down: PackedInt32Array = PackedInt32Array()
+var _inv_cell_size: float = 0.5
+var _inv_h2: float = 0.25
 
 
 func _init(
@@ -17,8 +23,16 @@ func _init(
 	width = maxi(2, p_width)
 	height = maxi(2, p_height)
 	cell_size = maxf(0.0001, p_cell_size)
-	values.resize(width * height)
-	_scratch.resize(width * height)
+	_inv_cell_size = 1.0 / cell_size
+	_inv_h2 = _inv_cell_size * _inv_cell_size
+	var count: int = width * height
+	values.resize(count)
+	_scratch.resize(count)
+	_left.resize(count)
+	_right.resize(count)
+	_up.resize(count)
+	_down.resize(count)
+	_build_neighbor_topology()
 	fill(initial_value)
 
 
@@ -48,8 +62,8 @@ func set_cell(x: int, y: int, value: float) -> void:
 func add_nearest_world(position: Vector2, amount: float) -> void:
 	if amount <= 0.0:
 		return
-	var ix: int = clampi(floori(position.x / cell_size), 0, width - 1)
-	var iy: int = clampi(floori(position.y / cell_size), 0, height - 1)
+	var ix: int = clampi(floori(position.x * _inv_cell_size), 0, width - 1)
+	var iy: int = clampi(floori(position.y * _inv_cell_size), 0, height - 1)
 	var idx: int = _index(ix, iy)
 	values[idx] = maxf(0.0, values[idx] + amount)
 
@@ -58,8 +72,8 @@ func add_radial_world(position: Vector2, radius: float, amount: float) -> void:
 	if amount <= 0.0 or radius <= 0.0:
 		return
 
-	var cx: int = clampi(floori(position.x / cell_size), 0, width - 1)
-	var cy: int = clampi(floori(position.y / cell_size), 0, height - 1)
+	var cx: int = clampi(floori(position.x * _inv_cell_size), 0, width - 1)
+	var cy: int = clampi(floori(position.y * _inv_cell_size), 0, height - 1)
 	var cell_radius: int = maxi(1, ceili(radius / cell_size))
 	var radius_sq: float = radius * radius
 
@@ -79,20 +93,87 @@ func add_radial_world(position: Vector2, radius: float, amount: float) -> void:
 			values[idx] = maxf(0.0, values[idx] + amount * weight)
 
 
+func attenuate_radial_world(
+	position: Vector2,
+	radius: float,
+	strength: float
+) -> void:
+	if radius <= 0.0 or strength <= 0.0:
+		return
+
+	var safe_strength: float = clampf(strength, 0.0, 1.0)
+	var cx: int = clampi(floori(position.x * _inv_cell_size), 0, width - 1)
+	var cy: int = clampi(floori(position.y * _inv_cell_size), 0, height - 1)
+	var cell_radius: int = maxi(1, ceili(radius / cell_size))
+	var radius_sq: float = radius * radius
+
+	for y in range(maxi(0, cy - cell_radius), mini(height, cy + cell_radius + 1)):
+		for x in range(maxi(0, cx - cell_radius), mini(width, cx + cell_radius + 1)):
+			var cell_center := Vector2(
+				(float(x) + 0.5) * cell_size,
+				(float(y) + 0.5) * cell_size
+			)
+			var distance_sq: float = cell_center.distance_squared_to(position)
+			if distance_sq > radius_sq:
+				continue
+
+			var normalized: float = 1.0 - sqrt(distance_sq) / radius
+			var weight: float = normalized * normalized
+			var idx: int = _index(x, y)
+			values[idx] = maxf(
+				0.0,
+				values[idx] * (1.0 - safe_strength * weight)
+			)
+
+
+func add_index(index: int, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	if index < 0 or index >= values.size():
+		return
+	values[index] = maxf(0.0, values[index] + amount)
+
+
+func take_index(index: int, requested: float) -> float:
+	if requested <= 0.0:
+		return 0.0
+	if index < 0 or index >= values.size():
+		return 0.0
+	var taken: float = minf(float(values[index]), requested)
+	values[index] = float(values[index]) - taken
+	return taken
+
+
 func take_nearest_world(position: Vector2, requested: float) -> float:
 	if requested <= 0.0:
 		return 0.0
-	var ix: int = clampi(floori(position.x / cell_size), 0, width - 1)
-	var iy: int = clampi(floori(position.y / cell_size), 0, height - 1)
+	var ix: int = clampi(floori(position.x * _inv_cell_size), 0, width - 1)
+	var iy: int = clampi(floori(position.y * _inv_cell_size), 0, height - 1)
 	var idx: int = _index(ix, iy)
 	var taken: float = minf(values[idx], requested)
 	values[idx] -= taken
 	return taken
 
 
+func sample_nearest_world(position: Vector2) -> float:
+	var ix: int = clampi(
+		floori(position.x * _inv_cell_size),
+		0,
+		width - 1
+	)
+	var iy: int = clampi(
+		floori(position.y * _inv_cell_size),
+		0,
+		height - 1
+	)
+	return float(values[iy * width + ix])
+
+
 func sample_world(position: Vector2) -> float:
-	var gx: float = clampf(position.x / cell_size, 0.0, float(width - 1))
-	var gy: float = clampf(position.y / cell_size, 0.0, float(height - 1))
+	# Hot path: position is clamped once, then PackedFloat32Array is read
+	# directly. Avoid four get_cell() calls and their repeated clamps.
+	var gx: float = clampf(position.x * _inv_cell_size, 0.0, float(width - 1))
+	var gy: float = clampf(position.y * _inv_cell_size, 0.0, float(height - 1))
 	var x0: int = floori(gx)
 	var y0: int = floori(gy)
 	var x1: int = mini(x0 + 1, width - 1)
@@ -100,9 +181,16 @@ func sample_world(position: Vector2) -> float:
 	var tx: float = gx - float(x0)
 	var ty: float = gy - float(y0)
 
-	var a: float = lerpf(get_cell(x0, y0), get_cell(x1, y0), tx)
-	var b: float = lerpf(get_cell(x0, y1), get_cell(x1, y1), tx)
-	return lerpf(a, b, ty)
+	var row0: int = y0 * width
+	var row1: int = y1 * width
+	var v00: float = values[row0 + x0]
+	var v10: float = values[row0 + x1]
+	var v01: float = values[row1 + x0]
+	var v11: float = values[row1 + x1]
+
+	var a: float = v00 + (v10 - v00) * tx
+	var b: float = v01 + (v11 - v01) * tx
+	return a + (b - a) * ty
 
 
 func gradient_world(position: Vector2) -> Vector2:
@@ -132,32 +220,21 @@ func diffuse(diffusion_coefficient: float, dt: float, decay_rate: float = 0.0) -
 	var max_stable_dt: float = (cell_size * cell_size) / (4.0 * diffusion)
 	var substeps: int = maxi(1, ceili(dt / (max_stable_dt * 0.95)))
 	var sub_dt: float = dt / float(substeps)
-	var inv_h2: float = 1.0 / (cell_size * cell_size)
-
+	var count: int = values.size()
 	for _substep in range(substeps):
-		for y in range(height):
-			var row: int = y * width
-			var row_up: int = maxi(y - 1, 0) * width
-			var row_down: int = mini(y + 1, height - 1) * width
-
-			for x in range(width):
-				var idx: int = row + x
-				var left_idx: int = row + maxi(x - 1, 0)
-				var right_idx: int = row + mini(x + 1, width - 1)
-				var up_idx: int = row_up + x
-				var down_idx: int = row_down + x
-				var center: float = values[idx]
-				var laplacian: float = (
-					values[left_idx]
-					+ values[right_idx]
-					+ values[up_idx]
-					+ values[down_idx]
-					- 4.0 * center
-				) * inv_h2
-				var next_value: float = center + sub_dt * (
-					diffusion * laplacian - decay * center
-				)
-				_scratch[idx] = maxf(0.0, next_value)
+		for idx in range(count):
+			var center: float = values[idx]
+			var laplacian: float = (
+				values[_left[idx]]
+				+ values[_right[idx]]
+				+ values[_up[idx]]
+				+ values[_down[idx]]
+				- 4.0 * center
+			) * _inv_h2
+			var next_value: float = center + sub_dt * (
+				diffusion * laplacian - decay * center
+			)
+			_scratch[idx] = maxf(0.0, next_value)
 
 		var previous: PackedFloat32Array = values
 		values = _scratch
@@ -183,6 +260,19 @@ func max_value() -> float:
 	for value in values:
 		maximum = maxf(maximum, value)
 	return maximum
+
+
+func _build_neighbor_topology() -> void:
+	for y in range(height):
+		var row: int = y * width
+		var row_up: int = maxi(0, y - 1) * width
+		var row_down: int = mini(height - 1, y + 1) * width
+		for x in range(width):
+			var idx: int = row + x
+			_left[idx] = row + maxi(0, x - 1)
+			_right[idx] = row + mini(width - 1, x + 1)
+			_up[idx] = row_up + x
+			_down[idx] = row_down + x
 
 
 func _index(x: int, y: int) -> int:

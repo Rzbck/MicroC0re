@@ -100,8 +100,9 @@ Ordering is explicit because changing it can change emergent behavior.
 Rod contact broad-phase now uses a uniform spatial hash. Buckets are rebuilt in deterministic organism order and neighbors are visited in fixed offset order.
 
 Current multirate loop:
-- organism dynamics: 120 Hz fixed step in the visible app;
-- chemistry diffusion/source update: 60 Hz;
+- organism dynamics: 60 Hz fixed step in the visible app;
+- chemistry diffusion/source update: 30 Hz;
+- contact mechanics: 60 Hz;
 - chemical ImageTexture upload: 20 Hz;
 - rendering: capped at 144 FPS in the current prototype.
 
