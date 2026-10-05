@@ -27,8 +27,13 @@ const BIOME_DISTURBED := 6
 const BIOME_STATE_COUNT := 7
 const BIOME_UPDATE_INTERVAL := 1.0
 const BIOME_TRANSITION_SECONDS := 9.0
-const BIOME_DISTURBANCE_DECAY := 0.018
-const BIOME_DISTURBANCE_THRESHOLD := 0.12
+const BIOME_DISTURBANCE_DECAY := 0.040
+const BIOME_DISTURBANCE_THRESHOLD := 0.16
+
+const TERRAIN_ACTIVITY_NONE := 0
+const TERRAIN_ACTIVITY_DIG := 1
+const TERRAIN_ACTIVITY_BUILD := 2
+const TERRAIN_ACTIVITY_DECAY := 0.012
 
 # Low-frequency hydrology. This is deliberately terrain-cell based and runs at
 # 2 Hz so water can be ecological without becoming a second 60 Hz simulation.
@@ -72,6 +77,9 @@ var biome_states: PackedByteArray = PackedByteArray()
 var biome_transition_pressure: PackedFloat32Array = PackedFloat32Array()
 var biome_ages: PackedFloat32Array = PackedFloat32Array()
 var biome_disturbance: PackedFloat32Array = PackedFloat32Array()
+var terrain_activity_kind: PackedByteArray = PackedByteArray()
+var terrain_activity_strength: PackedFloat32Array = PackedFloat32Array()
+var terrain_activity_hue: PackedFloat32Array = PackedFloat32Array()
 var biome_transitions_total: int = 0
 var _biome_accumulator: float = 0.0
 var _biome_field_indices: PackedInt32Array = PackedInt32Array()
@@ -123,6 +131,12 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	biome_ages.fill(0.0)
 	biome_disturbance.resize(width * height)
 	biome_disturbance.fill(0.0)
+	terrain_activity_kind.resize(width * height)
+	terrain_activity_kind.fill(TERRAIN_ACTIVITY_NONE)
+	terrain_activity_strength.resize(width * height)
+	terrain_activity_strength.fill(0.0)
+	terrain_activity_hue.resize(width * height)
+	terrain_activity_hue.fill(0.0)
 	water_depths.resize(width * height)
 	water_depths.fill(0.0)
 	soil_moisture.resize(width * height)
@@ -293,6 +307,24 @@ func cover_metrics() -> Dictionary:
 	}
 
 
+func terrain_activity_kind_at_grid(x: int, y: int) -> int:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return int(terrain_activity_kind[_index(sx, sy)])
+
+
+func terrain_activity_strength_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return float(terrain_activity_strength[_index(sx, sy)])
+
+
+func terrain_activity_hue_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return float(terrain_activity_hue[_index(sx, sy)])
+
+
 func biome_state_at_grid(x: int, y: int) -> int:
 	var sx: int = clampi(x, 0, width - 1)
 	var sy: int = clampi(y, 0, height - 1)
@@ -312,9 +344,17 @@ func biome_metrics() -> Dictionary:
 	for state in biome_states:
 		counts[int(state)] += 1
 	var disturbed_signal_cells: int = 0
-	for pressure in biome_disturbance:
-		if float(pressure) > BIOME_DISTURBANCE_THRESHOLD:
+	var dig_trace_cells: int = 0
+	var build_trace_cells: int = 0
+	for i in range(biome_disturbance.size()):
+		if float(biome_disturbance[i]) > BIOME_DISTURBANCE_THRESHOLD:
 			disturbed_signal_cells += 1
+		if float(terrain_activity_strength[i]) > 0.08:
+			match int(terrain_activity_kind[i]):
+				TERRAIN_ACTIVITY_DIG:
+					dig_trace_cells += 1
+				TERRAIN_ACTIVITY_BUILD:
+					build_trace_cells += 1
 	return {
 		"open": counts[BIOME_OPEN],
 		"producer": counts[BIOME_PRODUCER],
@@ -324,6 +364,8 @@ func biome_metrics() -> Dictionary:
 		"anoxic": counts[BIOME_ANOXIC],
 		"disturbed": counts[BIOME_DISTURBED],
 		"recently_modified": disturbed_signal_cells,
+		"dig_trace": dig_trace_cells,
+		"build_trace": build_trace_cells,
 		"transitions": biome_transitions_total,
 	}
 
@@ -342,19 +384,30 @@ func total_mass() -> float:
 	return total
 
 
-func excavate(position: Vector2, amount: float, radius_world: float = 1.8) -> float:
-	return _apply_radial_mass(position, amount, radius_world, false)
+func excavate(
+	position: Vector2,
+	amount: float,
+	radius_world: float = 1.8,
+	actor_hue: float = -1.0
+) -> float:
+	return _apply_radial_mass(position, amount, radius_world, false, actor_hue)
 
 
-func deposit(position: Vector2, amount: float, radius_world: float = 2.0) -> float:
-	return _apply_radial_mass(position, amount, radius_world, true)
+func deposit(
+	position: Vector2,
+	amount: float,
+	radius_world: float = 2.0,
+	actor_hue: float = -1.0
+) -> float:
+	return _apply_radial_mass(position, amount, radius_world, true, actor_hue)
 
 
 func _apply_radial_mass(
 	position: Vector2,
 	amount: float,
 	radius_world: float,
-	is_deposit: bool
+	is_deposit: bool,
+	actor_hue: float = -1.0
 ) -> float:
 	var safe_amount: float = maxf(0.0, amount)
 	if safe_amount <= 0.0 or radius_world <= 0.0:
@@ -417,10 +470,32 @@ func _apply_radial_mass(
 				local_change = take
 				changed += take
 			if local_change > 0.0:
+				# Tiny distributed edits should not paint the whole world as
+				# ecologically disturbed. Only meaningful local change crosses
+				# the succession threshold.
+				var disturbance_signal: float = clampf(
+					local_change * 2.4,
+					0.0,
+					1.0
+				)
 				biome_disturbance[index] = maxf(
 					float(biome_disturbance[index]),
-					clampf(0.35 + local_change * 4.0, 0.35, 1.0)
+					disturbance_signal
 				)
+				if actor_hue >= 0.0:
+					var activity_strength: float = clampf(
+						local_change * 5.5,
+						0.14,
+						1.0
+					)
+					if activity_strength >= float(terrain_activity_strength[index]):
+						terrain_activity_kind[index] = (
+							TERRAIN_ACTIVITY_BUILD
+							if is_deposit
+							else TERRAIN_ACTIVITY_DIG
+						)
+						terrain_activity_strength[index] = activity_strength
+						terrain_activity_hue[index] = wrapf(actor_hue, 0.0, 1.0)
 
 	if changed > 0.0:
 		if is_deposit:
@@ -804,6 +879,13 @@ func _advance_biome_succession(sim: Variant, dt: float) -> void:
 				0.0,
 				float(biome_disturbance[index]) - BIOME_DISTURBANCE_DECAY * dt
 			)
+			terrain_activity_strength[index] = maxf(
+				0.0,
+				float(terrain_activity_strength[index])
+					- TERRAIN_ACTIVITY_DECAY * dt
+			)
+			if float(terrain_activity_strength[index]) <= 0.01:
+				terrain_activity_kind[index] = TERRAIN_ACTIVITY_NONE
 			var current: int = int(biome_states[index])
 			var candidate: int = _candidate_biome_state(sim, index)
 			biome_ages[index] = float(biome_ages[index]) + dt
@@ -1357,10 +1439,16 @@ func _advance_agent(
 			float(agent.carried_soil),
 			0.15 + deposit_strength * 0.20
 		)
+		var actor_hue: float = (
+			float(agent.lineage_hue)
+			if "lineage_hue" in agent
+			else 0.0
+		)
 		var placed: float = deposit(
 			target,
 			requested,
-			1.45 + minf(1.0, deposit_strength) * 0.65
+			1.45 + minf(1.0, deposit_strength) * 0.65,
+			actor_hue
 		)
 		agent.carried_soil = maxf(
 			0.0,
@@ -1377,10 +1465,16 @@ func _advance_agent(
 			capacity - float(agent.carried_soil),
 			(0.13 + dig * 0.18) * substrate_factor
 		)
+		var actor_hue: float = (
+			float(agent.lineage_hue)
+			if "lineage_hue" in agent
+			else 0.0
+		)
 		var removed: float = excavate(
 			dig_target,
 			requested,
-			1.20 + minf(1.2, dig) * 0.55
+			1.20 + minf(1.2, dig) * 0.55,
+			actor_hue
 		)
 		if removed > 0.0:
 			agent.carried_soil = minf(

@@ -126,6 +126,25 @@ func _init() -> void:
 	if water_probe.season_index != 1:
 		errors.append("terrain: seasonal climate phase mismatch")
 
+	# Terraforming attribution: agent-built and agent-dug cells keep a
+	# fading lineage-colored trace, while tiny edits do not automatically
+	# become ecological DISTURBED state.
+	var trace_probe = LivingTerrainScript.new(
+		19187,
+		Vector2(30.0, 30.0)
+	)
+	trace_probe.deposit(Vector2(15.0, 15.0), 0.45, 1.2, 0.25)
+	var trace_x: int = roundi(15.0 / LivingTerrainScript.CELL_SIZE)
+	var trace_y: int = roundi(15.0 / LivingTerrainScript.CELL_SIZE)
+	if trace_probe.terrain_activity_kind_at_grid(trace_x, trace_y) != LivingTerrainScript.TERRAIN_ACTIVITY_BUILD:
+		errors.append("terrain: builder trace kind missing")
+	if absf(trace_probe.terrain_activity_hue_at_grid(trace_x, trace_y) - 0.25) > 0.02:
+		errors.append("terrain: builder lineage trace hue missing")
+	trace_probe.excavate(Vector2(21.0, 15.0), 0.45, 1.2, 0.75)
+	var dig_x: int = roundi(21.0 / LivingTerrainScript.CELL_SIZE)
+	if trace_probe.terrain_activity_kind_at_grid(dig_x, trace_y) != LivingTerrainScript.TERRAIN_ACTIVITY_DIG:
+		errors.append("terrain: digger trace kind missing")
+
 	# Living-terrain regression: excavation/deposition must conserve material
 	# when the carried material is returned to the world.
 	var terrain_probe = LivingTerrainScript.new(

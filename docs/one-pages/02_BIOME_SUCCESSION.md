@@ -42,7 +42,9 @@ The terrain also carries a slow living cover state: **bare → grass → shrub �
 
 Open · Producer · Biofilm · Detrital · Fungal · Anoxic · Disturbed.
 
-Transitions require persistent field conditions (hysteresis); they are not frame-by-frame color labels. **Disturbed is explicitly temporary:** excavation/deposition creates a decaying local disturbance memory, so engineered terrain later matures into another ecological state instead of remaining permanently tagged as damaged.
+Transitions require persistent field conditions (hysteresis); they are not frame-by-frame color labels. **Disturbed is explicitly temporary:** excavation/deposition creates a decaying local disturbance memory, and only meaningful local terrain change now crosses the disturbed threshold. Tiny distributed edits no longer repaint most of the map.
+
+Terraforming also leaves a separate fading **action trace**: excavation is darkened, construction/deposition is warm, and both are tinted toward the lineage color of the organism that performed the action. This answers "who built/destroyed this?" without turning the persistent biome label into an action log.
 
 ## Bidirectional rules
 

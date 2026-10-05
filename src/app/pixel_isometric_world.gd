@@ -850,6 +850,31 @@ func _terrain_top_color(
 			base = base.lerp(Color(0.08, 0.13, 0.14), 0.58)
 		LivingTerrainScript.BIOME_DISTURBED:
 			base = base.lerp(Color(0.52, 0.31, 0.14), 0.34)
+
+	var activity_strength: float = terrain.terrain_activity_strength_at_grid(
+		source.x,
+		source.y
+	)
+	if activity_strength > 0.04:
+		var activity_kind: int = terrain.terrain_activity_kind_at_grid(
+			source.x,
+			source.y
+		)
+		var builder_hue: float = terrain.terrain_activity_hue_at_grid(
+			source.x,
+			source.y
+		)
+		var builder_color: Color = _lineage_color(builder_hue)
+		if activity_kind == LivingTerrainScript.TERRAIN_ACTIVITY_BUILD:
+			base = base.lerp(
+				Color(0.67, 0.45, 0.19).lerp(builder_color, 0.38),
+				clampf(activity_strength * 0.52, 0.0, 0.52)
+			)
+		elif activity_kind == LivingTerrainScript.TERRAIN_ACTIVITY_DIG:
+			base = base.lerp(
+				Color(0.11, 0.08, 0.065).lerp(builder_color, 0.24),
+				clampf(activity_strength * 0.58, 0.0, 0.58)
+			)
 	return base
 
 
@@ -2329,14 +2354,15 @@ func _draw_metrics_panel() -> void:
 	var biome: Dictionary = biome_metrics_cache
 	_ui_text(
 		panel.position + Vector2(10.0, 94.0),
-		"biome P%d B%d D%d F%d A%d X%d mod%d tr%d" % [
+		"biome P%d B%d D%d F%d A%d X%d dig%d build%d tr%d" % [
 			int(biome.get("producer", 0)),
 			int(biome.get("biofilm", 0)),
 			int(biome.get("detrital", 0)),
 			int(biome.get("fungal", 0)),
 			int(biome.get("anoxic", 0)),
 			int(biome.get("disturbed", 0)),
-			int(biome.get("recently_modified", 0)),
+			int(biome.get("dig_trace", 0)),
+			int(biome.get("build_trace", 0)),
 			int(biome.get("transitions", 0)),
 		],
 		11,
