@@ -35,7 +35,12 @@ const SIMULATION_WALL_DELTA_CAP := 0.25
 const FAR_AGENT_LOD_USER_ZOOM := 0.72
 const FAR_AGENT_REFRESH := 1.0 / 15.0
 const FAR_AGENT_REFRESH_MASS := 1.0 / 10.0
-const DETAIL_POPULATION_LIMIT := 3200
+# Overview readability matters before the absolute CPU ceiling. Dense scenes use
+# the retained organism batch until the player deliberately zooms close; the
+# selected organism still receives its full detailed sprite.
+const DETAIL_POPULATION_LIMIT := 900
+const DETAIL_POPULATION_HARD_LIMIT := 2600
+const DETAIL_RECOVERY_USER_ZOOM := 1.42
 const FAST_LOD_X4_POPULATION := 3600
 const FAST_LOD_X8_POPULATION := 2400
 
@@ -599,6 +604,48 @@ func _rebuild_terrain_batch() -> void:
 						_round_vec(mark_center + Vector2(0.3, 0.0)),
 						_round_vec(mark_center + Vector2(-1.25, -0.45)),
 						Color(0.56, 0.59, 0.54, 0.88))
+				elif mark == 8:
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-2.8, 0.0)),
+						_round_vec(mark_center + Vector2(2.8, 0.0)),
+						_round_vec(mark_center + Vector2(1.9, 0.8)),
+						_round_vec(mark_center + Vector2(-1.9, 0.8)),
+						Color(0.08, 0.20, 0.14, 0.76))
+					for reed in range(3):
+						var reed_x: float = -1.7 + float(reed) * 1.7 + (flora_variant - 1.0) * 0.25
+						var reed_h: float = 2.8 + float(posmod(cache_index + reed * 5, 3))
+						_batch_quad(mark_points, mark_colors, mark_indices,
+							_round_vec(mark_center + Vector2(reed_x - 0.35, -reed_h)),
+							_round_vec(mark_center + Vector2(reed_x + 0.35, -reed_h - 0.5)),
+							_round_vec(mark_center + Vector2(reed_x + 0.30, 0.3)),
+							_round_vec(mark_center + Vector2(reed_x - 0.30, 0.3)),
+							_season_palette(Color(0.30, 0.54, 0.24), 0.52))
+				elif mark == 9:
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-3.0, -0.5)),
+						_round_vec(mark_center + Vector2(2.2, -0.8)),
+						_round_vec(mark_center + Vector2(3.0, 0.2)),
+						_round_vec(mark_center + Vector2(-1.8, 0.7)),
+						Color(0.68, 0.54, 0.30, 0.72))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.2, -1.0)),
+						_round_vec(mark_center + Vector2(1.8, -0.7)),
+						_round_vec(mark_center + Vector2(0.9, -0.1)),
+						_round_vec(mark_center + Vector2(-1.7, -0.3)),
+						Color(0.82, 0.67, 0.38, 0.78))
+				elif mark == 10:
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-3.1, 0.5)),
+						_round_vec(mark_center + Vector2(3.2, 0.4)),
+						_round_vec(mark_center + Vector2(1.7, -2.2)),
+						_round_vec(mark_center + Vector2(-2.0, -1.6)),
+						Color(0.31, 0.34, 0.32, 0.98))
+					_batch_quad(mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.8, -1.5)),
+						_round_vec(mark_center + Vector2(1.6, -2.2)),
+						_round_vec(mark_center + Vector2(0.3, -4.8 - flora_variant * 0.4)),
+						_round_vec(mark_center + Vector2(-0.9, -3.5)),
+						Color(0.51, 0.54, 0.50, 0.94))
 
 	var terrain_rid: RID = terrain_batch_layer.get_canvas_item()
 	var mark_rid: RID = terrain_mark_layer.get_canvas_item()
@@ -845,6 +892,11 @@ func _terrain_top_color(
 	var eps_value: float = float(sim.eps.sample_world(world))
 	var nutrient: float = float(sim.nutrient.sample_world(world))
 	var biome_state: int = terrain.biome_state_at_grid(source.x, source.y)
+	var habitat_state: int = terrain.habitat_state_at_grid(
+		sim,
+		source.x,
+		source.y
+	)
 	var water_depth: float = terrain.water_depth_at_grid(source.x, source.y)
 	var moisture: float = terrain.moisture_at_grid(source.x, source.y)
 
@@ -900,6 +952,14 @@ func _terrain_top_color(
 		LivingTerrainScript.BIOME_DISTURBED:
 			base = base.lerp(Color(0.52, 0.31, 0.14), 0.34)
 
+	match habitat_state:
+		LivingTerrainScript.HABITAT_MARSH:
+			base = base.lerp(Color(0.16, 0.30, 0.20), 0.44)
+		LivingTerrainScript.HABITAT_SAND:
+			base = base.lerp(Color(0.61, 0.47, 0.26), 0.58)
+		LivingTerrainScript.HABITAT_CRAG:
+			base = base.lerp(Color(0.35, 0.37, 0.34), 0.62)
+
 	base = _season_palette(base, 0.18)
 
 	var activity_strength: float = terrain.terrain_activity_strength_at_grid(
@@ -947,9 +1007,14 @@ func _using_far_agent_lod() -> bool:
 			and count >= FAST_LOD_X4_POPULATION
 		)
 	)
+	var density_lod: bool = (
+		count > DETAIL_POPULATION_LIMIT
+		and user_zoom < DETAIL_RECOVERY_USER_ZOOM
+	)
 	return (
 		speed_lod
-		or count > DETAIL_POPULATION_LIMIT
+		or count > DETAIL_POPULATION_HARD_LIMIT
+		or density_lod
 		or user_zoom < FAR_AGENT_LOD_USER_ZOOM
 	)
 
@@ -1059,6 +1124,23 @@ func _batch_far_bacteria_snapshot(
 			0.74,
 			1.38
 		)
+		var species_shape: int = posmod(
+			floori(float(species_hues[i]) * 997.0),
+			5
+		)
+		match species_shape:
+			0:
+				half_length *= 1.24
+				half_width *= 0.76
+			1:
+				half_length *= 0.82
+				half_width *= 1.22
+			2:
+				half_length *= 1.12
+				half_width *= 1.04
+			3:
+				half_length *= 0.90
+				half_width *= 0.86
 		half_length *= morph_scale
 		half_width *= lerpf(
 			0.90,
@@ -1254,17 +1336,17 @@ func _species_shape_scale(kind: String, agent: Variant) -> Vector2:
 	var species_id: int = sim.phenotype_species_id(agent, family_code)
 	match posmod(species_id * 17 + family_code * 11, 6):
 		0:
-			return Vector2(1.18, 0.88)
+			return Vector2(1.28, 0.80)
 		1:
-			return Vector2(0.90, 1.14)
+			return Vector2(0.82, 1.22)
 		2:
-			return Vector2(1.10, 1.04)
+			return Vector2(1.18, 1.02)
 		3:
-			return Vector2(0.96, 0.92)
+			return Vector2(0.90, 0.86)
 		4:
-			return Vector2(1.06, 0.86)
+			return Vector2(1.12, 0.76)
 		_:
-			return Vector2.ONE
+			return Vector2(0.98, 1.10)
 
 
 func _draw_species_marks(
@@ -1273,7 +1355,7 @@ func _draw_species_marks(
 	screen: Vector2,
 	sprite_size: Vector2
 ) -> void:
-	if sim == null or user_zoom < 0.82:
+	if sim == null or user_zoom < 1.12:
 		return
 	var family_code: int = _species_family_code(kind)
 	var species_id: int = sim.phenotype_species_id(agent, family_code)
@@ -1315,44 +1397,37 @@ func _draw_agent_interaction_fx(
 	sprite_size: Vector2
 ) -> void:
 	var px: float = maxf(1.0, roundf(_camera_zoom()))
-	if "feeding_target_id" in agent and int(agent.feeding_target_id) >= 0:
+	var close_detail: bool = (
+		agent == selected_agent
+		or user_zoom >= 1.58
+	)
+
+	# Feeding links are useful under the microscope, but become visual wiring
+	# when hundreds of agents are visible. Reproduction is already encoded in
+	# the organism sprite itself: never wrap living things in status circles.
+	if (
+		close_detail
+		and "feeding_target_id" in agent
+		and int(agent.feeding_target_id) >= 0
+	):
 		var target: Variant = sim.find_edible_by_id(int(agent.feeding_target_id))
 		if target != null:
 			var target_position: Vector2 = Vector2(target.position)
 			var target_screen: Vector2 = _round_vec(
 				_project_world(target_position, terrain.sample_height_nearest(target_position))
 			)
-			var feed_color: Color = _agent_tint(kind, agent).lightened(0.20)
-			feed_color.a = 0.68
+			var feed_color: Color = _agent_tint(kind, agent).lightened(0.12)
+			feed_color.a = 0.42
 			draw_line(screen, target_screen, feed_color, px, false)
-			var midpoint: Vector2 = _round_vec((screen + target_screen) * 0.5)
-			draw_rect(
-				Rect2(midpoint - Vector2.ONE * px, Vector2.ONE * px * 2.0),
-				Color(0.92, 0.72, 0.34, 0.78),
-				true
-			)
 
-	var reproducing: bool = (
-		("dividing" in agent and bool(agent.dividing))
-		or ("reproducing" in agent and bool(agent.reproducing))
-		or ("budding" in agent and bool(agent.budding))
-	)
-	if reproducing:
-		var pulse: float = 0.5 + 0.5 * sin(
-			visual_time * 7.0 + float(int(agent.id) % 31)
-		)
-		var radius: float = sprite_size.x * (0.44 + pulse * 0.08)
-		var pulse_color := Color(0.66, 0.92, 0.62, 0.34 + pulse * 0.26)
-		draw_arc(screen, radius, 0.0, TAU, 12, pulse_color, px, false)
-
-	if "dying" in agent and bool(agent.dying):
+	if close_detail and "dying" in agent and bool(agent.dying):
 		var progress: float = (
 			float(agent.lysis_progress)
 			if "lysis_progress" in agent
 			else 0.5
 		)
 		var burst: float = px * (2.0 + progress * 5.0)
-		var death_color := Color(0.90, 0.34, 0.20, 0.76)
+		var death_color := Color(0.90, 0.34, 0.20, 0.68)
 		for i in range(4):
 			var angle: float = float(i) * TAU / 4.0 + float(int(agent.id) % 13) * 0.17
 			var q: Vector2 = _round_vec(
@@ -1489,8 +1564,17 @@ func _agent_texture(kind: String, agent: Variant) -> Texture2D:
 				state = 2
 			elif bool(agent.dividing):
 				state = 1
+			var species_id: int = (
+				sim.phenotype_species_id(agent, 0)
+				if sim != null
+				else int(agent.guild)
+			)
+			var morphology_class: int = posmod(
+				species_id * 31 + int(agent.guild) * 7,
+				4
+			)
 			return atlas.get_texture(
-				clampi(int(agent.guild), 0, 3),
+				morphology_class,
 				_size_class(agent),
 				_appendage_class(agent),
 				posmod(
@@ -1722,6 +1806,12 @@ func _draw_capability_marks(
 	var px: float = maxf(1.0, roundf(_camera_zoom()))
 	var heading: Vector2 = _project_heading(float(agent.angle))
 	var side := Vector2(-heading.y, heading.x)
+	var close_detail: bool = (
+		agent == selected_agent
+		or user_zoom >= 1.48
+	)
+	if not close_detail:
+		return
 
 	# Soil is visible as material the organism is actually carrying.
 	if float(agent.carried_soil) > 0.018:
@@ -1750,19 +1840,24 @@ func _draw_capability_marks(
 			true
 		)
 
-	# Armor is a sparse edge, not a glowing bubble.
+	# Armor changes the silhouette with two small plates. Never draw a box
+	# around the organism: capability must read as anatomy, not debug UI.
 	if float(agent.physical_armor) > 0.56:
-		var r := Rect2(
-			_round_vec(screen - sprite_size * 0.37),
-			_round_vec(sprite_size * 0.74)
-		)
-		draw_rect(
-			r,
-			Color(0.64, 0.68, 0.62, 0.70),
-			false,
-			px,
-			false
-		)
+		var plate_color := Color(0.64, 0.68, 0.62, 0.72)
+		for sign_value in [-1.0, 1.0]:
+			var plate_pos: Vector2 = _round_vec(
+				screen
+				+ side * sign_value * sprite_size.y * 0.30
+				- heading * px * 0.5
+			)
+			draw_rect(
+				Rect2(
+					plate_pos - Vector2(px, px * 0.5),
+					Vector2(px * 2.0, px)
+				),
+				plate_color,
+				true
+			)
 
 	# Oviposition potential changes the rear silhouette; actual egg entities
 	# remain a separate lifecycle implementation.
@@ -2192,15 +2287,28 @@ func _refresh_terrain_visual_cache() -> void:
 				sim.producer_biomass.sample_world(world_position)
 			)
 			var mark: int = 0
+			var habitat_state: int = terrain.habitat_state_at_grid(
+				sim,
+				x,
+				y
+			)
 			var cover_state: int = terrain.cover_state_at_grid(x, y)
-			if cover_state > LivingTerrainScript.COVER_BARE:
-				mark = 3 + cover_state
-			elif damage > 0.09:
-				mark = 3
-			elif detritus_value > 0.10:
-				mark = 2
-			elif producer > 0.16:
-				mark = 1
+			match habitat_state:
+				LivingTerrainScript.HABITAT_MARSH:
+					mark = 8
+				LivingTerrainScript.HABITAT_SAND:
+					mark = 9
+				LivingTerrainScript.HABITAT_CRAG:
+					mark = 10
+				_:
+					if cover_state > LivingTerrainScript.COVER_BARE:
+						mark = 3 + cover_state
+					elif damage > 0.09:
+						mark = 3
+					elif detritus_value > 0.10:
+						mark = 2
+					elif producer > 0.16:
+						mark = 1
 			terrain_mark_cache[index] = mark
 
 

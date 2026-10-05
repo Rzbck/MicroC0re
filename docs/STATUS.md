@@ -667,3 +667,24 @@ This pass attacks those two hot paths:
   retained mass batch, so inspection/follow remains useful at high density;
 - far-agent batch refresh falls from 15 Hz to 10 Hz in mass-population mode;
 - CI scale benchmark now includes a 10,000-bacterium probe.
+
+
+## Readability + living-habitat correction after session 141901e002402ce1
+
+The local report exposed a dense-overview readability failure and a trophic
+balance bug. Armor/reproduction overlays wrapped hundreds of organisms in
+rectangles/circles; ciliates also capped feeding energy at 16.0 while requiring
+16.5 to reproduce.
+
+This correction removes enclosing status geometry, moves detailed interaction
+marks to microscope zoom, makes phenotype species select stronger silhouettes,
+activates density-aware overview batching, makes predator reproduction
+thresholds compatible with their energy caps, introduces earlier ecological
+bacterial density pressure, strengthens biomass recycling, and makes
+decomposer/hyphal persistence less brittle.
+
+Vegetation now needs living producer/exudate support. Marsh, sand-bar and crag
+habitats are derived from actual hydrology, producer fields and relief, feed
+back into habitat preference/substrate cost, and receive dedicated pixel
+silhouettes. They are therefore consequences of the simulated landscape and
+organism activity rather than decorative stickers.

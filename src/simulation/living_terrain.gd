@@ -50,6 +50,12 @@ const COVER_GRASS := 1
 const COVER_SHRUB := 2
 const COVER_TREE := 3
 const COVER_ROCK := 4
+
+const HABITAT_NONE := 0
+const HABITAT_MARSH := 1
+const HABITAT_SAND := 2
+const HABITAT_CRAG := 3
+
 const COVER_UPDATE_INTERVAL := 2.0
 const COVER_GRASS_SECONDS := 8.0
 const COVER_SHRUB_SECONDS := 28.0
@@ -311,6 +317,89 @@ func cover_metrics() -> Dictionary:
 		"rock": rock,
 		"transitions": cover_transitions_total,
 	}
+
+
+
+
+func habitat_state_at_grid(sim: Variant, x: int, y: int) -> int:
+	_ensure_biome_field_indices(sim)
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	var index: int = _index(sx, sy)
+	var field_index: int = int(_biome_field_indices[index])
+	var local_water: float = float(water_depths[index])
+	var local_moisture: float = float(soil_moisture[index])
+	var local_height: float = float(heights[index])
+	var producer: float = float(sim.producer_biomass.values[field_index])
+	var disturbance: float = float(biome_disturbance[index])
+	var right_height: float = float(
+		heights[_index(mini(width - 1, sx + 1), sy)]
+	)
+	var down_height: float = float(
+		heights[_index(sx, mini(height - 1, sy + 1))]
+	)
+	var slope: float = maxf(
+		absf(local_height - right_height),
+		absf(local_height - down_height)
+	)
+	if (
+		local_water >= 0.018
+		and local_water <= 0.18
+		and local_moisture >= 0.34
+		and producer >= 0.030
+	):
+		return HABITAT_MARSH
+	if (
+		local_water < 0.014
+		and local_moisture < 0.105
+		and producer < 0.055
+		and local_height <= WATER_LEVEL + 0.62
+		and disturbance < 0.45
+	):
+		return HABITAT_SAND
+	if (
+		local_height >= WATER_LEVEL + 0.92
+		and slope >= 0.22
+	):
+		return HABITAT_CRAG
+	return HABITAT_NONE
+
+
+func sample_habitat_state(sim: Variant, position: Vector2) -> int:
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	return habitat_state_at_grid(sim, gx, gy)
+
+
+func _habitat_affinity(agent: Variant, state: int) -> float:
+	match state:
+		HABITAT_MARSH:
+			if "gene_light_use" in agent:
+				return 0.82
+			if "gene_detritus" in agent:
+				return 0.66
+			if "gene_dormancy" in agent:
+				return 0.58 + 0.12 * clampf(
+					float(agent.gene_dormancy),
+					0.4,
+					2.0
+				)
+			return 0.50
+		HABITAT_SAND:
+			var burrow_value: float = (
+				float(agent.physical_burrow)
+				if "physical_burrow" in agent
+				else 0.0
+			)
+			return 0.36 + clampf(burrow_value * 0.24, 0.0, 0.34)
+		HABITAT_CRAG:
+			var climb_value: float = (
+				float(agent.physical_climb)
+				if "physical_climb" in agent
+				else 0.0
+			)
+			return 0.30 + clampf(climb_value * 0.30, 0.0, 0.42)
+	return 0.50
 
 
 func terrain_activity_kind_at_grid(x: int, y: int) -> int:
@@ -677,11 +766,19 @@ func _advance_cover(sim: Variant, dt: float) -> void:
 			continue
 
 		cover_stress[i] = maxf(0.0, stress - dt * 0.8)
+		var field_index: int = int(_biome_field_indices[i])
+		var producer_support: float = clampf(
+			float(sim.producer_biomass.values[field_index]) * 3.0
+			+ float(sim.exudate.values[field_index]) * 0.8,
+			0.0,
+			1.0
+		)
 		var growth: float = clampf(
 			(moisture - 0.075) / 0.45,
 			0.0,
 			1.0
 		)
+		growth *= lerpf(0.08, 1.14, producer_support)
 		growth *= lerpf(0.45, 1.10, season_warmth)
 		if season_index == 3:
 			growth *= 0.58
@@ -730,7 +827,6 @@ func _advance_cover(sim: Variant, dt: float) -> void:
 		# Living cover feeds back into the same ecological fields used by
 		# microbes. Autumn also returns litter to the detrital loop.
 		if state >= COVER_GRASS:
-			var field_index: int = int(_biome_field_indices[i])
 			var producer_add: float = (
 				0.00035 * float(state) * dt
 			)
@@ -856,20 +952,20 @@ func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
 	if (
 		local_moisture > 0.20
 		and (
-			fungal_value > 0.012
-			or (fungal_value > 0.0045 and detritus_value > 0.055)
+			fungal_value > 0.008
+			or (fungal_value > 0.0035 and detritus_value > 0.034)
 		)
 	):
 		return BIOME_FUNGAL
-	if eps_value > 0.025 or (eps_value > 0.012 and quorum_value > 0.025):
+	if eps_value > 0.034 or (eps_value > 0.016 and quorum_value > 0.032):
 		return BIOME_BIOFILM
 	if (
-		producer > 0.060
+		producer > 0.075
 		and oxygen_value > 0.12
 		and local_moisture > 0.12
 	):
 		return BIOME_PRODUCER
-	if detritus_value > 0.040:
+	if detritus_value > 0.024:
 		return BIOME_DETRITAL
 	if disturbed > BIOME_DISTURBANCE_THRESHOLD:
 		return BIOME_DISTURBED
@@ -1287,6 +1383,7 @@ func _advance_agent(
 		1.0
 	)
 	var biome_state: int = sample_biome_state(position)
+	var habitat_state: int = sample_habitat_state(sim, position)
 	var cover_state: int = sample_cover_state(position)
 	var habitat_tolerance: float = (
 		float(agent.gene_dormancy)
@@ -1352,13 +1449,25 @@ func _advance_agent(
 			-0.22,
 			0.22
 		)
-		var left_affinity: float = _biome_affinity(
-			agent,
-			sample_biome_state(left_position)
+		var left_affinity: float = (
+			_biome_affinity(
+				agent,
+				sample_biome_state(left_position)
+			)
+			+ _habitat_affinity(
+				agent,
+				sample_habitat_state(sim, left_position)
+			) * 0.42
 		)
-		var right_affinity: float = _biome_affinity(
-			agent,
-			sample_biome_state(right_position)
+		var right_affinity: float = (
+			_biome_affinity(
+				agent,
+				sample_biome_state(right_position)
+			)
+			+ _habitat_affinity(
+				agent,
+				sample_habitat_state(sim, right_position)
+			) * 0.42
 		)
 		var habitat_turn: float = clampf(
 			(right_affinity - left_affinity) * 0.55,
@@ -1406,6 +1515,13 @@ func _advance_agent(
 		substrate_factor *= 0.72
 	elif cover_state == COVER_SHRUB:
 		substrate_factor *= 0.88
+	match habitat_state:
+		HABITAT_MARSH:
+			substrate_factor *= 0.82
+		HABITAT_SAND:
+			substrate_factor *= 1.12
+		HABITAT_CRAG:
+			substrate_factor *= 0.46
 
 	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (

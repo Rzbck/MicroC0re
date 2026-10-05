@@ -41,7 +41,8 @@ const DRIFT_LUT_PHASE_STEP := 3
 const REGULATION_BUCKETS := 6
 const LINEAGE_BIN_COUNT := 32
 const ECOTYPE_PRESSURE_BIN_COUNT := 256
-const LIVE_POPULATION_SOFT_START := 1600
+const LIVE_POPULATION_SOFT_START := 700
+const LIVE_POPULATION_PRESSURE_RANGE := 1800.0
 const SPATIAL_BUCKET_SIZE := 3.0
 # 192 x 128 world with 3-unit linked cells.
 const GRID_WIDTH := 64
@@ -324,7 +325,8 @@ var protozoan_perception: float = 28.0
 var protozoan_engulf_distance: float = 4.2
 var protozoan_engulf_duration: float = 1.65
 var protozoan_maintenance: float = 0.065
-var protozoan_reproduction_energy: float = 18.5
+var protozoan_reproduction_energy: float = 14.5
+var protozoan_energy_cap: float = 20.0
 
 # Fast ciliate-like grazer: a second predator guild that sweeps dense prey
 # patches. Fewer, faster predators help regulate bacterial blooms without
@@ -334,7 +336,8 @@ var ciliate_perception: float = 34.0
 var ciliate_feed_distance: float = 3.4
 var ciliate_feed_duration: float = 1.05
 var ciliate_maintenance: float = 0.090
-var ciliate_reproduction_energy: float = 16.5
+var ciliate_reproduction_energy: float = 13.8
+var ciliate_energy_cap: float = 18.0
 
 # Small flagellate-like bacterivore: an intermediate grazer tier that
 # competes for bacterial prey and can itself be consumed by larger protists.
@@ -343,7 +346,8 @@ var flagellate_perception: float = 25.0
 var flagellate_feed_distance: float = 2.4
 var flagellate_feed_duration: float = 0.90
 var flagellate_maintenance: float = 0.052
-var flagellate_reproduction_energy: float = 8.8
+var flagellate_reproduction_energy: float = 7.2
+var flagellate_energy_cap: float = 10.5
 
 # Explicit producer and decomposer guilds.
 var microalga_photo_rate: float = 0.115
@@ -354,10 +358,10 @@ var microalga_reproduction_duration: float = 0.95
 var decomposer_detritus_rate: float = 0.105
 var decomposer_energy_yield: float = 4.2
 var decomposer_maintenance: float = 0.032
-var decomposer_budding_energy: float = 5.2
+var decomposer_budding_energy: float = 4.4
 var decomposer_budding_duration: float = 0.85
-var decomposer_dormancy_entry_detritus: float = 0.020
-var decomposer_dormancy_wake_detritus: float = 0.050
+var decomposer_dormancy_entry_detritus: float = 0.012
+var decomposer_dormancy_wake_detritus: float = 0.026
 var decomposer_dormancy_energy: float = 1.45
 var decomposer_dormant_maintenance_factor: float = 0.075
 var decomposer_dormancy_base_limit: float = 210.0
@@ -372,9 +376,9 @@ var hypha_growth_interval: float = 0.65
 var hypha_growth_step: float = 1.65
 var hypha_tip_detritus_rate: float = 0.050
 var hypha_maintenance_per_node: float = 0.0017
-var hypha_sporulation_energy: float = 9.2
-var hypha_dormancy_entry_detritus: float = 0.018
-var hypha_dormancy_wake_detritus: float = 0.048
+var hypha_sporulation_energy: float = 7.2
+var hypha_dormancy_entry_detritus: float = 0.012
+var hypha_dormancy_wake_detritus: float = 0.026
 var hypha_dormancy_energy: float = 2.2
 var hypha_dormant_maintenance_factor: float = 0.055
 var hypha_dormancy_base_limit: float = 300.0
@@ -2051,12 +2055,12 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
-			1.8,
-			0.010 + float(prey.biomass_size()) * 0.0035
+			2.1,
+			0.020 + float(prey.biomass_size()) * 0.0055
 		)
 		damage_cue.add_radial_world(Vector2(prey.position), 3.0, 0.022)
 		flagellate.energy = minf(
-			11.0,
+			flagellate_energy_cap,
 			float(flagellate.energy) + 0.62 + float(prey.biomass_size()) * 0.10
 		)
 		flagellate.finish_feed()
@@ -2463,8 +2467,8 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
-			2.6,
-			0.020 + float(prey.biomass_size()) * 0.006
+			2.9,
+			0.034 + float(prey.biomass_size()) * 0.008
 		)
 		damage_cue.add_radial_world(
 			Vector2(prey.position),
@@ -2472,7 +2476,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 			0.045
 		)
 		proto.energy = minf(
-			20.0,
+			protozoan_energy_cap,
 			float(proto.energy) + 1.35 + float(prey.biomass_size()) * 0.18
 		)
 		proto.finish_engulf()
@@ -2811,8 +2815,8 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
-			2.2,
-			0.016 + float(prey.biomass_size()) * 0.005
+			2.5,
+			0.027 + float(prey.biomass_size()) * 0.007
 		)
 		damage_cue.add_radial_world(
 			Vector2(prey.position),
@@ -2820,7 +2824,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 			0.036
 		)
 		ciliate.energy = minf(
-			16.0,
+			ciliate_energy_cap,
 			float(ciliate.energy) + 0.95 + float(prey.biomass_size()) * 0.14
 		)
 		ciliate.finish_feed()
@@ -3636,7 +3640,13 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 	)
 	var global_pressure: float = clampf(
 		(float(bacteria.size()) - soft_start)
-		/ maxf(1.0, float(limit) - soft_start),
+		/ maxf(
+			1.0,
+			minf(
+				LIVE_POPULATION_PRESSURE_RANGE,
+				float(limit) - soft_start
+			)
+		),
 		0.0,
 		1.0
 	)
@@ -3669,7 +3679,7 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 	var required_energy: float = base_division_energy * (
 		0.82
 		+ 0.18 * float(cell.gene_size)
-		+ global_pressure * global_pressure * 0.42
+		+ global_pressure * 0.90
 		+ lineage_pressure * lineage_pressure * 0.62
 		+ ecotype_pressure * ecotype_pressure * 1.12
 		- rare_ecotype_relief

@@ -615,6 +615,32 @@ func _init() -> void:
 	if absf(flux_probe.water_flux_at_grid(0, 0) - 0.25) > 0.0001:
 		errors.append("render: terrain water flux accessor mismatch")
 
+	var balance_probe = PetriSimulationScript.new(73021)
+	if (
+		balance_probe.ciliate_reproduction_energy
+		>= balance_probe.ciliate_energy_cap
+	):
+		errors.append("ecology: ciliate reproduction threshold exceeds energy cap")
+	if (
+		balance_probe.flagellate_reproduction_energy
+		>= balance_probe.flagellate_energy_cap
+	):
+		errors.append("ecology: flagellate reproduction threshold exceeds energy cap")
+	if (
+		balance_probe.protozoan_reproduction_energy
+		>= balance_probe.protozoan_energy_cap
+	):
+		errors.append("ecology: protozoan reproduction threshold exceeds energy cap")
+
+	flux_probe.water_depths[0] = 0.08
+	flux_probe.soil_moisture[0] = 0.55
+	balance_probe.producer_biomass.values[0] = 0.20
+	if (
+		flux_probe.habitat_state_at_grid(balance_probe, 0, 0)
+		!= LivingTerrainScript.HABITAT_MARSH
+	):
+		errors.append("biome: wet producer edge should derive a marsh habitat")
+
 	# Trophic capacity regression: safety ceilings are guards, not population
 	# targets. Predator carrying capacities must respond to prey abundance.
 	var capacity_probe = PetriSimulationScript.new(73004)
