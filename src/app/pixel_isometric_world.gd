@@ -27,12 +27,14 @@ const SIMULATION_FRAME_BUDGET_MS := 16.0
 const SIMULATION_FAST_BUDGET_PER_X_MS := 8.0
 const SIMULATION_MAX_FRAME_BUDGET_MS := 80.0
 const SIMULATION_WALL_DELTA_CAP := 0.25
-const FAR_AGENT_LOD_ZOOM := 6.20
+# Detailed pixel-art is the default presentation. Coarse batched glyphs are a
+# last-resort scalability mode, not something x4/x8 enables at ordinary counts.
+const FAR_AGENT_LOD_USER_ZOOM := 0.72
 const FAR_AGENT_REFRESH := 1.0 / 15.0
 const FAR_AGENT_REFRESH_MASS := 1.0 / 10.0
-const DETAIL_POPULATION_LIMIT := 1200
-const FAST_LOD_X4_POPULATION := 650
-const FAST_LOD_X8_POPULATION := 320
+const DETAIL_POPULATION_LIMIT := 3200
+const FAST_LOD_X4_POPULATION := 3600
+const FAST_LOD_X8_POPULATION := 2400
 
 const LINEAGE_PALETTE := [
 	Color(0.42, 0.70, 0.46, 1.0),
@@ -802,7 +804,7 @@ func _using_far_agent_lod() -> bool:
 	return (
 		speed_lod
 		or count > DETAIL_POPULATION_LIMIT
-		or _camera_zoom() < FAR_AGENT_LOD_ZOOM
+		or user_zoom < FAR_AGENT_LOD_USER_ZOOM
 	)
 
 

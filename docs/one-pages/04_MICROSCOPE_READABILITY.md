@@ -24,6 +24,8 @@ Species color is stable enough to follow through time; lineage hue adds bounded 
 
 ## Acceleration rule
 
+x4/x8 may reduce rendering cost only when population/zoom actually requires it. At ordinary populations, acceleration no longer automatically sacrifices the pixel-art silhouettes. The fitted camera uses relative user zoom for LOD decisions so resolution/window size cannot accidentally force coarse glyphs.
+
 x4/x8 may reduce rendering cost, but:
 - keep directional silhouettes;
 - keep species color/morphology;
