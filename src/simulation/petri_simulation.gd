@@ -933,34 +933,17 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 	var cell_position: Vector2 = Vector2(cell.position)
 	var field_index: int = _field_index_for_world(cell_position)
 	var local_eps: float = float(eps.values[field_index])
-	var flagella_propulsion: float = (
-		0.66
-		+ 0.085 * float(cell.flagella_count)
-		+ 0.15 * float(cell.flagella_length)
-	)
-	var size_drag: float = 0.84 + 0.20 * float(cell.gene_size)
 	var energy_speed_factor: float = clampf(
 		float(cell.energy) / 1.6,
 		0.18,
 		1.0
 	)
 	var division_mobility: float = 0.16 if bool(cell.dividing) else 1.0
-	var ecological_drag: float = clampf(
-		1.0
-		- float(cell.expression_matrix) * 0.17
-		- float(cell.expression_photo) * 0.07
-		- float(cell.expression_detritus) * 0.035,
-		0.52,
-		1.0
-	)
 	var speed: float = (
 		run_speed
-		* float(cell.gene_speed)
-		* ecological_drag
-		* flagella_propulsion
+		* float(cell.motion_speed_base)
 		* energy_speed_factor
 		* division_mobility
-		/ size_drag
 	)
 	if float(cell.expression_matrix) > 0.08:
 		var local_quorum: float = float(quorum_signal.values[field_index])
@@ -2914,6 +2897,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		cell.expression_quorum = float(
 			genome_values[EvolvableGenomeScript.MODULE_QUORUM_SIGNAL]
 		)
+		cell.refresh_motion_speed_cache()
 		var previous_guild: int = int(cell.guild)
 		cell.guild = int(
 			cell.genome.dominant_guild_from_values(genome_values)
@@ -3029,22 +3013,8 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 	cell.angle = wrapf(float(cell.angle), -PI, PI)
 
-	var flagella_propulsion: float = (
-		0.66
-		+ 0.085 * float(cell.flagella_count)
-		+ 0.15 * float(cell.flagella_length)
-	)
-	var size_drag: float = 0.84 + 0.20 * float(cell.gene_size)
 	var energy_speed_factor: float = clampf(float(cell.energy) / 1.6, 0.18, 1.0)
 	var division_mobility: float = 0.16 if bool(cell.dividing) else 1.0
-	var ecological_drag: float = clampf(
-		1.0
-		- float(cell.expression_matrix) * 0.17
-		- float(cell.expression_photo) * 0.07
-		- float(cell.expression_detritus) * 0.035,
-		0.52,
-		1.0
-	)
 
 	var local_eps: float = float(eps.values[field_index])
 	var local_quorum: float = local_quorum_before
@@ -3062,12 +3032,9 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 	)
 	var speed: float = (
 		run_speed
-		* float(cell.gene_speed)
-		* ecological_drag
-		* flagella_propulsion
+		* float(cell.motion_speed_base)
 		* energy_speed_factor
 		* division_mobility
-		/ size_drag
 	)
 	if float(cell.expression_matrix) > 0.08:
 		speed *= lerpf(
@@ -4105,8 +4072,9 @@ func _integrate_dna_fragment(cell: Variant, fragment: Variant) -> void:
 	if fragment.has_module_payload():
 		cell.integrate_genome_module(fragment.module_payload, rng)
 
-	# Scalar transformation can cross a phenotype-species threshold.
+	# Scalar transformation can cross phenotype/motion thresholds.
 	cell.phenotype_species_dirty = true
+	cell.refresh_motion_speed_cache()
 
 
 func _bacterium_trait_value(cell: Variant, trait_kind: int) -> float:
@@ -4802,6 +4770,9 @@ func _apply_founder_niche(agent: Variant, family_code: int, index: int) -> void:
 				2:
 					agent.gene_enzyme *= 1.30
 					agent.gene_efficiency *= 1.16
+
+	if family_code == 0:
+		agent.refresh_motion_speed_cache()
 
 
 func _allocate_id() -> int:

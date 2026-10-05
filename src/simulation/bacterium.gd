@@ -89,6 +89,10 @@ var ecotype_label: String = "generalist"
 # population/render loops do not repeatedly reread and quantize many genes.
 var phenotype_species_cache: int = -1
 var phenotype_species_dirty: bool = true
+
+# Derived hot-motion coefficient. Recomputed only when heritable morphology or
+# regulated ecological expression changes.
+var motion_speed_base: float = 1.0
 var genome_event: String = "founder"
 var structural_mutations: int = 0
 var genome_recombination_events: int = 0
@@ -193,6 +197,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	phenotype_species_dirty = true
 
 	_apply_size_phenotype()
+	refresh_motion_speed_cache()
 
 	physical_genome = PhysicalCapabilityGenomeScript.new()
 	physical_genome.configure_founder(p_rng, PhysicalCapabilityGenomeScript.PROFILE_MICROBE)
@@ -283,6 +288,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	phenotype_species_dirty = true
 
 	_apply_size_phenotype()
+	refresh_motion_speed_cache()
 
 	physical_genome = PhysicalCapabilityGenomeScript.new()
 	if parent.physical_genome != null:
@@ -297,6 +303,29 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	burrow_depth = 0.0
 	terrain_action_clock = 0.0
 	terrain_action = "none"
+
+
+func refresh_motion_speed_cache() -> void:
+	var flagella_propulsion: float = (
+		0.66
+		+ 0.085 * float(flagella_count)
+		+ 0.15 * float(flagella_length)
+	)
+	var size_drag: float = 0.84 + 0.20 * float(gene_size)
+	var ecological_drag: float = clampf(
+		1.0
+		- float(expression_matrix) * 0.17
+		- float(expression_photo) * 0.07
+		- float(expression_detritus) * 0.035,
+		0.52,
+		1.0
+	)
+	motion_speed_base = (
+		float(gene_speed)
+		* ecological_drag
+		* flagella_propulsion
+		/ maxf(0.001, size_drag)
+	)
 
 
 func integrate_genome_module(

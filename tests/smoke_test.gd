@@ -154,6 +154,39 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Cached motility must equal the uncached phenotype formula and update
+	# after regulated expression changes.
+	var motion_probe = BacteriumScript.new(
+		930001,
+		Vector2(20.0, 20.0),
+		0.0
+	)
+	motion_probe.configure_founder(RandomNumberGenerator.new())
+	var uncached_motion: float = (
+		float(motion_probe.gene_speed)
+		* clampf(
+			1.0
+			- float(motion_probe.expression_matrix) * 0.17
+			- float(motion_probe.expression_photo) * 0.07
+			- float(motion_probe.expression_detritus) * 0.035,
+			0.52,
+			1.0
+		)
+		* (
+			0.66
+			+ 0.085 * float(motion_probe.flagella_count)
+			+ 0.15 * float(motion_probe.flagella_length)
+		)
+		/ (0.84 + 0.20 * float(motion_probe.gene_size))
+	)
+	if absf(float(motion_probe.motion_speed_base) - uncached_motion) > 0.0001:
+		errors.append("performance: cached bacterial motility diverged from phenotype formula")
+	var old_motion: float = float(motion_probe.motion_speed_base)
+	motion_probe.expression_matrix = 1.0
+	motion_probe.refresh_motion_speed_cache()
+	if float(motion_probe.motion_speed_base) >= old_motion:
+		errors.append("performance: motility cache ignored regulated matrix drag")
+
 	# Dense frequency metadata is sampled adaptively; the hard population
 	# ceiling remains exact because births use the packed population size.
 	var metadata_probe = PetriSimulationScript.new(73010)
