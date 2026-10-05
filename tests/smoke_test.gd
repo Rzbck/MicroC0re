@@ -273,6 +273,43 @@ func _init() -> void:
 	if mat_probe.producer_biomass.total() <= seeded_before:
 		errors.append("biome: seeded producer mat failed to grow")
 
+	# Habitat-choice regression: ecological traits must produce distinct niche
+	# preferences instead of every guild seeing the same terrain.
+	var affinity_sim = PetriSimulationScript.new(88229)
+	affinity_sim.seed_demo(12)
+	var affinity_terrain = LivingTerrainScript.new(
+		99109,
+		Vector2(affinity_sim.world_size)
+	)
+	var affinity_alga = affinity_sim.microalgae[0]
+	if affinity_terrain._biome_affinity(
+		affinity_alga,
+		LivingTerrainScript.BIOME_PRODUCER
+	) <= affinity_terrain._biome_affinity(
+		affinity_alga,
+		LivingTerrainScript.BIOME_ANOXIC
+	):
+		errors.append("biome: producer failed to prefer productive oxic habitat")
+	var affinity_decomposer = affinity_sim.decomposers[0]
+	if affinity_terrain._biome_affinity(
+		affinity_decomposer,
+		LivingTerrainScript.BIOME_DETRITAL
+	) <= affinity_terrain._biome_affinity(
+		affinity_decomposer,
+		LivingTerrainScript.BIOME_OPEN
+	):
+		errors.append("biome: decomposer failed to prefer detrital habitat")
+	var affinity_bacterium = affinity_sim.bacteria[0]
+	affinity_bacterium.gene_adhesion = 1.6
+	if affinity_terrain._biome_affinity(
+		affinity_bacterium,
+		LivingTerrainScript.BIOME_BIOFILM
+	) <= affinity_terrain._biome_affinity(
+		affinity_bacterium,
+		LivingTerrainScript.BIOME_OPEN
+	):
+		errors.append("biome: adherent bacterium failed to prefer biofilm habitat")
+
 	# Persistent biome succession regression: producer fields should mature into
 	# producer habitat and later transition under anoxic waste pressure.
 	var biome_sim = PetriSimulationScript.new(88230)

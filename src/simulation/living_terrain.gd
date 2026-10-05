@@ -638,6 +638,51 @@ func _advance_group(
 		_advance_agent(sim, agent, dt, can_move)
 
 
+func _biome_affinity(agent: Variant, state: int) -> float:
+	# Trait-driven habitat choice. Values are relative preferences used only for
+	# steering; they do not force an organism to remain inside one biome.
+	match state:
+		BIOME_PRODUCER:
+			if "gene_light_use" in agent:
+				return 0.62 + 0.24 * clampf(float(agent.gene_light_use), 0.5, 1.8)
+			if "gene_uptake" in agent:
+				return 0.55 + 0.10 * clampf(float(agent.gene_uptake), 0.5, 1.8)
+			if "gene_capture" in agent or "gene_engulf" in agent:
+				return 0.56
+			return 0.52
+		BIOME_BIOFILM:
+			if "gene_adhesion" in agent:
+				return 0.58 + 0.26 * clampf(float(agent.gene_adhesion), 0.4, 2.0)
+			if "gene_capture" in agent:
+				return 0.42
+			return 0.48
+		BIOME_DETRITAL:
+			if "gene_detritus" in agent:
+				return 0.62 + 0.24 * clampf(float(agent.gene_detritus), 0.4, 1.9)
+			if "gene_uptake" in agent:
+				return 0.56 + 0.08 * clampf(float(agent.gene_uptake), 0.5, 1.8)
+			return 0.48
+		BIOME_FUNGAL:
+			if "gene_branch" in agent:
+				return 0.82
+			if "gene_detritus" in agent:
+				return 0.64 + 0.18 * clampf(float(agent.gene_detritus), 0.4, 1.9)
+			return 0.44
+		BIOME_ANOXIC:
+			if "gene_light_use" in agent:
+				return 0.12
+			if "gene_dormancy" in agent:
+				return 0.30 + 0.24 * clampf(float(agent.gene_dormancy), 0.4, 2.0)
+			if "gene_detritus" in agent:
+				return 0.50
+			return 0.22
+		BIOME_DISTURBED:
+			if "gene_speed" in agent:
+				return 0.44 + 0.08 * clampf(float(agent.gene_speed), 0.5, 1.8)
+			return 0.42
+	return 0.50
+
+
 func _advance_agent(
 	sim: Variant,
 	agent: Variant,
@@ -712,17 +757,38 @@ func _advance_agent(
 	agent.physical_armor = armor
 
 	if can_move:
-		# Side steering only needs local sign, so nearest samples avoid two
-		# bilinear interpolations per agent while preserving the terrain feedback.
-		var left_height: float = sample_height_nearest(
+		# Terrain and habitat are sensed to either side of the current heading.
+		# This produces niche-oriented migration without a global pathfinder.
+		var left_position: Vector2 = (
 			position + forward.rotated(-0.72) * CELL_SIZE
 		)
-		var right_height: float = sample_height_nearest(
+		var right_position: Vector2 = (
 			position + forward.rotated(0.72) * CELL_SIZE
 		)
-		var terrain_turn: float = clampf((left_height - right_height) * 0.34, -0.22, 0.22)
+		var left_height: float = sample_height_nearest(left_position)
+		var right_height: float = sample_height_nearest(right_position)
+		var terrain_turn: float = clampf(
+			(left_height - right_height) * 0.34,
+			-0.22,
+			0.22
+		)
+		var left_affinity: float = _biome_affinity(
+			agent,
+			sample_biome_state(left_position)
+		)
+		var right_affinity: float = _biome_affinity(
+			agent,
+			sample_biome_state(right_position)
+		)
+		var habitat_turn: float = clampf(
+			(right_affinity - left_affinity) * 0.55,
+			-0.18,
+			0.18
+		) * clampf(dt * 4.0, 0.0, 1.0)
 		agent.angle = wrapf(
-			float(agent.angle) + terrain_turn * (1.0 - clampf(climb * 0.22, 0.0, 0.52)),
+			float(agent.angle)
+			+ terrain_turn * (1.0 - clampf(climb * 0.22, 0.0, 0.52))
+			+ habitat_turn,
 			-PI,
 			PI
 		)
