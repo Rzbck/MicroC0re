@@ -48,6 +48,27 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      - name: Check PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $files = @(
+            "scripts/run_simulation.ps1",
+            "scripts/publish_session.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }
+
       - name: Import project
         run: godot --headless --path . --import --quit
 

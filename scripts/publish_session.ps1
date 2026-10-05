@@ -110,9 +110,9 @@ foreach ($s in @($raw.samples)) {
 
 $safeLongSamples = @()
 $hasLongSamples = (
-    [int]$raw.schema -ge 2
-    -and $null -ne $raw.PSObject.Properties["long_samples"]
-    -and $null -ne $raw.long_samples
+    ([int]$raw.schema -ge 2) -and
+    ($null -ne $raw.PSObject.Properties["long_samples"]) -and
+    ($null -ne $raw.long_samples)
 )
 if ($hasLongSamples) {
 foreach ($s in @($raw.long_samples)) {
