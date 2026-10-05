@@ -56,6 +56,7 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 - Frequency-dependent lineage/species metadata uses adaptive cadence (1× small, 1/2 mass, 1/4 ultra). The hard population ceiling still uses exact packed population size, so this optimization adds only bounded ecological-pressure latency, not population-limit drift.
 - Bacterial motility now uses a cached derived phenotype coefficient (gene speed + appendages + size + regulated matrix/photo/detritus drag), refreshed only when heredity/regulation changes. Motion-only cohorts avoid rebuilding the same static expression every step.
 - The main bacterial loop routes cells directly to full-metabolism vs motion-only paths. Dense populations avoid a per-cell `_advance_cell → _should_run_metabolism → motion-only` dispatch chain on skipped metabolism cohorts.
+- Motion-only curvature uses a deterministic sine LUT (phase step ≈0.031 rad) instead of evaluating `sin()` per bacterial cell. Visual wandering remains smooth/coherent while dense-agent trig cost is removed.
 
 This is the first explicit hot/cold split for #20; stable biological IDs remain unchanged.
 

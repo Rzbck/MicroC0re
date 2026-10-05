@@ -33,6 +33,8 @@ const EXACT_MECHANICS_LIMIT := 900
 const DENSITY_NEIGHBOR_VISIT_CAP := 18
 const DENSITY_NEIGHBOR_VISIT_CAP_ULTRA := 12
 const DIRECTION_LUT_SIZE := 1024
+const DRIFT_LUT_SIZE := 1024
+const DRIFT_LUT_PHASE_STEP := 5
 const REGULATION_BUCKETS := 6
 const LINEAGE_BIN_COUNT := 32
 const ECOTYPE_PRESSURE_BIN_COUNT := 256
@@ -130,6 +132,7 @@ var _current_memory_alpha: float = 0.0
 var _current_rotational_sigma: float = 0.0
 var _current_mechanics_dt: float = MECHANICS_DT
 var _direction_lut: PackedVector2Array = PackedVector2Array()
+var _drift_lut: PackedFloat32Array = PackedFloat32Array()
 var mechanics_mode_last: int = 0
 var _mech_positions: PackedVector2Array = PackedVector2Array()
 var _mech_radii: PackedFloat32Array = PackedFloat32Array()
@@ -390,6 +393,9 @@ func _init(seed_value: int = 1) -> void:
 			TAU * float(i) / float(DIRECTION_LUT_SIZE) - PI
 		)
 		_direction_lut[i] = Vector2(cos(lut_angle), sin(lut_angle))
+	_drift_lut.resize(DRIFT_LUT_SIZE)
+	for i in range(DRIFT_LUT_SIZE):
+		_drift_lut[i] = sin(TAU * float(i) / float(DRIFT_LUT_SIZE))
 	_flow_x_rows.resize(FIELD_HEIGHT)
 	_flow_y_cols.resize(FIELD_WIDTH)
 	_flow_field_cache.resize(FIELD_WIDTH * FIELD_HEIGHT)
@@ -964,9 +970,11 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 			* clampf(float(cell.expression_matrix), 0.0, 1.0)
 		)
 
-	var drift_turn: float = sin(
-		float(int(cell.id) * 17 + _agent_tick * 11) * 0.031
-	) * 0.16 * dt
+	var drift_phase: int = posmod(
+		(int(cell.id) * 17 + _agent_tick * 11) * DRIFT_LUT_PHASE_STEP,
+		DRIFT_LUT_SIZE
+	)
+	var drift_turn: float = float(_drift_lut[drift_phase]) * 0.16 * dt
 	cell.angle = wrapf(float(cell.angle) + drift_turn, -PI, PI)
 	var heading: Vector2 = _direction_for_angle(float(cell.angle))
 	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)

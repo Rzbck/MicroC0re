@@ -154,6 +154,23 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Dense motion drift uses a deterministic sine LUT with bounded error.
+	var drift_probe = PetriSimulationScript.new(73012)
+	drift_probe.seed_demo(4)
+	var worst_drift_error: float = 0.0
+	for phase in range(0, 180, 7):
+		var drift_index: int = posmod(
+			phase * PetriSimulationScript.DRIFT_LUT_PHASE_STEP,
+			PetriSimulationScript.DRIFT_LUT_SIZE
+		)
+		var expected_drift: float = sin(float(phase) * 0.031)
+		worst_drift_error = maxf(
+			worst_drift_error,
+			absf(float(drift_probe._drift_lut[drift_index]) - expected_drift)
+		)
+	if worst_drift_error > 0.035:
+		errors.append("performance: drift LUT approximation exceeded motion tolerance")
+
 	# Direct cohort routing must remain equivalent to the legacy helper.
 	var routing_probe = PetriSimulationScript.new(73011)
 	routing_probe.seed_demo(16)
