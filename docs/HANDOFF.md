@@ -367,7 +367,12 @@ Validate the authored terrain-prop pass after pulling the newest code commit.
 
 Newest first:
 
-- **current code pass after 21964d0** — authored terrain pixel-art props + hydrology equilibrium + ridge habitat; validate locally after CI.
+- `37e4d3e` — **Author living terrain pixel art**
+  - authored grass/shrub/tree/rock/marsh/sand/crag/ridge pixel-art atlas;
+  - terrain props rendered as real sprites instead of procedural biome glyphs;
+  - surface infiltration + stricter anoxic transition to stop whole-dish flooding;
+  - derived ridge habitat and faster, water-aware vegetation succession.
+- `ce57481a` — smoke fixture updated for the new wet-stress anoxic rule.
 - `51e0a7d` — **Rebalance living biome readability**
   - removes enclosing armor/reproduction geometry;
   - density-aware overview batching with close-zoom detail recovery;
@@ -422,14 +427,16 @@ Earlier important architecture:
 
 # CI state at handoff
 
-For code commit `51e0a7d`:
+For implementation commit `37e4d3e` plus smoke-fixture commit `ce57481a`:
 
-- parser/import checks: **SUCCESS**
+- import: **SUCCESS**
+- simulation parser: **SUCCESS**
+- pixel-isometric renderer parser: **SUCCESS**
 - deterministic smoke test: **SUCCESS**
-- push workflow run **37323204693** continued into the 10-minute ecology soak at
-  the time this handoff note was refreshed.
+- workflow run **37329431866** entered the 10-minute ecology soak after smoke passed.
 
-Local visual validation is still required; CI cannot judge readability.
+Local visual validation is still required; CI cannot judge whether the authored
+trees, marshes and ridges are visually strong enough.
 
 ---
 
@@ -437,7 +444,8 @@ Local visual validation is still required; CI cannot judge readability.
 
 Do this first, before adding more systems:
 
-1. Ask the maintainer to pull and run code commit `51e0a7d` (or newer) if they have not already.
+1. Ask the maintainer to pull the newest branch HEAD and verify that `37e4d3e`
+   is present below the handoff/test commits.
 2. Have them test:
    - x1;
    - x4;
@@ -475,7 +483,9 @@ Do **not** start another large visual or ecology feature before seeing how `2222
 ### Species readability / coexistence
 The previous local run had >1000 ecotypes but only 29 visible species at the end.
 
-Code commit `51e0a7d` adds stronger species silhouettes and density-aware overview rendering, but this has **not yet been locally validated**.
+The `51e0a7d` readability pass was locally validated in session 5996618514.
+The new unvalidated product gate is `37e4d3e`: authored vegetation/rock/mountain
+sprites plus hydrology equilibrium.
 
 Watch for:
 - too many organisms still appearing identical;
@@ -541,10 +551,12 @@ git log -1 --oneline
 & .\scripts\run_simulation.ps1
 ```
 
-Expected latest **code** commit beneath any documentation-only handoff commit(s):
+Expected terrain-art implementation commit beneath any documentation/test-only
+commit(s):
 
 ```text
-51e0a7d Rebalance living biome readability
+37e4d3e Author living terrain pixel art
+ce57481a Update anoxic smoke fixture for wet stress
 ```
 
 Use `git log -3 --oneline` rather than assuming the documentation commit itself is the code baseline.
