@@ -475,6 +475,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(-PI, PI)
 		)
 		cell.configure_founder(rng)
+		_apply_founder_niche(cell, 0, _i)
 		cell.energy = rng.randf_range(2.6, 3.5)
 		cell.length = minimum_length * float(cell.gene_size) * rng.randf_range(0.96, 1.08)
 		cell.sensed_memory = nutrient.sample_world(position)
@@ -525,6 +526,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		proto.configure_founder(rng)
+		_apply_founder_niche(proto, 1, proto_index)
 		proto.lineage_hue = wrapf(0.48 + float(proto_index) * 0.055, 0.0, 1.0)
 		protozoa.append(proto)
 
@@ -557,6 +559,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		ciliate.configure_founder(rng)
+		_apply_founder_niche(ciliate, 2, ciliate_index)
 		ciliates.append(ciliate)
 
 	# Small flagellate bacterivores form an intermediate trophic tier. They
@@ -579,6 +582,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		flagellate.configure_founder(rng)
+		_apply_founder_niche(flagellate, 3, flagellate_index)
 		flagellate.energy = rng.randf_range(3.8, 4.8)
 		flagellates.append(flagellate)
 
@@ -594,6 +598,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		colony.configure_founder(rng)
+		_apply_founder_niche(colony, 6, hypha_index)
 		colony.energy = rng.randf_range(4.4, 5.4)
 		hyphae.append(colony)
 
@@ -616,6 +621,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		alga.configure_founder(rng)
+		_apply_founder_niche(alga, 4, algae_index)
 		alga.energy = rng.randf_range(2.8, 3.8)
 		microalgae.append(alga)
 
@@ -638,6 +644,7 @@ func seed_demo(count: int = 36) -> void:
 			rng.randf_range(0.0, TAU)
 		)
 		yeast.configure_founder(rng)
+		_apply_founder_niche(yeast, 5, yeast_index)
 		yeast.energy = rng.randf_range(2.4, 3.2)
 		decomposers.append(yeast)
 
@@ -3205,7 +3212,11 @@ func _ready_to_begin_division(cell: Variant) -> bool:
 		1.0
 	)
 	var ecotype_fraction: float = (
-		float(_ecotype_counts[_ecotype_pressure_bin(int(cell.ecotype_id))])
+		float(
+			_ecotype_counts[
+				_ecotype_pressure_bin(phenotype_species_id(cell, 0))
+			]
+		)
 		/ float(maxi(1, bacteria.size()))
 	)
 	var ecotype_pressure: float = clampf(
@@ -3242,6 +3253,62 @@ func _lineage_bin(hue: float) -> int:
 	)
 
 
+func _species_bin(value: float, minimum: float, maximum: float) -> int:
+	var normalized: float = clampf(
+		(value - minimum) / maxf(0.0001, maximum - minimum),
+		0.0,
+		0.9999
+	)
+	return floori(normalized * 3.0)
+
+
+func _species_mix(signature: int, value: int) -> int:
+	return posmod(signature * 31 + value + 17, 2147483000)
+
+
+func phenotype_species_id(agent: Variant, family_code: int) -> int:
+	# Exact ecotypes are intentionally much finer than species. A species only
+	# changes when meaningful phenotype/niche thresholds are crossed.
+	var signature: int = 1009 + family_code * 100003
+	match family_code:
+		0:
+			signature = _species_mix(signature, int(agent.guild))
+			signature = _species_mix(signature, _species_bin((float(agent.gene_speed) + float(agent.gene_chemotaxis)) * 0.5, 0.55, 1.75))
+			signature = _species_mix(signature, _species_bin((float(agent.gene_uptake) + float(agent.gene_growth)) * 0.5, 0.55, 1.65))
+			signature = _species_mix(signature, _species_bin((float(agent.gene_adhesion) + float(agent.gene_dormancy)) * 0.5, 0.45, 1.70))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_size), 0.70, 1.50))
+		1:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_speed), 0.55, 1.70))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_engulf), 0.55, 1.75))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_size), 0.70, 1.50))
+		2:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_speed), 0.60, 1.85))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_capture), 0.60, 1.75))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_size), 0.75, 1.45))
+		3:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_speed), 0.60, 1.80))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_capture), 0.55, 1.75))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_metabolism), 0.60, 1.50))
+		4:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_light_use), 0.55, 1.75))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_exudate), 0.50, 1.85))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_drift), 0.50, 1.70))
+		5:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_detritus), 0.50, 1.85))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_mineralize), 0.50, 1.85))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_growth), 0.55, 1.70))
+		6:
+			signature = _species_mix(signature, _species_bin(float(agent.gene_branch), 0.45, 1.85))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_enzyme), 0.50, 1.75))
+			signature = _species_mix(signature, _species_bin(float(agent.gene_efficiency), 0.55, 1.65))
+	return signature
+
+
+func species_visual_hue(agent: Variant, family_code: int) -> float:
+	var species_id: int = phenotype_species_id(agent, family_code)
+	return float(posmod(species_id * 73 + family_code * 131, 997)) / 997.0
+
+
 func _ecotype_pressure_bin(ecotype_id: int) -> int:
 	return posmod(ecotype_id, ECOTYPE_PRESSURE_BIN_COUNT)
 
@@ -3261,8 +3328,10 @@ func _refresh_population_metadata() -> int:
 		living_count += 1
 		var bin_index: int = _lineage_bin(float(cell.lineage_hue))
 		_lineage_counts[bin_index] += 1
-		var ecotype_bin: int = _ecotype_pressure_bin(int(cell.ecotype_id))
-		_ecotype_counts[ecotype_bin] += 1
+		var species_bin: int = _ecotype_pressure_bin(
+			phenotype_species_id(cell, 0)
+		)
+		_ecotype_counts[species_bin] += 1
 	return living_count
 
 
@@ -4359,6 +4428,112 @@ func _maintain_ecological_refugia(dt: float) -> void:
 		_try_wake_refugium(5, _refugia_hypha)
 
 
+func _apply_founder_niche(agent: Variant, family_code: int, index: int) -> void:
+	# Seed several genuinely different strategies per guild. These are starting
+	# conditions only: mutation and selection can merge, erase or split them.
+	match family_code:
+		0:
+			match posmod(index, 6):
+				0:
+					agent.gene_speed *= 1.22
+					agent.gene_chemotaxis *= 1.18
+					agent.gene_growth *= 0.88
+				1:
+					agent.gene_adhesion *= 1.34
+					agent.gene_dormancy *= 1.18
+					agent.gene_speed *= 0.82
+				2:
+					agent.gene_uptake *= 1.28
+					agent.gene_growth *= 0.92
+					agent.gene_dormancy *= 1.12
+				3:
+					agent.gene_growth *= 1.26
+					agent.gene_uptake *= 1.14
+					agent.gene_dormancy *= 0.78
+				4:
+					agent.gene_dormancy *= 1.38
+					agent.gene_growth *= 0.78
+					agent.gene_competence *= 1.20
+				5:
+					agent.gene_size *= 1.22
+					agent.gene_adhesion *= 1.22
+					agent.gene_speed *= 0.86
+		1:
+			match posmod(index, 3):
+				0:
+					agent.gene_speed *= 1.24
+					agent.gene_perception *= 1.16
+					agent.gene_size *= 0.90
+				1:
+					agent.gene_engulf *= 1.28
+					agent.gene_size *= 1.18
+					agent.gene_speed *= 0.82
+				2:
+					agent.gene_perception *= 1.30
+					agent.gene_metabolism *= 0.82
+			agent.radius = 3.2 * float(agent.gene_size)
+		2:
+			if posmod(index, 2) == 0:
+				agent.gene_speed *= 1.24
+				agent.gene_perception *= 1.20
+				agent.gene_capture *= 0.90
+			else:
+				agent.gene_capture *= 1.26
+				agent.gene_size *= 1.14
+				agent.gene_speed *= 0.88
+			agent.radius = 2.4 * float(agent.gene_size)
+		3:
+			match posmod(index, 3):
+				0:
+					agent.gene_speed *= 1.24
+					agent.gene_capture *= 0.90
+				1:
+					agent.gene_capture *= 1.24
+					agent.gene_size *= 1.12
+				2:
+					agent.gene_metabolism *= 0.78
+					agent.gene_perception *= 1.22
+			agent.radius = 1.35 * float(agent.gene_size)
+		4:
+			match posmod(index, 4):
+				0:
+					agent.gene_light_use *= 1.28
+					agent.gene_drift *= 0.80
+				1:
+					agent.gene_growth *= 1.24
+					agent.gene_exudate *= 0.82
+				2:
+					agent.gene_exudate *= 1.34
+					agent.gene_growth *= 0.88
+				3:
+					agent.gene_drift *= 1.30
+					agent.gene_light_use *= 0.92
+			agent.radius = 1.35 * float(agent.gene_size)
+		5:
+			match posmod(index, 3):
+				0:
+					agent.gene_detritus *= 1.30
+					agent.gene_mineralize *= 0.86
+				1:
+					agent.gene_mineralize *= 1.30
+					agent.gene_growth *= 0.88
+				2:
+					agent.gene_growth *= 1.22
+					agent.gene_metabolism *= 1.08
+			agent.radius = 1.55 * float(agent.gene_size)
+		6:
+			match posmod(index, 3):
+				0:
+					agent.gene_growth *= 1.24
+					agent.gene_branch *= 0.86
+				1:
+					agent.gene_branch *= 1.30
+					agent.gene_efficiency *= 0.90
+				2:
+					agent.gene_enzyme *= 1.30
+					agent.gene_efficiency *= 1.16
+
+
 func _allocate_id() -> int:
 	var result: int = _next_id
 	_next_id += 1
@@ -4837,6 +5012,8 @@ func _record_predation(predator: String, prey: Variant) -> void:
 
 func evolution_metrics() -> Dictionary:
 	var ecotypes: Dictionary = {}
+	var species: Dictionary = {}
+	var species_by_family: Array[Dictionary] = [{}, {}, {}, {}, {}, {}, {}]
 	var lineage_bins: Dictionary = {}
 	var maximum_generation: int = 0
 	var structural_total: int = 0
@@ -4848,6 +5025,9 @@ func evolution_metrics() -> Dictionary:
 		if cell == null or bool(cell.consumed):
 			continue
 		ecotypes[int(cell.ecotype_id)] = true
+		var bacterial_species: int = phenotype_species_id(cell, 0)
+		species[bacterial_species] = true
+		species_by_family[0][bacterial_species] = true
 		lineage_bins[_lineage_bin(float(cell.lineage_hue))] = true
 		maximum_generation = maxi(maximum_generation, int(cell.generation))
 		structural_total += int(cell.structural_mutations)
@@ -4855,12 +5035,18 @@ func evolution_metrics() -> Dictionary:
 		transformation_total += int(cell.transformation_events)
 		capability_mix_total += int(cell.capability_mix_events)
 
-	for group in [protozoa, ciliates, flagellates, microalgae, decomposers, hyphae]:
+	var family_groups: Array = [protozoa, ciliates, flagellates, microalgae, decomposers, hyphae]
+	for group_index in range(family_groups.size()):
+		var group: Array = family_groups[group_index]
+		var family_code: int = group_index + 1
 		for organism in group:
 			if organism == null:
 				continue
 			if "consumed" in organism and bool(organism.consumed):
 				continue
+			var organism_species: int = phenotype_species_id(organism, family_code)
+			species[organism_species] = true
+			species_by_family[family_code][organism_species] = true
 			maximum_generation = maxi(maximum_generation, int(organism.generation))
 			if "lineage_hue" in organism:
 				lineage_bins[_lineage_bin(float(organism.lineage_hue))] = true
@@ -4869,6 +5055,14 @@ func evolution_metrics() -> Dictionary:
 
 	return {
 		"ecotypes": ecotypes.size(),
+		"species": species.size(),
+		"species_bacteria": species_by_family[0].size(),
+		"species_protozoa": species_by_family[1].size(),
+		"species_ciliates": species_by_family[2].size(),
+		"species_flagellates": species_by_family[3].size(),
+		"species_algae": species_by_family[4].size(),
+		"species_decomposers": species_by_family[5].size(),
+		"species_hyphae": species_by_family[6].size(),
 		"lineage_bins": lineage_bins.size(),
 		"max_generation": maximum_generation,
 		"structural_mutations": structural_total,

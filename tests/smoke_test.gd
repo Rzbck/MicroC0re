@@ -485,6 +485,8 @@ func _init() -> void:
 		errors.append("determinism: identical seeds produced different signatures")
 
 	var evolution_probe: Dictionary = first.evolution_metrics()
+	if int(evolution_probe.get("species", 0)) < 4:
+		errors.append("evolution: phenotype species clustering produced too little diversity")
 	if int(evolution_probe.get("ecotypes", 0)) <= 0:
 		errors.append("evolution: ecotype telemetry reported no diversity")
 	if int(evolution_probe.get("max_generation", -1)) < 0:
