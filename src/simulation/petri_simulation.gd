@@ -131,6 +131,8 @@ var _max_half_body_length: float = 2.0
 var _agent_tick: int = 0
 var _current_agent_dt: float = AGENT_DT_SMALL
 var _current_metabolic_stride: int = 1
+var _metabolism_schedule_stride: int = 0
+var _metabolism_due_ticks: PackedInt32Array = PackedInt32Array()
 var _current_memory_alpha: float = 0.0
 var _current_rotational_sigma: float = 0.0
 var _current_mechanics_dt: float = MECHANICS_DT
@@ -465,6 +467,8 @@ func seed_demo(count: int = 36) -> void:
 	_mechanics_accumulator = 0.0
 	_agent_accumulator = 0.0
 	_agent_tick = 0
+	_metabolism_schedule_stride = 0
+	_metabolism_due_ticks = PackedInt32Array()
 	disturbance_index = 0
 	next_disturbance_time = 24.0
 	last_disturbance_type = -1
@@ -765,6 +769,7 @@ func step(dt: float) -> void:
 		)
 		_current_mechanics_dt = agent_dt
 		_agent_tick += 1
+		_ensure_metabolism_schedule()
 		var agents_start: int = Time.get_ticks_usec()
 		var pending_births: Array = _population_buffer
 		pending_births.clear()
@@ -793,6 +798,16 @@ func step(dt: float) -> void:
 		# render SoA is synchronized lazily outside this biological hot loop.
 		for cell_index in range(bacteria.size()):
 			var cell: Variant = bacteria[cell_index]
+			var run_metabolism: bool = true
+			if _current_metabolic_stride > 1:
+				run_metabolism = (
+					int(_metabolism_due_ticks[cell_index])
+					== _agent_tick
+				)
+				if run_metabolism:
+					_metabolism_due_ticks[cell_index] = (
+						_agent_tick + _current_metabolic_stride
+					)
 			if float(cell.adhesion_timer) > 0.0:
 				cell.adhesion_timer = maxf(
 					0.0,
@@ -814,13 +829,6 @@ func step(dt: float) -> void:
 					_recycle_dead_cell(cell)
 				continue
 
-			var run_metabolism: bool = (
-				_current_metabolic_stride <= 1
-				or (
-					(int(cell.id) + _agent_tick)
-					% _current_metabolic_stride
-				) == 0
-			)
 			if run_metabolism:
 				_advance_cell(cell, agent_dt)
 			else:
@@ -1001,6 +1009,7 @@ func _compact_bacteria_population(pending_births: Array) -> void:
 		bacteria.append_array(pending_births)
 		pending_births.clear()
 	_bacteria_hot_store_dirty = true
+	_metabolism_schedule_stride = 0
 
 
 func _chemistry_dt_for_population() -> float:
@@ -1034,6 +1043,30 @@ func _metabolic_stride() -> int:
 	if count >= AGENT_MEDIUM_THRESHOLD:
 		return 2
 	return 1
+
+
+func _rebuild_metabolism_schedule() -> void:
+	var stride: int = maxi(1, _current_metabolic_stride)
+	_metabolism_schedule_stride = stride
+	_metabolism_due_ticks.resize(bacteria.size())
+	if stride <= 1:
+		_metabolism_due_ticks.fill(_agent_tick)
+		return
+
+	for i in range(bacteria.size()):
+		var phase: int = (
+			(int(bacteria[i].id) + _agent_tick) % stride
+		)
+		var offset: int = 0 if phase == 0 else stride - phase
+		_metabolism_due_ticks[i] = _agent_tick + offset
+
+
+func _ensure_metabolism_schedule() -> void:
+	if (
+		_metabolism_schedule_stride != _current_metabolic_stride
+		or _metabolism_due_ticks.size() != bacteria.size()
+	):
+		_rebuild_metabolism_schedule()
 
 
 func _should_run_metabolism(cell_id: int) -> bool:
@@ -4760,6 +4793,7 @@ func _restore_refugium(kind: int, parent: Variant) -> bool:
 		6:
 			_event_inc("refugia_bacteria")
 			_bacteria_hot_store_dirty = true
+			_metabolism_schedule_stride = 0
 			_rebuild_bacteria_id_map()
 	if "cooldown" in child:
 		child.cooldown = 2.5

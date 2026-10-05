@@ -225,6 +225,35 @@ func _init() -> void:
 	if not bool(inline_cell.dying):
 		errors.append("performance: motion reference lost phage lysis transition")
 
+	# Packed metabolism scheduler exactly reproduces the legacy absolute
+	# (stable_id + tick) modulo cadence while avoiding modulo in the hot loop.
+	var schedule_probe = PetriSimulationScript.new(73020)
+	schedule_probe.seed_demo(24)
+	schedule_probe._current_metabolic_stride = 5
+	schedule_probe._agent_tick = 11
+	schedule_probe._rebuild_metabolism_schedule()
+	for schedule_step in range(12):
+		var schedule_tick: int = 11 + schedule_step
+		schedule_probe._agent_tick = schedule_tick
+		for schedule_i in range(schedule_probe.bacteria.size()):
+			var expected_due: bool = (
+				(
+					int(schedule_probe.bacteria[schedule_i].id)
+					+ schedule_tick
+				) % 5
+			) == 0
+			var packed_due: bool = (
+				int(schedule_probe._metabolism_due_ticks[schedule_i])
+				== schedule_tick
+			)
+			if packed_due != expected_due:
+				errors.append("performance: packed metabolism schedule diverged")
+				break
+			if packed_due:
+				schedule_probe._metabolism_due_ticks[schedule_i] = schedule_tick + 5
+		if not errors.is_empty():
+			break
+
 	# Direct cohort routing must remain equivalent to the legacy helper.
 	var routing_probe = PetriSimulationScript.new(73011)
 	routing_probe.seed_demo(16)
