@@ -45,9 +45,12 @@ const GRID_CELL_COUNT := GRID_WIDTH * GRID_HEIGHT
 # CPU-reference safety ceilings. These are performance guards, not biology.
 # Raise them only after GPU-resident agent mechanics is validated.
 const SAFETY_POPULATION_LIMIT := 10000
-const PROTOZOAN_SAFETY_LIMIT := 18
-const CILIATE_SAFETY_LIMIT := 16
-const FLAGELLATE_SAFETY_LIMIT := 28
+# Technical guards are deliberately above the trophic capacities reachable at
+# the current 10k bacterial CPU-reference ceiling. They must never define the
+# ecological target population.
+const PROTOZOAN_SAFETY_LIMIT := 48
+const CILIATE_SAFETY_LIMIT := 64
+const FLAGELLATE_SAFETY_LIMIT := 128
 const MICROALGA_SAFETY_LIMIT := 64
 const DECOMPOSER_SAFETY_LIMIT := 48
 const HYPHAL_COLONY_SAFETY_LIMIT := 6
@@ -1529,12 +1532,9 @@ func _sporulate_hypha(parent: Variant) -> Variant:
 
 
 func _flagellate_carrying_capacity() -> int:
-	# Safety limits remain hard CPU guards. Ecological capacity follows prey.
-	return clampi(
-		2 + floori(float(bacteria.size()) / 110.0),
-		2,
-		FLAGELLATE_SAFETY_LIMIT
-	)
+	# Pure ecological target. The CPU guard is applied only when births are
+	# admitted, never while estimating carrying capacity.
+	return maxi(2, 2 + floori(float(bacteria.size()) / 110.0))
 
 
 func _ciliate_carrying_capacity() -> int:
@@ -1544,11 +1544,7 @@ func _ciliate_carrying_capacity() -> int:
 		+ float(microalgae.size()) * 12.0
 		+ float(decomposers.size()) * 10.0
 	)
-	return clampi(
-		1 + floori(prey_units / 240.0),
-		1,
-		CILIATE_SAFETY_LIMIT
-	)
+	return maxi(1, 1 + floori(prey_units / 240.0))
 
 
 func _protozoan_carrying_capacity() -> int:
@@ -1559,11 +1555,7 @@ func _protozoan_carrying_capacity() -> int:
 		+ float(microalgae.size()) * 14.0
 		+ float(decomposers.size()) * 12.0
 	)
-	return clampi(
-		1 + floori(prey_units / 360.0),
-		1,
-		PROTOZOAN_SAFETY_LIMIT
-	)
+	return maxi(1, 1 + floori(prey_units / 360.0))
 
 
 func _crowding_maintenance_multiplier(current: int, capacity: int) -> float:

@@ -41,6 +41,8 @@ Dormant banks:
 ## Selection loops
 
 - abundant prey raises predator carrying capacity;
+- carrying capacity is a biological value and is **not clamped by CPU safety guards**;
+- CPU guards remain higher emergency birth ceilings and are sized outside the current 10k trophic design range;
 - scarce prey raises predator competition cost;
 - abundant bacterial species face frequency-dependent pressure;
 - habitat traits bias local movement and energetic success;
@@ -50,4 +52,4 @@ Dormant banks:
 
 Track: species per guild, exact ecotypes, lineage bins, max true generation, mutation/HGT/transformation, reproduction per guild, predation edges, prey escape, refuge wakes, and **predator population / trophic carrying capacity** over time.
 
-**Current target:** many genotypes, fewer readable species, no predator pinned to a safety ceiling.
+**Current target:** many genotypes, fewer readable species, no predator pinned to a safety ceiling. Current CPU-reference guards are protozoa 48, ciliates 64 and flagellates 128; telemetry compares live population against the independent ecological capacity.

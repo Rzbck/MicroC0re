@@ -57,11 +57,14 @@ func _init() -> void:
 		if elapsed + 0.0001 >= next_report:
 			var biome: Dictionary = terrain.biome_metrics()
 			print(
-				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d sp=%d eco=%d gen=%d refuge=%d biome=%d/%d/%d/%d/%d/%d fieldMax=%.3f/%.3f/%.3f/%.3f/%.3f soil=%.1f/%.1f"
+				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d cap=%d/%d/%d alg=%d dec=%d hyp=%d sp=%d eco=%d gen=%d refuge=%d biome=%d/%d/%d/%d/%d/%d mod=%d fieldMax=%.3f/%.3f/%.3f/%.3f/%.3f soil=%.1f/%.1f"
 				% [
 					int(round(elapsed)), sim.bacteria.size(), sim.protozoa.size(),
-					sim.ciliates.size(), sim.flagellates.size(), sim.microalgae.size(),
-					sim.decomposers.size(), sim.hyphae.size(),
+					sim.ciliates.size(), sim.flagellates.size(),
+					sim._protozoan_carrying_capacity(),
+					sim._ciliate_carrying_capacity(),
+					sim._flagellate_carrying_capacity(),
+					sim.microalgae.size(), sim.decomposers.size(), sim.hyphae.size(),
 					int(evolution.get("species", 0)),
 					int(evolution.get("ecotypes", 0)),
 					int(evolution.get("max_generation", 0)),
@@ -72,6 +75,7 @@ func _init() -> void:
 					int(biome.get("fungal", 0)),
 					int(biome.get("anoxic", 0)),
 					int(biome.get("disturbed", 0)),
+					int(biome.get("recently_modified", 0)),
 					float(sim.eps.max_value()),
 					float(sim.quorum_signal.max_value()),
 					float(sim.detritus.max_value()),
@@ -98,10 +102,14 @@ func _init() -> void:
 
 	var events: Dictionary = sim.ecology_event_metrics()
 	print(
-		"ecology_soak FINAL bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d refuge=%d longest_bacteria_zero=%.1fs min_active_guilds=%d gen=%d pred=%d/%d/%d"
+		"ecology_soak FINAL bac=%d pro=%d cil=%d fla=%d cap=%d/%d/%d alg=%d dec=%d hyp=%d refuge=%d longest_bacteria_zero=%.1fs min_active_guilds=%d gen=%d pred=%d/%d/%d"
 		% [
 			sim.bacteria.size(), sim.protozoa.size(), sim.ciliates.size(),
-			sim.flagellates.size(), sim.microalgae.size(), sim.decomposers.size(),
+			sim.flagellates.size(),
+			sim._protozoan_carrying_capacity(),
+			sim._ciliate_carrying_capacity(),
+			sim._flagellate_carrying_capacity(),
+			sim.microalgae.size(), sim.decomposers.size(),
 			sim.hyphae.size(), max_refugia, longest_bacteria_zero, min_active_guilds,
 			max_generation_seen,
 			int(events.get("pred_proto_bacteria", 0))

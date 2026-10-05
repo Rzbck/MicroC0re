@@ -204,6 +204,16 @@ func _init() -> void:
 		errors.append("ecology: flagellate capacity failed to follow prey abundance")
 	if capacity_probe._protozoan_carrying_capacity() <= low_proto_capacity:
 		errors.append("ecology: protozoan capacity failed to follow prey abundance")
+	capacity_probe.bacteria.resize(PetriSimulationScript.SAFETY_POPULATION_LIMIT)
+	var max_flag_capacity: int = capacity_probe._flagellate_carrying_capacity()
+	var max_ciliate_capacity: int = capacity_probe._ciliate_carrying_capacity()
+	var max_proto_capacity: int = capacity_probe._protozoan_carrying_capacity()
+	if max_flag_capacity >= PetriSimulationScript.FLAGELLATE_SAFETY_LIMIT:
+		errors.append("ecology: flagellate CPU guard is inside current trophic design range")
+	if max_ciliate_capacity >= PetriSimulationScript.CILIATE_SAFETY_LIMIT:
+		errors.append("ecology: ciliate CPU guard is inside current trophic design range")
+	if max_proto_capacity >= PetriSimulationScript.PROTOZOAN_SAFETY_LIMIT:
+		errors.append("ecology: protozoan CPU guard is inside current trophic design range")
 
 	# Basal seed-bank wake-up is niche-driven. Predators may coexist with dormant
 	# producers/decomposers instead of globally suppressing their germination.
