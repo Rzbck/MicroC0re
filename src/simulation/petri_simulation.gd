@@ -3398,6 +3398,64 @@ func species_visual_hue(agent: Variant, family_code: int) -> float:
 	return float(posmod(species_id * 73 + family_code * 131, 997)) / 997.0
 
 
+func bacteria_render_snapshot() -> Dictionary:
+	# Rendering reads a compact immutable-at-call-time view instead of walking
+	# RefCounted bacteria directly. This is an incremental bridge toward #20:
+	# simulation objects remain authoritative for biology while presentation
+	# consumes dense packed state.
+	var positions := PackedVector2Array()
+	var angles := PackedFloat32Array()
+	var lengths := PackedFloat32Array()
+	var radii := PackedFloat32Array()
+	var gene_sizes := PackedFloat32Array()
+	var burrow_depths := PackedFloat32Array()
+	var species_hues := PackedFloat32Array()
+	var lineage_hues := PackedFloat32Array()
+	var states := PackedByteArray()
+
+	var count: int = 0
+	for cell in bacteria:
+		if cell == null or bool(cell.consumed):
+			continue
+		count += 1
+	positions.resize(count)
+	angles.resize(count)
+	lengths.resize(count)
+	radii.resize(count)
+	gene_sizes.resize(count)
+	burrow_depths.resize(count)
+	species_hues.resize(count)
+	lineage_hues.resize(count)
+	states.resize(count)
+
+	var write_index: int = 0
+	for cell in bacteria:
+		if cell == null or bool(cell.consumed):
+			continue
+		positions[write_index] = Vector2(cell.position)
+		angles[write_index] = float(cell.angle)
+		lengths[write_index] = float(cell.length)
+		radii[write_index] = float(cell.radius)
+		gene_sizes[write_index] = float(cell.gene_size)
+		burrow_depths[write_index] = float(cell.burrow_depth)
+		species_hues[write_index] = species_visual_hue(cell, 0)
+		lineage_hues[write_index] = float(cell.lineage_hue)
+		states[write_index] = 1 if bool(cell.dying) else 0
+		write_index += 1
+
+	return {
+		"positions": positions,
+		"angles": angles,
+		"lengths": lengths,
+		"radii": radii,
+		"gene_sizes": gene_sizes,
+		"burrow_depths": burrow_depths,
+		"species_hues": species_hues,
+		"lineage_hues": lineage_hues,
+		"states": states,
+	}
+
+
 func _ecotype_pressure_bin(ecotype_id: int) -> int:
 	return posmod(ecotype_id, ECOTYPE_PRESSURE_BIN_COUNT)
 

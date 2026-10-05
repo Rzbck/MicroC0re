@@ -844,7 +844,12 @@ func _rebuild_far_agent_batch() -> void:
 	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
 
-	_batch_far_group(points, colors, indices, sim.bacteria, 0)
+	_batch_far_bacteria_snapshot(
+		points,
+		colors,
+		indices,
+		sim.bacteria_render_snapshot()
+	)
 	_batch_far_group(points, colors, indices, sim.protozoa, 1)
 	_batch_far_group(points, colors, indices, sim.ciliates, 2)
 	_batch_far_group(points, colors, indices, sim.flagellates, 3)
@@ -859,6 +864,72 @@ func _rebuild_far_agent_batch() -> void:
 			points,
 			colors
 		)
+
+
+func _batch_far_bacteria_snapshot(
+	points: PackedVector2Array,
+	colors: PackedColorArray,
+	indices: PackedInt32Array,
+	snapshot: Dictionary
+) -> void:
+	var positions: PackedVector2Array = snapshot["positions"]
+	var angles: PackedFloat32Array = snapshot["angles"]
+	var lengths: PackedFloat32Array = snapshot["lengths"]
+	var radii: PackedFloat32Array = snapshot["radii"]
+	var gene_sizes: PackedFloat32Array = snapshot["gene_sizes"]
+	var burrow_depths: PackedFloat32Array = snapshot["burrow_depths"]
+	var species_hues: PackedFloat32Array = snapshot["species_hues"]
+	var lineage_hues: PackedFloat32Array = snapshot["lineage_hues"]
+	var states: PackedByteArray = snapshot["states"]
+
+	for i in range(positions.size()):
+		var p: Vector2 = positions[i]
+		var height_value: float = (
+			terrain.sample_height_nearest(p)
+			- float(burrow_depths[i]) * 0.24
+		)
+		var center: Vector2 = _round_vec(
+			_project_world_unscaled(p, height_value)
+		)
+		var half_length: float = (
+			1.42 + clampf(float(lengths[i]) * 0.10, 0.0, 0.55)
+		)
+		var half_width: float = (
+			0.50 + clampf(float(radii[i]) * 0.24, 0.0, 0.24)
+		)
+		var species_color: Color = _lineage_color(float(species_hues[i]))
+		var lineage_color: Color = _lineage_color(float(lineage_hues[i]))
+		var color: Color = Color(0.66, 0.74, 0.64).lerp(
+			species_color.lerp(lineage_color, 0.22),
+			0.72
+		)
+		if (int(states[i]) & 1) != 0:
+			color = color.lerp(Color(0.72, 0.30, 0.18), 0.62)
+
+		var morph_scale: float = clampf(
+			float(gene_sizes[i]),
+			0.74,
+			1.38
+		)
+		half_length *= morph_scale
+		half_width *= lerpf(
+			0.90,
+			1.12,
+			clampf((morph_scale - 0.74) / 0.64, 0.0, 1.0)
+		)
+		var heading: Vector2 = _project_heading_unscaled(float(angles[i]))
+		var side := Vector2(-heading.y, heading.x)
+		_batch_quad(
+			points,
+			colors,
+			indices,
+			center + heading * half_length,
+			center + side * half_width,
+			center - heading * half_length * 0.72,
+			center - side * half_width,
+			color
+		)
+		last_far_agent_count += 1
 
 
 func _batch_far_group(

@@ -154,6 +154,25 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Far-render bacteria are exported as packed dense state rather than
+	# requiring the renderer to traverse RefCounted cell objects.
+	var render_probe = PetriSimulationScript.new(73008)
+	render_probe.seed_demo(18)
+	var render_snapshot: Dictionary = render_probe.bacteria_render_snapshot()
+	var render_positions: PackedVector2Array = render_snapshot["positions"]
+	var render_angles: PackedFloat32Array = render_snapshot["angles"]
+	if render_positions.size() != render_probe.bacteria.size():
+		errors.append("performance: bacterial render snapshot count mismatch")
+	if render_angles.size() != render_positions.size():
+		errors.append("performance: bacterial render snapshot arrays diverged")
+	if (
+		not render_positions.is_empty()
+		and render_positions[0].distance_to(
+			Vector2(render_probe.bacteria[0].position)
+		) > 0.0001
+	):
+		errors.append("performance: bacterial render snapshot position mismatch")
+
 	# Packed field-flow cache must stay equivalent to position sampling.
 	var flow_probe = PetriSimulationScript.new(73007)
 	flow_probe.seed_demo(4)
