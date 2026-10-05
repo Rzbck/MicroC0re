@@ -491,24 +491,79 @@ func _rebuild_terrain_batch() -> void:
 				else 0
 			)
 			if mark > 0:
-				var mark_color := Color(0.25, 0.50, 0.22, 0.82)
 				var mark_center := center + Vector2(0.0, -0.5)
-				if mark == 3:
-					mark_color = Color(0.72, 0.24, 0.10, 0.86)
-					mark_center += Vector2(0.0, -0.5)
-				elif mark == 2:
-					mark_color = Color(0.40, 0.25, 0.12, 0.90)
-					mark_center += Vector2(0.0, 0.5)
-				_batch_quad(
-					mark_points,
-					mark_colors,
-					mark_indices,
-					_round_vec(mark_center + Vector2(-1.0, -0.5)),
-					_round_vec(mark_center + Vector2(1.0, -0.5)),
-					_round_vec(mark_center + Vector2(1.0, 0.5)),
-					_round_vec(mark_center + Vector2(-1.0, 0.5)),
-					mark_color
-				)
+				if mark <= 3:
+					var mark_color := Color(0.25, 0.50, 0.22, 0.82)
+					if mark == 3:
+						mark_color = Color(0.72, 0.24, 0.10, 0.86)
+						mark_center += Vector2(0.0, -0.5)
+					elif mark == 2:
+						mark_color = Color(0.40, 0.25, 0.12, 0.90)
+						mark_center += Vector2(0.0, 0.5)
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.0, -0.5)),
+						_round_vec(mark_center + Vector2(1.0, -0.5)),
+						_round_vec(mark_center + Vector2(1.0, 0.5)),
+						_round_vec(mark_center + Vector2(-1.0, 0.5)),
+						mark_color
+					)
+				elif mark == 4:
+					# Grass: low two-pixel tuft.
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.4, -0.8)),
+						_round_vec(mark_center + Vector2(1.4, -0.8)),
+						_round_vec(mark_center + Vector2(1.0, 0.2)),
+						_round_vec(mark_center + Vector2(-1.0, 0.2)),
+						Color(0.28, 0.58, 0.24, 0.92)
+					)
+				elif mark == 5:
+					# Shrub: dark base + lighter crown.
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-2.1, -1.3)),
+						_round_vec(mark_center + Vector2(2.1, -1.3)),
+						_round_vec(mark_center + Vector2(1.7, 0.3)),
+						_round_vec(mark_center + Vector2(-1.7, 0.3)),
+						Color(0.18, 0.43, 0.20, 0.96)
+					)
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-1.3, -2.0)),
+						_round_vec(mark_center + Vector2(1.3, -2.0)),
+						_round_vec(mark_center + Vector2(1.1, -0.8)),
+						_round_vec(mark_center + Vector2(-1.1, -0.8)),
+						Color(0.32, 0.62, 0.26, 0.96)
+					)
+				elif mark == 6:
+					# Tree: tiny pixel trunk + canopy, still batched.
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-0.55, -3.0)),
+						_round_vec(mark_center + Vector2(0.55, -3.0)),
+						_round_vec(mark_center + Vector2(0.55, 0.4)),
+						_round_vec(mark_center + Vector2(-0.55, 0.4)),
+						Color(0.36, 0.23, 0.12, 1.0)
+					)
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(-2.5, -4.2)),
+						_round_vec(mark_center + Vector2(2.5, -4.2)),
+						_round_vec(mark_center + Vector2(2.0, -1.5)),
+						_round_vec(mark_center + Vector2(-2.0, -1.5)),
+						Color(0.18, 0.48, 0.20, 0.98)
+					)
+				elif mark == 7:
+					# Rock: compact grey diamond.
+					_batch_quad(
+						mark_points, mark_colors, mark_indices,
+						_round_vec(mark_center + Vector2(0.0, -1.6)),
+						_round_vec(mark_center + Vector2(2.0, -0.2)),
+						_round_vec(mark_center + Vector2(0.0, 1.0)),
+						_round_vec(mark_center + Vector2(-2.0, -0.2)),
+						Color(0.42, 0.44, 0.40, 0.96)
+					)
 
 	var terrain_rid: RID = terrain_batch_layer.get_canvas_item()
 	var mark_rid: RID = terrain_mark_layer.get_canvas_item()
@@ -1890,7 +1945,10 @@ func _refresh_terrain_visual_cache() -> void:
 				sim.producer_biomass.sample_world(world_position)
 			)
 			var mark: int = 0
-			if damage > 0.09:
+			var cover_state: int = terrain.cover_state_at_grid(x, y)
+			if cover_state > LivingTerrainScript.COVER_BARE:
+				mark = 3 + cover_state
+			elif damage > 0.09:
 				mark = 3
 			elif detritus_value > 0.10:
 				mark = 2

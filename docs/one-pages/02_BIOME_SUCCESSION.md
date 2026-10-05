@@ -36,6 +36,8 @@ Terrain now owns a low-frequency hydrology layer:
 
 Hydrology updates at 2 Hz, not 60 Hz, to keep the ecology visible without making `earth_ms` explode.
 
+The terrain also carries a slow living cover state: **bare → grass → shrub → tree**, plus persistent rock. Moisture, season, flooding, disturbance and biome control succession. Living cover feeds producer biomass/oxygen and autumn litter back into detritus; shrubs/roots and rocks also resist excavation. Cover updates only every 2 seconds.
+
 ## Persistent habitat states
 
 Open · Producer · Biofilm · Detrital · Fungal · Anoxic · Disturbed.

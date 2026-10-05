@@ -40,6 +40,16 @@ const WATER_FLOW_RATE := 0.34
 const WATER_FLOW_CELL_FRACTION := 0.18
 const WATER_EPSILON := 0.008
 
+const COVER_BARE := 0
+const COVER_GRASS := 1
+const COVER_SHRUB := 2
+const COVER_TREE := 3
+const COVER_ROCK := 4
+const COVER_UPDATE_INTERVAL := 2.0
+const COVER_GRASS_SECONDS := 8.0
+const COVER_SHRUB_SECONDS := 28.0
+const COVER_TREE_SECONDS := 70.0
+
 var world_size := Vector2.ZERO
 var width: int = 0
 var height: int = 0
@@ -79,6 +89,13 @@ var season_rain: float = 1.0
 var season_warmth: float = 0.5
 var water_moved_total: float = 0.0
 
+var cover_states: PackedByteArray = PackedByteArray()
+var cover_age: PackedFloat32Array = PackedFloat32Array()
+var cover_stress: PackedFloat32Array = PackedFloat32Array()
+var rockiness: PackedFloat32Array = PackedFloat32Array()
+var cover_transitions_total: int = 0
+var _cover_accumulator: float = 0.0
+
 # Bounded mobile physical cassettes. When an organism disappears, one sampled
 # capability module can remain in the environment for a short time. Any current
 # family with enough evolved assimilation expression can acquire it.
@@ -114,6 +131,14 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	water_flux.fill(0.0)
 	_water_delta.resize(width * height)
 	_water_delta.fill(0.0)
+	cover_states.resize(width * height)
+	cover_states.fill(COVER_BARE)
+	cover_age.resize(width * height)
+	cover_age.fill(0.0)
+	cover_stress.resize(width * height)
+	cover_stress.fill(0.0)
+	rockiness.resize(width * height)
+	rockiness.fill(0.0)
 	_fragment_grid_width = maxi(
 		1,
 		ceili(world_size.x / FRAGMENT_BUCKET_SIZE)
@@ -127,6 +152,7 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	_generate_seeded_relief()
 	baseline_heights = heights.duplicate()
 	_initialize_hydrology()
+	_initialize_cover()
 
 
 func sample_height(position: Vector2) -> float:
@@ -228,6 +254,42 @@ func hydrology_metrics() -> Dictionary:
 		"rain": season_rain,
 		"warmth": season_warmth,
 		"moved": water_moved_total,
+	}
+
+
+func cover_state_at_grid(x: int, y: int) -> int:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return int(cover_states[_index(sx, sy)])
+
+
+func sample_cover_state(position: Vector2) -> int:
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	return int(cover_states[_index(gx, gy)])
+
+
+func cover_metrics() -> Dictionary:
+	var grass: int = 0
+	var shrub: int = 0
+	var tree: int = 0
+	var rock: int = 0
+	for state in cover_states:
+		match int(state):
+			COVER_GRASS:
+				grass += 1
+			COVER_SHRUB:
+				shrub += 1
+			COVER_TREE:
+				tree += 1
+			COVER_ROCK:
+				rock += 1
+	return {
+		"grass": grass,
+		"shrub": shrub,
+		"tree": tree,
+		"rock": rock,
+		"transitions": cover_transitions_total,
 	}
 
 
@@ -488,6 +550,127 @@ func _advance_hydrology(dt: float) -> void:
 	revision += 1
 
 
+func _initialize_cover() -> void:
+	for i in range(cover_states.size()):
+		var hash_value: int = posmod(
+			(i + 1) * 1103515245 + fixed_seed * 12345,
+			2147483647
+		)
+		var noise: float = float(hash_value % 10000) / 10000.0
+		rockiness[i] = noise
+		if (
+			noise > 0.985
+			and float(heights[i]) > WATER_LEVEL + 0.05
+		):
+			cover_states[i] = COVER_ROCK
+
+
+func _advance_cover(sim: Variant, dt: float) -> void:
+	_ensure_biome_field_indices(sim)
+	for i in range(cover_states.size()):
+		var state: int = int(cover_states[i])
+		if state == COVER_ROCK:
+			continue
+
+		var moisture: float = float(soil_moisture[i])
+		var water: float = float(water_depths[i])
+		var disturbance: float = float(biome_disturbance[i])
+		var stress: float = float(cover_stress[i])
+
+		var bad_water: bool = water > 0.16
+		var too_dry: bool = moisture < 0.075
+		var disturbed: bool = disturbance > 0.42
+		if bad_water or too_dry or disturbed:
+			stress += dt * (
+				1.0
+				+ (0.8 if bad_water else 0.0)
+				+ (0.6 if disturbed else 0.0)
+			)
+			cover_stress[i] = stress
+			var regression_limit: float = 12.0 + float(state) * 7.0
+			if state > COVER_BARE and stress >= regression_limit:
+				cover_states[i] = state - 1
+				cover_age[i] = 0.0
+				cover_stress[i] = 0.0
+				cover_transitions_total += 1
+			continue
+
+		cover_stress[i] = maxf(0.0, stress - dt * 0.8)
+		var growth: float = clampf(
+			(moisture - 0.075) / 0.45,
+			0.0,
+			1.0
+		)
+		growth *= lerpf(0.45, 1.10, season_warmth)
+		if season_index == 3:
+			growth *= 0.58
+
+		var biome_state: int = int(biome_states[i])
+		match biome_state:
+			BIOME_PRODUCER:
+				growth *= 1.30
+			BIOME_FUNGAL:
+				growth *= 1.08
+			BIOME_BIOFILM:
+				growth *= 0.78
+			BIOME_ANOXIC:
+				growth *= 0.24
+
+		cover_age[i] = float(cover_age[i]) + dt * growth
+
+		var transitioned: bool = false
+		if state == COVER_BARE and float(cover_age[i]) >= COVER_GRASS_SECONDS:
+			cover_states[i] = COVER_GRASS
+			transitioned = true
+		elif (
+			state == COVER_GRASS
+			and float(cover_age[i]) >= COVER_SHRUB_SECONDS
+			and moisture >= 0.16
+			and moisture <= 0.82
+		):
+			cover_states[i] = COVER_SHRUB
+			transitioned = true
+		elif (
+			state == COVER_SHRUB
+			and float(cover_age[i]) >= COVER_TREE_SECONDS
+			and moisture >= 0.22
+			and moisture <= 0.72
+			and disturbance < 0.08
+		):
+			cover_states[i] = COVER_TREE
+			transitioned = true
+
+		if transitioned:
+			cover_age[i] = 0.0
+			cover_stress[i] = 0.0
+			cover_transitions_total += 1
+			state = int(cover_states[i])
+
+		# Living cover feeds back into the same ecological fields used by
+		# microbes. Autumn also returns litter to the detrital loop.
+		if state >= COVER_GRASS:
+			var field_index: int = int(_biome_field_indices[i])
+			var producer_add: float = (
+				0.00035 * float(state) * dt
+			)
+			sim.producer_biomass.values[field_index] = minf(
+				1.5,
+				float(sim.producer_biomass.values[field_index])
+					+ producer_add
+			)
+			sim.oxygen.values[field_index] = minf(
+				1.5,
+				float(sim.oxygen.values[field_index])
+					+ 0.00016 * float(state) * dt
+			)
+			if season_index == 2:
+				sim.detritus.values[field_index] = minf(
+					1.5,
+					float(sim.detritus.values[field_index])
+						+ 0.00018 * float(state) * dt
+				)
+
+
 func advance_from_sim(sim: Variant, dt: float) -> void:
 	climate_time += dt
 	_hydrology_accumulator += dt
@@ -495,6 +678,12 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 		var hydro_dt: float = _hydrology_accumulator
 		_hydrology_accumulator = 0.0
 		_advance_hydrology(hydro_dt)
+
+	_cover_accumulator += dt
+	if _cover_accumulator >= COVER_UPDATE_INTERVAL:
+		var cover_dt: float = _cover_accumulator
+		_cover_accumulator = 0.0
+		_advance_cover(sim, cover_dt)
 
 	_agent_accumulator += dt
 	var terrain_dt: float = _terrain_agent_dt(sim)
@@ -1000,12 +1189,15 @@ func _advance_agent(
 		1.0
 	)
 	var light_signal: float = clampf(float(sim.sample_light(position)), 0.0, 1.0)
+	var local_water: float = sample_water_depth(position)
+	var local_moisture: float = sample_moisture(position)
 	var water_signal: float = clampf(
-		(WATER_LEVEL + 0.8 - local_height) / 1.6,
+		local_water * 1.45 + local_moisture * 0.82,
 		0.0,
 		1.0
 	)
 	var biome_state: int = sample_biome_state(position)
+	var cover_state: int = sample_cover_state(position)
 	var habitat_tolerance: float = (
 		float(agent.gene_dormancy)
 		if "gene_dormancy" in agent
@@ -1118,6 +1310,12 @@ func _advance_agent(
 			substrate_factor = 1.10
 		BIOME_DISTURBED:
 			substrate_factor = 1.24
+	if cover_state == COVER_ROCK:
+		substrate_factor *= 0.34
+	elif cover_state == COVER_TREE:
+		substrate_factor *= 0.72
+	elif cover_state == COVER_SHRUB:
+		substrate_factor *= 0.88
 
 	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (

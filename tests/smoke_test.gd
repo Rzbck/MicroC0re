@@ -52,6 +52,36 @@ func _init() -> void:
 	if lysis_fx == null or lysis_fx.get_width() <= 0:
 		errors.append("render: lysis effect asset missing")
 
+	# Seasonal living cover progresses through ecological stages and rocks
+	# remain persistent substrate.
+	var cover_sim = PetriSimulationScript.new(19189)
+	cover_sim.seed_demo(0)
+	var cover_probe = LivingTerrainScript.new(
+		19189,
+		Vector2(30.0, 30.0)
+	)
+	cover_probe.water_depths.fill(0.0)
+	cover_probe.soil_moisture.fill(0.55)
+	cover_probe.biome_disturbance.fill(0.0)
+	cover_probe.cover_states.fill(LivingTerrainScript.COVER_BARE)
+	cover_probe.cover_age.fill(0.0)
+	cover_probe.rockiness.fill(0.0)
+	cover_probe.season_warmth = 1.0
+	cover_probe.season_index = 0
+	cover_probe._advance_cover(cover_sim, 12.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_GRASS):
+		errors.append("terrain: living cover failed to establish grass")
+	cover_probe._advance_cover(cover_sim, 42.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_SHRUB):
+		errors.append("terrain: living cover failed to mature shrub")
+	cover_probe._advance_cover(cover_sim, 100.0)
+	if not cover_probe.cover_states.has(LivingTerrainScript.COVER_TREE):
+		errors.append("terrain: living cover failed to mature tree")
+	cover_probe.cover_states[0] = LivingTerrainScript.COVER_ROCK
+	cover_probe._advance_cover(cover_sim, 200.0)
+	if int(cover_probe.cover_states[0]) != LivingTerrainScript.COVER_ROCK:
+		errors.append("terrain: rock substrate was not persistent")
+
 	# Low-frequency hydrology: water must flow downhill and wet the soil
 	# without requiring a 60 Hz terrain simulation.
 	var water_probe = LivingTerrainScript.new(
