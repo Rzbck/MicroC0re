@@ -25,6 +25,17 @@ flowchart TD
   A -->|stress / dormancy selection| Org
 ```
 
+## Water & seasons
+
+Terrain now owns a low-frequency hydrology layer:
+- standing water occupies low basins and runoff moves between neighbouring cells according to **surface height = soil + water**;
+- rain and evaporation vary over a four-season climate cycle;
+- soil moisture persists after water passes;
+- wet/flooded cells bias succession toward producer/fungal/anoxic states;
+- the renderer uses actual dynamic water depth instead of a fixed global water-height color test.
+
+Hydrology updates at 2 Hz, not 60 Hz, to keep the ecology visible without making `earth_ms` explode.
+
 ## Persistent habitat states
 
 Open · Producer · Biofilm · Detrital · Fungal · Anoxic · Disturbed.

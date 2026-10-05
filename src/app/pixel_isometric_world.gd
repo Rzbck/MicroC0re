@@ -741,16 +741,31 @@ func _terrain_top_color(
 	var eps_value: float = float(sim.eps.sample_world(world))
 	var nutrient: float = float(sim.nutrient.sample_world(world))
 	var biome_state: int = terrain.biome_state_at_grid(source.x, source.y)
+	var water_depth: float = terrain.water_depth_at_grid(source.x, source.y)
+	var moisture: float = terrain.moisture_at_grid(source.x, source.y)
 
-	if height_value < LivingTerrainScript.WATER_LEVEL:
-		var water := Color(0.075, 0.22, 0.24)
+	if water_depth > 0.025:
+		var water := Color(0.055, 0.19, 0.25)
 		water = water.lerp(
 			Color(0.10, 0.30, 0.22),
 			clampf(producer * 1.4, 0.0, 0.46)
 		)
+		water = water.lerp(
+			Color(0.12, 0.38, 0.43),
+			clampf(water_depth * 0.55, 0.0, 0.48)
+		)
 		return water
 
 	var base := Color(0.34, 0.28, 0.18)
+	base = base.lerp(
+		Color(0.22, 0.31, 0.23),
+		clampf(moisture * 0.28, 0.0, 0.28)
+	)
+	if moisture < 0.12:
+		base = base.lerp(
+			Color(0.48, 0.34, 0.18),
+			clampf((0.12 - moisture) * 1.8, 0.0, 0.20)
+		)
 	base = base.lerp(
 		Color(0.25, 0.39, 0.20),
 		clampf(producer * 1.8, 0.0, 0.62)

@@ -30,6 +30,16 @@ const BIOME_TRANSITION_SECONDS := 9.0
 const BIOME_DISTURBANCE_DECAY := 0.018
 const BIOME_DISTURBANCE_THRESHOLD := 0.12
 
+# Low-frequency hydrology. This is deliberately terrain-cell based and runs at
+# 2 Hz so water can be ecological without becoming a second 60 Hz simulation.
+const HYDROLOGY_INTERVAL := 0.50
+const SEASON_CYCLE_SECONDS := 240.0
+const RAIN_RATE := 0.0032
+const EVAPORATION_RATE := 0.0022
+const WATER_FLOW_RATE := 0.34
+const WATER_FLOW_CELL_FRACTION := 0.18
+const WATER_EPSILON := 0.008
+
 var world_size := Vector2.ZERO
 var width: int = 0
 var height: int = 0
@@ -56,6 +66,18 @@ var biome_transitions_total: int = 0
 var _biome_accumulator: float = 0.0
 var _biome_field_indices: PackedInt32Array = PackedInt32Array()
 var _biome_field_signature: Vector3i = Vector3i.ZERO
+
+var water_depths: PackedFloat32Array = PackedFloat32Array()
+var soil_moisture: PackedFloat32Array = PackedFloat32Array()
+var water_flux: PackedFloat32Array = PackedFloat32Array()
+var _water_delta: PackedFloat32Array = PackedFloat32Array()
+var _hydrology_accumulator: float = 0.0
+var climate_time: float = 0.0
+var season_phase: float = 0.0
+var season_index: int = 0
+var season_rain: float = 1.0
+var season_warmth: float = 0.5
+var water_moved_total: float = 0.0
 
 # Bounded mobile physical cassettes. When an organism disappears, one sampled
 # capability module can remain in the environment for a short time. Any current
@@ -84,6 +106,14 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	biome_ages.fill(0.0)
 	biome_disturbance.resize(width * height)
 	biome_disturbance.fill(0.0)
+	water_depths.resize(width * height)
+	water_depths.fill(0.0)
+	soil_moisture.resize(width * height)
+	soil_moisture.fill(0.0)
+	water_flux.resize(width * height)
+	water_flux.fill(0.0)
+	_water_delta.resize(width * height)
+	_water_delta.fill(0.0)
 	_fragment_grid_width = maxi(
 		1,
 		ceili(world_size.x / FRAGMENT_BUCKET_SIZE)
@@ -96,6 +126,7 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	_fragment_heads.fill(-1)
 	_generate_seeded_relief()
 	baseline_heights = heights.duplicate()
+	_initialize_hydrology()
 
 
 func sample_height(position: Vector2) -> float:
@@ -135,6 +166,69 @@ func height_delta_at_grid(x: int, y: int) -> float:
 	var sy: int = clampi(y, 0, height - 1)
 	var index: int = _index(sx, sy)
 	return float(heights[index]) - float(baseline_heights[index])
+
+
+func water_depth_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return float(water_depths[_index(sx, sy)])
+
+
+func moisture_at_grid(x: int, y: int) -> float:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return float(soil_moisture[_index(sx, sy)])
+
+
+func sample_water_depth(position: Vector2) -> float:
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	return float(water_depths[_index(gx, gy)])
+
+
+func sample_moisture(position: Vector2) -> float:
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	return float(soil_moisture[_index(gx, gy)])
+
+
+func season_name() -> String:
+	match season_index:
+		0:
+			return "spring"
+		1:
+			return "summer"
+		2:
+			return "autumn"
+		_:
+			return "winter"
+
+
+func hydrology_metrics() -> Dictionary:
+	var water_cells: int = 0
+	var wet_cells: int = 0
+	var water_total: float = 0.0
+	var moisture_total: float = 0.0
+	for i in range(water_depths.size()):
+		var depth: float = float(water_depths[i])
+		var moisture: float = float(soil_moisture[i])
+		water_total += depth
+		moisture_total += moisture
+		if depth > 0.025:
+			water_cells += 1
+		if moisture > 0.35:
+			wet_cells += 1
+	var count: float = float(maxi(1, water_depths.size()))
+	return {
+		"water_cells": water_cells,
+		"wet_cells": wet_cells,
+		"water_total": water_total,
+		"mean_moisture": moisture_total / count,
+		"season": season_index,
+		"rain": season_rain,
+		"warmth": season_warmth,
+		"moved": water_moved_total,
+	}
 
 
 func biome_state_at_grid(x: int, y: int) -> int:
@@ -275,7 +369,133 @@ func _apply_radial_mass(
 	return changed
 
 
+func _initialize_hydrology() -> void:
+	for i in range(heights.size()):
+		var lowland_water: float = maxf(
+			0.0,
+			WATER_LEVEL - float(heights[i])
+		)
+		water_depths[i] = minf(1.5, lowland_water)
+		soil_moisture[i] = clampf(
+			0.08 + lowland_water * 1.25,
+			0.0,
+			1.0
+		)
+
+
+func _update_season() -> void:
+	season_phase = fposmod(
+		climate_time / SEASON_CYCLE_SECONDS,
+		1.0
+	)
+	season_index = clampi(floori(season_phase * 4.0), 0, 3)
+	# Wet spring/autumn, hot/dry summer, cool winter.
+	var rain_wave: float = sin(TAU * season_phase + 0.55)
+	var warm_wave: float = sin(TAU * season_phase - 0.65)
+	season_rain = clampf(1.0 + 0.52 * rain_wave, 0.45, 1.55)
+	season_warmth = clampf(0.55 + 0.45 * warm_wave, 0.10, 1.0)
+
+
+func _queue_water_pair(a: int, b: int, dt: float) -> void:
+	var surface_a: float = float(heights[a]) + float(water_depths[a])
+	var surface_b: float = float(heights[b]) + float(water_depths[b])
+	var difference: float = surface_a - surface_b
+	if absf(difference) <= WATER_EPSILON:
+		return
+
+	var source: int = a if difference > 0.0 else b
+	var target: int = b if difference > 0.0 else a
+	var source_water: float = float(water_depths[source])
+	if source_water <= 0.00001:
+		return
+
+	var moved: float = minf(
+		source_water * WATER_FLOW_CELL_FRACTION,
+		(absf(difference) - WATER_EPSILON)
+			* WATER_FLOW_RATE
+			* minf(dt, 1.0)
+	)
+	if moved <= 0.0:
+		return
+	_water_delta[source] = float(_water_delta[source]) - moved
+	_water_delta[target] = float(_water_delta[target]) + moved
+	water_flux[source] = float(water_flux[source]) + moved
+	water_flux[target] = float(water_flux[target]) + moved
+	water_moved_total += moved
+
+
+func _advance_hydrology(dt: float) -> void:
+	_update_season()
+	_water_delta.fill(0.0)
+	water_flux.fill(0.0)
+
+	var rain_add: float = RAIN_RATE * season_rain * dt
+	var evaporation: float = (
+		EVAPORATION_RATE
+		* lerpf(0.45, 1.70, season_warmth)
+		* dt
+	)
+
+	# Climate first. Low basins remain connected to the standing groundwater
+	# level while higher cells depend on rain/runoff.
+	for i in range(water_depths.size()):
+		var depth: float = maxf(
+			0.0,
+			float(water_depths[i]) + rain_add - evaporation
+		)
+		var lowland_floor: float = maxf(
+			0.0,
+			WATER_LEVEL - float(heights[i])
+		)
+		if lowland_floor > 0.0:
+			depth = maxf(depth, minf(1.5, lowland_floor))
+		water_depths[i] = depth
+
+	# One right/down pair per edge; direction is chosen from the current water
+	# surface, so flow can still move left/up when those neighbours are lower.
+	for y in range(height):
+		var row: int = y * width
+		for x in range(width):
+			var index: int = row + x
+			if x + 1 < width:
+				_queue_water_pair(index, index + 1, dt)
+			if y + 1 < height:
+				_queue_water_pair(index, index + width, dt)
+
+	var moisture_blend: float = clampf(dt * 0.22, 0.0, 1.0)
+	for i in range(water_depths.size()):
+		var depth: float = maxf(
+			0.0,
+			float(water_depths[i]) + float(_water_delta[i])
+		)
+		water_depths[i] = depth
+		var lowland: float = maxf(
+			0.0,
+			WATER_LEVEL - float(heights[i])
+		)
+		var moisture_target: float = clampf(
+			depth * 1.65
+			+ lowland * 0.55
+			+ rain_add * 22.0,
+			0.0,
+			1.0
+		)
+		soil_moisture[i] = lerpf(
+			float(soil_moisture[i]),
+			moisture_target,
+			moisture_blend
+		)
+	revision += 1
+
+
 func advance_from_sim(sim: Variant, dt: float) -> void:
+	climate_time += dt
+	_hydrology_accumulator += dt
+	if _hydrology_accumulator >= HYDROLOGY_INTERVAL:
+		var hydro_dt: float = _hydrology_accumulator
+		_hydrology_accumulator = 0.0
+		_advance_hydrology(hydro_dt)
+
 	_agent_accumulator += dt
 	var terrain_dt: float = _terrain_agent_dt(sim)
 	while _agent_accumulator >= terrain_dt:
@@ -350,16 +570,34 @@ func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
 	var waste_value: float = float(sim.waste.values[field_index])
 	var quorum_value: float = float(sim.quorum_signal.values[field_index])
 	var disturbed: float = float(biome_disturbance[terrain_index])
+	var local_water: float = float(water_depths[terrain_index])
+	var local_moisture: float = float(soil_moisture[terrain_index])
 
 	# These are regime thresholds, not visual-only labels. Hysteresis below
 	# still requires a signal to persist before the substrate changes state.
-	if oxygen_value < 0.16 and (waste_value > 0.035 or detritus_value > 0.045):
+	if (
+		(local_water > 0.20 and oxygen_value < 0.24)
+		or (
+			oxygen_value < 0.16
+			and (waste_value > 0.035 or detritus_value > 0.045)
+		)
+	):
 		return BIOME_ANOXIC
-	if fungal_value > 0.012 or (fungal_value > 0.0045 and detritus_value > 0.055):
+	if (
+		local_moisture > 0.20
+		and (
+			fungal_value > 0.012
+			or (fungal_value > 0.0045 and detritus_value > 0.055)
+		)
+	):
 		return BIOME_FUNGAL
 	if eps_value > 0.025 or (eps_value > 0.012 and quorum_value > 0.025):
 		return BIOME_BIOFILM
-	if producer > 0.070 and oxygen_value > 0.12:
+	if (
+		producer > 0.060
+		and oxygen_value > 0.12
+		and local_moisture > 0.12
+	):
 		return BIOME_PRODUCER
 	if detritus_value > 0.040:
 		return BIOME_DETRITAL

@@ -52,6 +52,30 @@ func _init() -> void:
 	if lysis_fx == null or lysis_fx.get_width() <= 0:
 		errors.append("render: lysis effect asset missing")
 
+	# Low-frequency hydrology: water must flow downhill and wet the soil
+	# without requiring a 60 Hz terrain simulation.
+	var water_probe = LivingTerrainScript.new(
+		19190,
+		Vector2(30.0, 30.0)
+	)
+	water_probe.heights.fill(1.0)
+	water_probe.water_depths.fill(0.0)
+	water_probe.soil_moisture.fill(0.0)
+	var water_source: int = 4 * water_probe.width + 4
+	var water_target: int = 4 * water_probe.width + 5
+	water_probe.heights[water_source] = 1.0
+	water_probe.heights[water_target] = 0.0
+	water_probe.water_depths[water_source] = 0.80
+	water_probe._advance_hydrology(0.5)
+	if float(water_probe.water_depths[water_target]) <= 0.0:
+		errors.append("terrain: water failed to flow to lower neighbour")
+	if float(water_probe.soil_moisture[water_target]) <= 0.0:
+		errors.append("terrain: flowed water failed to wet soil")
+	water_probe.climate_time = LivingTerrainScript.SEASON_CYCLE_SECONDS * 0.30
+	water_probe._advance_hydrology(0.5)
+	if water_probe.season_index != 1:
+		errors.append("terrain: seasonal climate phase mismatch")
+
 	# Living-terrain regression: excavation/deposition must conserve material
 	# when the carried material is returned to the world.
 	var terrain_probe = LivingTerrainScript.new(
