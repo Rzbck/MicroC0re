@@ -191,8 +191,8 @@ func _init() -> void:
 	else:
 		if int(refuge_probe.bacteria[0].generation) != bank_generation:
 			errors.append("ecology: refuge wake incorrectly advanced generation")
-		if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != 1:
-			errors.append("ecology: bacterial refuge wake was not counted")
+		if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != 2:
+			errors.append("ecology: bacterial diversity wake count mismatch")
 	var refuge_count_before: int = refuge_probe.refugia_recoveries_total
 	refuge_probe.bacteria.clear()
 	refuge_probe._maintain_ecological_refugia(
