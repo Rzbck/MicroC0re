@@ -1,72 +1,575 @@
 # MicroC0re — AI handoff
 
-This document exists so a fresh ChatGPT/Codex/agent session can continue the project without asking the maintainer to reconstruct context.
+This document is the operational handoff for a fresh ChatGPT/Codex/agent session. It should be sufficient to resume the project without asking the maintainer to reconstruct recent history.
 
-## Repository / project identity
+## Repository / active branch
 
 - Repository: `Rzbck/MicroC0re`
 - GitHub Project: `MicroC0re` (#2)
-- Project V2 node: `PVT_kwHOAKdXDM4BldFb`
-- Current development branch: `rebuild/pixel-microscope-v0.2`
-- Current active PR: #19
-- Current visual product gate: #14
-- Active living-biome epic: #38
+- Active development branch: `rebuild/pixel-microscope-v0.2`
+- Active PR: #19
+- Current branch HEAD at this handoff: **`2222688b09e92c7d1b2c01d5095518fa94043b25`**
+- HEAD title: **`Polish living microscope presentation`**
+- Telemetry issue: #66
+- Benchmark / smoke issue: #67
+- Godot: 4.7.1
+- Maintainer local project path: `E:\_Project\MicroC0re`
+- Maintainer GPU used for local validation: NVIDIA GeForce RTX 5080
 
-The GitHub Project **Status field is the canonical workflow state**.
+GitHub Project **Status** remains the canonical workflow state.
 
-## Mandatory session bootstrap
+## Mandatory bootstrap for a fresh agent
 
-A fresh agent must do this before choosing work:
+Before choosing work:
 
 1. Read `/AGENTS.md`.
 2. Read `docs/CURRENT_DIRECTION.md`.
 3. Read `docs/STATUS.md`.
-4. Inspect active PR #19 and its recent conversation/commits.
-5. Inspect the relevant GitHub Project cards / Issues before starting work.
-6. Read the issue body and acceptance criteria for the work being changed.
-7. For evolution work, also read `docs/EVOLUTION.md` and `docs/RESEARCH.md`.
-8. For performance/GPU work, also read `docs/OPTIMIZATION_STRATEGY.md`.
+4. Read this file completely.
+5. Inspect PR #19 and the last commits on `rebuild/pixel-microscope-v0.2`.
+6. Inspect issues #66 and #67 for the newest telemetry / benchmark evidence.
+7. Read the relevant One-Page files:
+   - `docs/one-pages/01_EVOLUTION_SPECIES.md`
+   - `docs/one-pages/02_BIOME_SUCCESSION.md`
+   - `docs/one-pages/03_SCALE_PERFORMANCE.md`
+   - `docs/one-pages/04_MICROSCOPE_READABILITY.md`
+8. For evolution work, also read `docs/EVOLUTION.md` and `docs/RESEARCH.md`.
+9. For performance/GPU work, also read `docs/OPTIMIZATION_STRATEGY.md`.
 
-Do not ask the maintainer to repeat project history that is already in GitHub.
+Do not ask the maintainer to repeat history already present in GitHub.
 
-## Connector-first rule
+---
 
-For GitHub bookkeeping, **use the GitHub connector / GitHub-capable agent tools directly**.
+# Current product direction
 
-Do not ask the maintainer to run PowerShell, `gh`, Git commands, or manually move Project cards merely to:
-- create/update Issues;
+The project is an evolving living-microscope simulation, not a sterile benchmark.
+
+The maintainer explicitly wants:
+
+- organisms that keep evolving indefinitely;
+- many visible species, not thousands of hidden ecotypes that all look the same;
+- bidirectional ecology: organisms reshape the biome and the biome selects organisms;
+- readable terraforming: it must be obvious who digs, who builds, what gets destroyed, and what later colonizes it;
+- water, moisture, seasons and evolving terrain cover;
+- readable pixel-art organisms, with front/back and behavior visible;
+- no ugly generic cube/diamond replacement at ordinary populations;
+- feeding, predation, division, lysis, dormancy, construction and destruction to be visibly animated;
+- terrain that becomes visually rich: water, grass, shrubs, trees, rocks, relief, construction / erosion-like structures;
+- optimization that preserves biology instead of deleting systems;
+- real measured performance; requested x8 must never be reported as achieved x8 unless simulation-time / wall-time actually reaches it.
+
+The microscope view should feel like artwork first. Debug overlays are useful for validation but are not the final product aesthetic.
+
+---
+
+# Important maintainer working style
+
+The maintainer prefers direct implementation over long design lectures.
+
+When work is clear:
+
+- inspect current code / telemetry;
+- make the change;
+- push it;
+- give a short explanation;
+- provide a small PowerShell block only when local validation is required.
+
+Do not spend multiple turns only theorizing.
+
+For long tasks, send brief progress updates while working.
+
+---
+
+# Latest implementation state
+
+## 1. Evolution / species
+
+Current design separates:
+
+- exact ecotype / genotype: fine-grained and potentially thousands;
+- phenotype species: stable readable grouping;
+- guild: broad trophic role;
+- lineage: ancestry/history.
+
+Recent changes include:
+
+- phenotype-species identity cached as cold state;
+- frequency-dependent anti-monoculture pressure;
+- multi-species refugia / seed-bank behavior;
+- predator carrying capacity separated from CPU safety guards;
+- decomposer `gene_spore` and hyphal `gene_quiescence`;
+- basal decomposer / hyphal dormancy with finite reserves and local wake-up;
+- dormancy telemetry;
+- stable species tint + bounded lineage tint variation;
+- current HEAD increases phenotype-species trait bands from 3 to 4 and strengthens rare-species relief / dominant-species cost;
+- current HEAD also uses stable species ID to choose small silhouette/body-mark variants.
+
+Evolution must remain open-ended. Do not freeze mutation, HGT, transformation, predation, guild behavior or terraforming at high population merely to gain FPS.
+
+## 2. Ecology / trophic system
+
+Implemented guilds include:
+
+- bacteria;
+- protozoa / amoebae;
+- ciliates;
+- flagellates;
+- microalgae;
+- decomposer yeast-like organisms;
+- hyphal colonies;
+- phage clouds and extracellular DNA fragments.
+
+Predator carrying capacity now follows ecological prey availability and is no longer identical to CPU guard values.
+
+Current technical guards are deliberately above the normal current trophic range:
+
+- protozoa: 48
+- ciliates: 64
+- flagellates: 128
+
+Telemetry exposes live population / calculated trophic capacity.
+
+## 3. Terraforming / biome succession
+
+Persistent biome states:
+
+- Open
+- Producer
+- Biofilm
+- Detrital
+- Fungal
+- Anoxic
+- Disturbed
+
+Important corrections already made:
+
+- `DISTURBED` is temporary and decays;
+- old physical height changes remain, but do not permanently lock the ecological label;
+- tiny distributed edits no longer automatically mark most of the map disturbed;
+- current terraforming has separate fading action traces:
+  - digging = darkened terrain;
+  - building/depositing = warmer terrain;
+  - traces are tinted toward the lineage color of the organism that performed the action;
+- overlay exposes `dig` / `build` trace counts.
+
+This was added specifically because the maintainer could not tell “who builds what / who destroys what”.
+
+## 4. Hydrology / seasons / living cover
+
+Implemented on the terrain grid:
+
+- dynamic water depth;
+- low-frequency water runoff between neighboring cells using soil+water surface height;
+- persistent soil moisture;
+- rainfall;
+- evaporation;
+- four-season climate cycle;
+- wet / flooded habitat bias toward relevant biome states;
+- terrain cover succession:
+  - bare → grass → shrub → tree
+  - persistent rocks;
+- flooding, drought, disturbance and season can regress cover;
+- living cover feeds producer biomass and oxygen;
+- autumn returns litter to detritus;
+- shrubs / roots / rocks increase resistance to excavation;
+- hydrology runs at low cadence rather than 60 Hz;
+- cover evolves slowly rather than every frame.
+
+At HEAD `2222688`, presentation also includes:
+
+- sparse animated water specular streaks;
+- seasonal terrain palette shifts;
+- larger layered pixel silhouettes for shrubs / trees / rocks;
+- contact shadows and deterministic local visual variation.
+
+Still missing / incomplete:
+
+- explicit river-channel erosion/deposition driven by water flux;
+- explicit organisms grazing trees/shrubs as discrete food entities;
+- plant reproduction as an explicit organism lifecycle;
+- richer long-term mountain / landscape engineering beyond the current dig/deposit relief;
+- stronger visual distinction between natural relief, organism-built structures and water erosion.
+
+## 5. Visual / microscope readability
+
+Recent visual commits intentionally moved away from generic far-LOD diamonds at ordinary populations.
+
+Key rules now:
+
+- detailed pixel art is the normal mode;
+- x4/x8 alone does not force coarse LOD at ordinary population;
+- coarse far LOD is reserved for large population / real zoom-out conditions;
+- heading still determines front/back orientation;
+- organism sprites use atlas animation;
+- current HEAD adds low-amplitude breathing/bobbing;
+- species ID affects silhouette aspect ratio and small pixel markings;
+- active feeding gets visible links / transfer cues;
+- reproduction gets pulse FX;
+- lysis gets visible fragment/burst cues;
+- decomposer spores visibly contract/darken;
+- dormant hyphae become thinner/duller while preserving lineage/species identity;
+- terraforming particles already show active dig/deposit behavior.
+
+The maintainer still considers the game visually under-polished. More animation / event readability / biome richness is wanted.
+
+## 6. Performance architecture
+
+Current path is intentionally incremental, preserving mechanics/biology.
+
+Already implemented:
+
+- adaptive biology / terrain cadence;
+- deterministic cohorts;
+- adaptive chemistry cadence;
+- active HGT recipient queue;
+- spatial phage scans;
+- packed water-flow cache;
+- cached species identity;
+- cached derived motility phenotype;
+- in-place bacterial population mutation with stable compaction only on death/division;
+- adaptive frequency-metadata refresh;
+- direct metabolic / motion-only cohort routing;
+- dense motion hot-path optimizations;
+- persistent `BacteriaHotStore`;
+- **lazy** hot-store synchronization so rendering can consume packed state without mirroring every biological sub-tick;
+- terrain bacteria evaluation cohorts from medium density upward;
+- packed render snapshot for far bacterial rendering.
+
+Do not reintroduce eager full hot-store synchronization every biological tick. That caused a large regression.
+
+The next major structural performance milestone remains:
+
+1. fuller packed SoA / chunked bacterial hot state;
+2. GPU-resident chemistry / biome fields;
+3. parallel / GPU agent kernels if still required.
+
+Native C++ / GDExtension remains gated until algorithmic/data-layout/GPU work proves insufficient.
+
+---
+
+# Performance truth / target
+
+At 60 biological ticks/s:
+
+- x1 requires about 16.67 ms/tick;
+- x2 about 8.33 ms/tick;
+- x4 about 4.17 ms/tick;
+- x8 about **2.08 ms/tick**.
+
+Current system is nowhere near true x8 at dense population yet.
+
+The renderer/scheduler now uses a hard ~15 ms main-thread simulation budget per rendered frame instead of allowing fast-forward to monopolize up to ~80 ms.
+
+This improves visual responsiveness, but **does not make the biology actually x8**.
+
+Always use `actual_sim_speed` (simulation time / wall time) as the truth.
+
+Do not fake requested speed.
+
+---
+
+# Useful benchmark history
+
+CI runner variance is significant. Do not judge a change from one runner result alone.
+
+Important measured points from this branch history:
+
+### Earlier reference around c2cfff6
+- 500: ~16.48 ms/tick
+- 2k: ~26.86 ms/tick
+- 10k: ~22.61 ms/tick
+
+### After adaptive tier / chemistry work
+One strong run reached roughly:
+- 500: 5.19 ms/tick
+- 1k: 7.47
+- 2k: 7.57
+- 5k: 10.31
+- 10k: 9.60
+
+### After lazy hot-store correction
+A repeat benchmark on `68ede53` showed approximately:
+- 10k: **15.42 ms/tick**
+- agents: **~9.02 ms**
+
+This was much better than the eager hot-store implementation, where agents had regressed toward ~18.9 ms on one run.
+
+Do not overreact to CI runner variance; compare repeated runs and subsystem timings.
+
+---
+
+# Last maintainer local telemetry before current HEAD
+
+The latest local session currently published in issue #66 is:
+
+- issue comment ID: **5993344228**
+- build: **`27b3ab4967d7`**
+- duration: 307 s (~5.1 min)
+- Windows / NVIDIA / Forward+
+- final bacteria: 1268
+
+Performance:
+- sim step p50: **27.22 ms**
+- core p50: **14.44 ms**
+- terrain p50: **3.93 ms**
+- FPS p50: **8**
+- achieved speed p50: **0.48x**
+
+Evolution:
+- phenotype species final / peak: **29 / 47**
+- ecotypes final / peak: **1053 / 1062**
+- generation: 24
+- structural mutations: ~2899
+- HGT: 0
+- transformations: 0
+- capability mixes: 15
+- refugia recoveries: 5
+
+Terraforming / biome:
+- excavated: ~1246
+- deposited: ~1030
+- producer: 179
+- biofilm: 1
+- detrital: 7
+- fungal: 0
+- anoxic: 0
+- disturbed: **2560**
+- recently modified: **2688**
+
+This run directly motivated:
+- `bc7d013 Make terraforming attribution readable`
+- `92acd60 Keep fast-forward frames responsive`
+- `2222688 Polish living microscope presentation`
+
+Therefore **do not treat the 27b3ab4 local telemetry as validation of the current HEAD**.
+
+A new local run on `2222688` is the next required product-validation gate.
+
+---
+
+# Recent commit chain to know
+
+Newest first:
+
+- `2222688` — **Polish living microscope presentation**
+  - species silhouette/body-mark variation;
+  - four phenotype bands;
+  - stronger bounded anti-dominance / rare relief;
+  - breathing/bobbing;
+  - feeding/reproduction/lysis FX;
+  - water sparkles;
+  - seasonal palette;
+  - richer tree/shrub/rock silhouettes.
+
+- `92acd60` — **Keep fast-forward frames responsive**
+  - hard main-thread simulation budget ~15 ms per rendered frame;
+  - requested vs actual speed remains separate.
+
+- `bc7d013` — **Make terraforming attribution readable**
+  - localized disturbance;
+  - dig/build traces;
+  - lineage-colored attribution.
+
+- `27b3ab4` — **Cut medium-density terrain evaluation cost**
+  - terrain organism evaluation cohorting begins at medium density.
+
+- `74376a4` — **Add seasonal living terrain cover**
+  - grass → shrub → tree + rock.
+
+- `f5629ce` — **Add seasonal terrain hydrology**
+  - water depth / runoff / moisture / seasons.
+
+- `c4e8670` — **Keep pixel art at ordinary populations**
+  - x4/x8 no longer automatically forces ugly coarse glyphs.
+
+Earlier important architecture:
+- `68ede53` — lazy bacterial hot snapshots;
+- `110eb9f` — persistent bacterial hot-state store;
+- `606afb8` — dormancy telemetry;
+- `3977663` — basal dormancy visually readable;
+- `977a20e` — evolved decomposer / hyphal dormancy;
+- `6798c94` — dense bacterial motion math;
+- `09a067f` — adaptive population metadata;
+- `2f57558` — population compaction only on identity changes.
+
+---
+
+# CI state at handoff
+
+For HEAD `2222688`:
+
+- PR workflow run **37303818118**: **SUCCESS**
+- push run was cancelled because newer workflow activity superseded it; do not interpret that cancellation as a code failure.
+
+Current HEAD parses and passes the PR smoke/benchmark workflow.
+
+Local visual validation is still required.
+
+---
+
+# Immediate next action for the next agent
+
+Do this first, before adding more systems:
+
+1. Ask the maintainer to pull and run HEAD `2222688` if they have not already.
+2. Have them test:
+   - x1;
+   - x4;
+   - x8;
+   - normal zoom and close zoom;
+   - with `P` overlay briefly enabled.
+3. Ask for one screenshot / video and let telemetry publish automatically to #66.
+4. Analyze:
+   - FPS;
+   - `core`;
+   - `terrain/earth`;
+   - achieved vs requested speed;
+   - visible species variation;
+   - whether trees/shrubs/rocks are actually readable;
+   - whether water motion is readable;
+   - whether dig/build attribution is understandable;
+   - whether `DISTURBED` still floods the map.
+5. Then fix the largest measured problem instead of blindly adding another subsystem.
+
+Do **not** start another large visual or ecology feature before seeing how `2222688` behaves locally unless the maintainer explicitly asks to skip validation.
+
+---
+
+# Known problems / likely next work
+
+## Highest priority
+
+### Performance
+- 60 FPS at dense x1 is not guaranteed yet.
+- true x8 is far from the 2.08 ms/tick biological target.
+- continue #20 packed SoA/chunks;
+- then GPU-resident fields (#57 / related GPU issues);
+- do not sacrifice readable art to hide CPU cost.
+
+### Species readability / coexistence
+The previous local run had >1000 ecotypes but only 29 visible species at the end.
+
+HEAD `2222688` increases phenotype resolution and visual species variation, but this has **not yet been locally validated**.
+
+Watch for:
+- too many organisms still appearing identical;
+- species count exploding into unreadable noise;
+- rare-species relief becoming an artificial immortality mechanism.
+
+### Terraforming clarity
+Need to verify that:
+- `DISTURBED` no longer occupies almost the whole map;
+- dig and build traces are localized;
+- lineage tint makes actor attribution understandable;
+- old structures remain physically present while ecological state matures.
+
+### Terrain richness
+Current cover is still simplified.
+
+Desired future directions:
+- water erosion / sediment transport;
+- river/stream channels and readable ponds;
+- richer vegetation stages;
+- explicit grazing / destruction of vegetation;
+- clearer natural vs organism-built terrain;
+- more readable mountains / mounds / tunnels / deposits;
+- seasonal death/regrowth cycles that are visible at overview.
+
+### Evolution event activity
+The last local run reported:
+- HGT = 0
+- transformations = 0
+
+This may simply be due to conditions / short duration, but should be checked. Evolution must not silently lose these mechanisms.
+
+### Decomposers / hyphae
+They now have dormancy/quiescence, but long-run guild persistence still needs telemetry validation.
+
+---
+
+# Godot shutdown warning note
+
+The maintainer has seen messages such as:
+
+- `Unreferenced static string`
+- `RID allocations ... were leaked at exit`
+- `PagedAllocator ... pages in use exist at exit`
+
+when stopping the game with **Ctrl+C**.
+
+Treat these first as forced-shutdown Godot cleanup artifacts, not proof of a runtime simulation fault.
+
+Investigate only if they reproduce on a normal clean exit or correlate with an actual crash.
+
+---
+
+# Local PowerShell validation commands
+
+Use this exact short sequence when the maintainer needs to test:
+
+```powershell
+cd E:\_Project\MicroC0re
+git switch rebuild/pixel-microscope-v0.2
+git pull --ff-only
+git log -1 --oneline
+& .\scripts\run_simulation.ps1
+```
+
+Expected current HEAD at this handoff:
+
+```text
+2222688 Polish living microscope presentation
+```
+
+Useful controls:
+
+- `P` — performance / telemetry overlay
+- `1` — x1
+- `2` — x2
+- `3` — x4
+- `4` — x8
+
+Telemetry should publish to issue #66 when enabled.
+
+---
+
+# GitHub connector-first rule
+
+For GitHub bookkeeping, use GitHub connector tools directly.
+
+Do not ask the maintainer to run PowerShell / `gh` merely to:
+- create/update issues;
 - update checklists;
-- comment on PRs;
+- add PR comments;
 - change labels;
-- close/reopen Issues;
-- change Project status when Project V2 write capability is available.
+- inspect CI;
+- move workflow state when connector/project tools can do it.
 
-Local PowerShell is reserved for things the agent cannot execute remotely, especially running the maintainer's local Godot/RTX tests.
+Local PowerShell is for local Godot/RTX validation.
 
-## Project status protocol
+For multi-file code pushes on the active branch, preserve fast-forward safety:
+- fetch current branch HEAD;
+- build tree from its tree SHA;
+- create commit with that exact parent;
+- update ref without force.
+
+If the branch moved, refetch and rebase/reapply; never overwrite newer work.
+
+---
+
+# Workflow / status protocol
 
 Real workflow states:
 
-- `Backlog`
-- `Todo`
-- `In Progress`
-- `Review`
-- `Done`
+- Backlog
+- Todo
+- In Progress
+- Review
+- Done
 
-Issue titles must **not** encode workflow state. Bracketed title tags are domain tags only, for example `[GPU]`, `[Evolution]`, `[Kernel]`.
+Issue titles must not encode workflow state.
 
-### Preferred path
-
-If the current GitHub connector exposes Project V2 mutation:
-1. move the card directly;
-2. update the Issue/PR;
-3. update `docs/STATUS.md` only when the summarized state materially changed.
-
-### Compatibility path
-
-Some ChatGPT/GitHub surfaces expose Issues/PRs/labels but not Project V2 fields.
-
-In that case use exactly one connector-writable workflow label:
+If direct Project V2 mutation is unavailable, use exactly one of:
 
 - `status:backlog`
 - `status:todo`
@@ -74,55 +577,20 @@ In that case use exactly one connector-writable workflow label:
 - `status:review`
 - `status:done`
 
-The default-branch workflow `.github/workflows/project-board-sync.yml` maps these labels to the real GitHub Project Status field.
+The default-branch sync workflow maps these labels to the Project Status field.
 
-Never claim the card moved unless either:
-- the Project mutation succeeded directly; or
-- the Project sync workflow succeeded.
+Never claim a Project card moved unless the mutation/sync succeeded.
 
-## Status transition rules
+---
 
-When beginning implementation on an Issue:
-- set/move it to `In Progress`;
-- add a short Issue comment only when useful;
-- link the active PR.
+# End-of-turn discipline
 
-When implementation is complete but maintainer/local validation is still needed:
-- set/move it to `Review`;
-- record exactly what remains to validate.
+After a substantial implementation pass:
 
-When validation and acceptance criteria pass:
-- set/move it to `Done`;
-- close the Issue if appropriate.
+1. push the branch;
+2. confirm CI or explicitly state what remains untested;
+3. update relevant issue / PR notes when useful;
+4. update this handoff again when the global direction/state materially changes;
+5. never describe untested local visual behavior as validated.
 
-When a task is explicitly deferred/gated:
-- use `Backlog`.
-
-Do not start random `Todo` work while a blocking `In Progress` item should be finished first.
-
-## End-of-turn handoff
-
-After a substantial code/research pass, the agent must leave GitHub self-explanatory:
-
-1. push/update the working branch;
-2. update relevant Issue checklists/bodies;
-3. update the Issue/PR workflow status;
-4. comment on PR #19 with what changed, what was measured, and what still needs local validation;
-5. update `docs/STATUS.md` if the overall project state changed;
-6. do not mark untested code as passing.
-
-The next agent should be able to recover state from GitHub alone.
-
-## Current maintainer preferences that affect product decisions
-
-- The microscope view is artwork first, not a debug dashboard.
-- No permanent top-left profiler/HUD.
-- Escape opens a clean menu.
-- Clicking an organism opens a left-side inspector.
-- Overview is cover-fit; zoom-out must never shrink the living world into a tiny island.
-- Pixel art must be deliberate, not vector art with nearest filtering.
-- Evolution should be observable: mutation, lineage divergence, HGT, ecology and later richer eco-evolution.
-- Desktop scaling is GPU-first where the workload is parallel.
-- Performance claims require measurements.
-
-See `docs/CURRENT_DIRECTION.md` for the complete contract.
+The next agent should be able to recover from GitHub alone.
