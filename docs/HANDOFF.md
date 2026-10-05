@@ -8,8 +8,9 @@ This document is the operational handoff for a fresh ChatGPT/Codex/agent session
 - GitHub Project: `MicroC0re` (#2)
 - Active development branch: `rebuild/pixel-microscope-v0.2`
 - Active PR: #19
-- Current branch HEAD at this handoff: **`2222688b09e92c7d1b2c01d5095518fa94043b25`**
-- HEAD title: **`Polish living microscope presentation`**
+- Latest **code** commit documented by this handoff: **`2222688b09e92c7d1b2c01d5095518fa94043b25`**
+- Code commit title: **`Polish living microscope presentation`**
+- The branch HEAD may be one or more documentation-only handoff commits newer than `2222688`; always fetch the branch and inspect `git log` before coding.
 - Telemetry issue: #66
 - Benchmark / smoke issue: #67
 - Godot: 4.7.1
@@ -396,7 +397,7 @@ Earlier important architecture:
 
 # CI state at handoff
 
-For HEAD `2222688`:
+For code commit `2222688`:
 
 - PR workflow run **37303818118**: **SUCCESS**
 - push run was cancelled because newer workflow activity superseded it; do not interpret that cancellation as a code failure.
@@ -515,11 +516,13 @@ git log -1 --oneline
 & .\scripts\run_simulation.ps1
 ```
 
-Expected current HEAD at this handoff:
+Expected latest **code** commit beneath any documentation-only handoff commit(s):
 
 ```text
 2222688 Polish living microscope presentation
 ```
+
+Use `git log -3 --oneline` rather than assuming the documentation commit itself is the code baseline.
 
 Useful controls:
 
