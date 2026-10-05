@@ -78,3 +78,24 @@ If the current agent has direct Project V2 write capability, it may update the P
 Codex automatically consumes repository `AGENTS.md` instructions according to its documented instruction hierarchy. Other ChatGPT GitHub experiences retrieve repository content on demand, so `README.md`, `AGENTS.md`, and `docs/HANDOFF.md` all point to the same workflow contract.
 
 The project must remain understandable from GitHub alone.
+
+
+## One-page design protocol
+
+MicroC0re uses `docs/one-pages/` as the active visual design layer.
+
+For every substantial design/code tranche, an agent must:
+1. identify the one-page whose design question is being changed;
+2. update its date, current rule, measurable success criteria and latest evidence;
+3. create a new one-page instead of expanding an existing page when the work introduces a new design question;
+4. keep implementation details in the existing deep docs; the one-page records relationships, constraints and decisions;
+5. use telemetry/soak/benchmark evidence to update the page instead of relying on subjective claims alone.
+
+A one-page is not a backlog dump. If it cannot be understood at a glance, split it.
+
+Current active pages:
+- `00_GAME.md` — overall experience and living-world loop;
+- `01_EVOLUTION_SPECIES.md` — endless evolution, species and refugia;
+- `02_BIOME_SUCCESSION.md` — ecological succession and terraformation feedback;
+- `03_SCALE_PERFORMANCE.md` — scaling without deleting biology;
+- `04_MICROSCOPE_READABILITY.md` — observation, movement and visual continuity.
