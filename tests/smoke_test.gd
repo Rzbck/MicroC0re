@@ -394,6 +394,20 @@ func _init() -> void:
 	if int(cached_cell.phenotype_species_cache) != recomputed_species:
 		errors.append("performance: phenotype species cache stored wrong value")
 
+	# Dormant basal guilds expose explicit state for renderer/telemetry.
+	var dormant_visual_probe = PetriSimulationScript.new(73016)
+	dormant_visual_probe.seed_demo(0)
+	if (
+		dormant_visual_probe.decomposers.is_empty()
+		or not ("dormant" in dormant_visual_probe.decomposers[0])
+	):
+		errors.append("render: decomposer dormancy state missing")
+	if (
+		dormant_visual_probe.hyphae.is_empty()
+		or not ("dormant" in dormant_visual_probe.hyphae[0])
+	):
+		errors.append("render: hyphal dormancy state missing")
+
 	# Basal decomposer dormancy is inherited/trait-driven and reversible.
 	var dormancy_probe = PetriSimulationScript.new(73015)
 	dormancy_probe.seed_demo(0)

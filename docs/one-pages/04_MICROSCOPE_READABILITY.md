@@ -39,6 +39,8 @@ Front/back must be obvious from heading. Wandering can curve; prey pursuit, chem
 
 Terraforming and mature biome states must read as spatial structures, not subtle numeric overlays.
 
+Dormancy is also visible: bacterial dormancy already desaturates cells; decomposer spores now contract/darken and quiescent hyphae become thinner/duller while keeping their species tint underneath. The player can distinguish "temporarily inactive" from "dead/disappeared".
+
 ## Validation
 
 Live review + screenshots/video at x1/x4/x8 and overview/medium/close zoom. Telemetry tells performance; visual review tells whether optimization destroyed meaning.

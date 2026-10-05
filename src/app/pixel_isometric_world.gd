@@ -980,10 +980,17 @@ func _batch_far_group(
 				half_length = 1.36
 				half_width = 0.88
 				color = _evolved_lineage_tint(Color(0.72, 0.57, 0.35), agent, 0.56, "yeast")
+				if bool(agent.dormant):
+					half_length *= 0.64
+					half_width *= 0.72
+					color = color.lerp(Color(0.36, 0.33, 0.27), 0.64)
 			6:
 				half_length = 1.90
 				half_width = 0.72
 				color = _evolved_lineage_tint(Color(0.64, 0.56, 0.38), agent, 0.52, "hypha")
+				if bool(agent.dormant):
+					half_width *= 0.68
+					color = color.lerp(Color(0.31, 0.30, 0.27), 0.66)
 
 		var morph_scale: float = (
 			clampf(float(agent.gene_size), 0.74, 1.38)
@@ -1115,6 +1122,12 @@ func _draw_agent_sprite(
 		else 1.0
 	)
 	var size: Vector2 = texture.get_size() * base_scale * morph_scale
+	if (
+		kind == "yeast"
+		and "dormant" in agent
+		and bool(agent.dormant)
+	):
+		size *= 0.68
 	size.x = maxf(1.0, roundf(size.x))
 	size.y = maxf(1.0, roundf(size.y))
 
@@ -1291,14 +1304,49 @@ func _agent_tint(kind: String, agent: Variant) -> Color:
 		"alga":
 			return _evolved_lineage_tint(Color(0.90, 0.96, 0.86), agent, 0.56, "alga")
 		"yeast":
-			return _evolved_lineage_tint(Color(0.94, 0.88, 0.78), agent, 0.56, "yeast")
+			var yeast_color: Color = _evolved_lineage_tint(
+				Color(0.94, 0.88, 0.78),
+				agent,
+				0.56,
+				"yeast"
+			)
+			if bool(agent.dormant):
+				yeast_color = yeast_color.lerp(
+					Color(0.42, 0.38, 0.30),
+					0.62
+				)
+			return yeast_color
 	return Color.WHITE
 
 
 func _draw_hypha(colony: Variant) -> void:
 	if colony.nodes.is_empty():
 		return
-	var width_px: float = maxf(1.0, roundf(_camera_zoom()))
+	var width_px: float = maxf(
+		1.0,
+		roundf(_camera_zoom() * (0.72 if bool(colony.dormant) else 1.0))
+	)
+	var hypha_line_color: Color = _evolved_lineage_tint(
+		Color(0.64, 0.56, 0.38),
+		colony,
+		0.52,
+		"hypha"
+	)
+	var hypha_tip_color: Color = _evolved_lineage_tint(
+		Color(0.78, 0.72, 0.50),
+		colony,
+		0.44,
+		"hypha"
+	)
+	if bool(colony.dormant):
+		hypha_line_color = hypha_line_color.lerp(
+			Color(0.31, 0.30, 0.27),
+			0.66
+		)
+		hypha_tip_color = hypha_tip_color.lerp(
+			Color(0.40, 0.38, 0.31),
+			0.62
+		)
 
 	for i in range(1, colony.nodes.size()):
 		var parent_index: int = int(colony.parents[i])
@@ -1323,7 +1371,7 @@ func _draw_hypha(colony: Variant) -> void:
 		draw_line(
 			a,
 			b,
-			_evolved_lineage_tint(Color(0.64, 0.56, 0.38), colony, 0.52, "hypha"),
+			hypha_line_color,
 			width_px,
 			false
 		)
@@ -1342,7 +1390,7 @@ func _draw_hypha(colony: Variant) -> void:
 				tip - Vector2.ONE * px,
 				Vector2.ONE * px * 2.0
 			),
-			_evolved_lineage_tint(Color(0.78, 0.72, 0.50), colony, 0.44, "hypha"),
+			hypha_tip_color,
 			true
 		)
 
