@@ -225,6 +225,48 @@ func _init() -> void:
 	if not bool(inline_cell.dying):
 		errors.append("performance: motion reference lost phage lysis transition")
 
+	# Sparse ecological steering points toward resources and away from damage.
+	var steering_probe = PetriSimulationScript.new(73021)
+	steering_probe.seed_demo(4)
+	var steering_cell = steering_probe.bacteria[0]
+	steering_cell.position = Vector2(96.0, 64.0)
+	steering_cell.expression_nutrient = 1.0
+	steering_cell.expression_exudate = 0.0
+	steering_cell.expression_detritus = 0.0
+	steering_cell.expression_matrix = 0.0
+	steering_cell.expression_photo = 0.0
+	steering_probe.nutrient.fill(0.0)
+	steering_probe.exudate.fill(0.0)
+	steering_probe.detritus.fill(0.0)
+	steering_probe.damage_cue.fill(0.0)
+	steering_probe.eps.fill(0.0)
+	var steering_index: int = steering_probe._field_index_for_world(
+		Vector2(steering_cell.position)
+	)
+	var steering_x: int = steering_index % PetriSimulationScript.FIELD_WIDTH
+	if steering_x < PetriSimulationScript.FIELD_WIDTH - 1:
+		steering_probe.nutrient.values[steering_index + 1] = 0.8
+	steering_probe._refresh_bacterial_steering(
+		steering_cell,
+		steering_index
+	)
+	if (
+		float(steering_cell.steering_strength) <= 0.0
+		or cos(float(steering_cell.steering_angle)) <= 0.55
+	):
+		errors.append("ecology: nutrient steering failed to point toward resource")
+
+	steering_probe.nutrient.fill(0.0)
+	steering_probe.damage_cue.fill(0.0)
+	if steering_x < PetriSimulationScript.FIELD_WIDTH - 1:
+		steering_probe.damage_cue.values[steering_index + 1] = 0.8
+	steering_probe._refresh_bacterial_steering(
+		steering_cell,
+		steering_index
+	)
+	if cos(float(steering_cell.steering_angle)) >= -0.55:
+		errors.append("ecology: damage steering failed to point away from stress")
+
 	# Direct cohort routing must remain equivalent to the legacy helper.
 	var routing_probe = PetriSimulationScript.new(73011)
 	routing_probe.seed_demo(16)

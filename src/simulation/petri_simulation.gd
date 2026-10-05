@@ -882,6 +882,29 @@ func step(dt: float) -> void:
 							)
 						)
 
+					if (
+						float(cell.steering_strength) > 0.015
+						and not bool(cell.dividing)
+					):
+						var motion_steering_delta: float = wrapf(
+							float(cell.steering_angle) - float(cell.angle),
+							-PI,
+							PI
+						)
+						var motion_steering_limit: float = (
+							(
+								0.40
+								+ 0.48 * float(cell.gene_chemotaxis)
+							)
+							* float(cell.steering_strength)
+							* agent_dt
+						)
+						cell.angle = float(cell.angle) + clampf(
+							motion_steering_delta,
+							-motion_steering_limit,
+							motion_steering_limit
+						)
+
 					var motion_drift_phase: int = (
 						(
 							int(cell.id) * 17
@@ -1085,6 +1108,26 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 			0.56,
 			clampf(local_quorum * 8.0, 0.0, 1.0)
 			* clampf(float(cell.expression_matrix), 0.0, 1.0)
+		)
+
+	if (
+		float(cell.steering_strength) > 0.015
+		and not bool(cell.dividing)
+	):
+		var steering_delta: float = wrapf(
+			float(cell.steering_angle) - float(cell.angle),
+			-PI,
+			PI
+		)
+		var steering_limit: float = (
+			(0.40 + 0.48 * float(cell.gene_chemotaxis))
+			* float(cell.steering_strength)
+			* dt
+		)
+		cell.angle = float(cell.angle) + clampf(
+			steering_delta,
+			-steering_limit,
+			steering_limit
 		)
 
 	var drift_phase: int = (
@@ -3059,6 +3102,80 @@ func _plasmid_burden(cell: Variant) -> float:
 	return 0.0018 * float(modules)
 
 
+func _field_gradient_for_index(field: Variant, index: int) -> Vector2:
+	var x: int = index % FIELD_WIDTH
+	var y: int = index / FIELD_WIDTH
+	var left_index: int = index - 1 if x > 0 else index
+	var right_index: int = index + 1 if x < FIELD_WIDTH - 1 else index
+	var up_index: int = index - FIELD_WIDTH if y > 0 else index
+	var down_index: int = index + FIELD_WIDTH if y < FIELD_HEIGHT - 1 else index
+	var scale: float = 0.5 * FIELD_CELL_INV
+	return Vector2(
+		(float(field.values[right_index]) - float(field.values[left_index])) * scale,
+		(float(field.values[down_index]) - float(field.values[up_index])) * scale
+	)
+
+
+func _refresh_bacterial_steering(cell: Variant, field_index: int) -> void:
+	# This is intentionally sparse (regulation cadence), not a per-motion-tick
+	# gradient query. It turns local ecological opportunity into a persistent
+	# movement intention that remains visible between full biological updates.
+	var steering := Vector2.ZERO
+	steering += (
+		_field_gradient_for_index(nutrient, field_index)
+		* maxf(0.20, float(cell.expression_nutrient))
+	)
+	steering += (
+		_field_gradient_for_index(exudate, field_index)
+		* 1.20
+		* maxf(0.0, float(cell.expression_exudate))
+	)
+	if float(cell.expression_detritus) > 0.035:
+		steering += (
+			_field_gradient_for_index(detritus, field_index)
+			* 1.35
+			* float(cell.expression_detritus)
+		)
+
+	# Damage is universally aversive but stress-persistent lineages react a bit
+	# less strongly. Matrix/adhesive phenotypes can instead seek established EPS.
+	var damage_avoidance: float = clampf(
+		1.08 - 0.16 * float(cell.gene_dormancy),
+		0.72,
+		1.02
+	)
+	steering -= (
+		_field_gradient_for_index(damage_cue, field_index)
+		* damage_avoidance
+	)
+	var matrix_drive: float = (
+		float(cell.expression_matrix) * 0.42
+		+ maxf(0.0, float(cell.gene_adhesion) - 0.90) * 0.24
+	)
+	if matrix_drive > 0.035:
+		steering += (
+			_field_gradient_for_index(eps, field_index)
+			* matrix_drive
+		)
+
+	# Phototrophs retain a weak upward/lightward bias while chemical gradients
+	# dominate whenever stronger local information exists.
+	if float(cell.expression_photo) > 0.05:
+		steering += Vector2(0.0, -0.0045 * float(cell.expression_photo))
+
+	var magnitude: float = steering.length()
+	if magnitude <= 0.00001:
+		cell.steering_strength = 0.0
+		return
+
+	cell.steering_angle = steering.angle()
+	cell.steering_strength = clampf(
+		magnitude * 18.0 * float(cell.gene_chemotaxis),
+		0.0,
+		1.0
+	)
+
+
 func _advance_cell(cell: Variant, dt: float) -> void:
 	var metabolic_dt: float = dt * float(_current_metabolic_stride)
 	cell.age = float(cell.age) + dt
@@ -3129,6 +3246,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 			genome_values[EvolvableGenomeScript.MODULE_QUORUM_SIGNAL]
 		)
 		cell.refresh_motion_speed_cache()
+		_refresh_bacterial_steering(cell, field_index)
 		var previous_guild: int = int(cell.guild)
 		cell.guild = int(
 			cell.genome.dominant_guild_from_values(genome_values)
@@ -3240,6 +3358,26 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		cell.angle = (
 			float(cell.angle)
 			+ rng.randfn(0.0, _current_rotational_sigma)
+		)
+
+	if (
+		float(cell.steering_strength) > 0.015
+		and not bool(cell.dividing)
+	):
+		var steering_delta: float = wrapf(
+			float(cell.steering_angle) - float(cell.angle),
+			-PI,
+			PI
+		)
+		var steering_limit: float = (
+			(0.40 + 0.48 * float(cell.gene_chemotaxis))
+			* float(cell.steering_strength)
+			* dt
+		)
+		cell.angle = float(cell.angle) + clampf(
+			steering_delta,
+			-steering_limit,
+			steering_limit
 		)
 
 	cell.angle = wrapf(float(cell.angle), -PI, PI)

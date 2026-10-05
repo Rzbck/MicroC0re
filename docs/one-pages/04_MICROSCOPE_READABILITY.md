@@ -35,6 +35,8 @@ x4/x8 may reduce rendering cost, but:
 
 Front/back must be obvious from heading. Wandering can curve; prey pursuit, chemotaxis, flow and habitat preference must visibly bend trajectories for understandable reasons.
 
+Bacterial movement now separates **decision cadence** from **motion cadence**: sparse regulation ticks sample local nutrient/exudate/detritus/EPS/damage gradients and cache an ecological steering intention; cheap intermediate motion follows that intention smoothly. This keeps dense movement purposeful instead of becoming straight-line drift when metabolism is staggered.
+
 ## Environment rule
 
 Terraforming and mature biome states must read as spatial structures, not subtle numeric overlays.

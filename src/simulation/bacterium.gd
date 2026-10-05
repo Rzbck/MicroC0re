@@ -66,6 +66,11 @@ var consumed: bool = false
 # Temporal memory used by run-and-tumble chemotaxis.
 var sensed_memory: float = 0.0
 
+# Cached ecological movement intention. Expensive spatial gradients are sampled
+# sparsely on regulation ticks; ordinary motion follows this intention smoothly.
+var steering_angle: float = 0.0
+var steering_strength: float = 0.0
+
 # Heritable phenotype. Values near 1.0 are the founder baseline.
 var gene_speed: float = 1.0
 var gene_chemotaxis: float = 1.0
@@ -149,6 +154,8 @@ func _init(
 	id = p_id
 	position = p_position
 	angle = p_angle
+	steering_angle = p_angle
+	steering_strength = 0.0
 	generation = p_generation
 	parent_id = p_parent_id
 	lineage_id = p_id
