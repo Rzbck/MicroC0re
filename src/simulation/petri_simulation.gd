@@ -739,41 +739,41 @@ func step(dt: float) -> void:
 		_current_mechanics_dt = agent_dt
 		_agent_tick += 1
 		var agents_start: int = Time.get_ticks_usec()
-		var next_population: Array = _population_buffer
-		next_population.clear()
+		var pending_births: Array = _population_buffer
+		pending_births.clear()
 		var living_start: int = _refresh_population_metadata()
 		var available_bacterial_births: int = maxi(
 			0,
 			bacteria_population_limit - living_start
 		)
 		var bacteria_identity_changed: bool = false
-	
+
+		# Hot-path rule: do not rebuild/copy the population array on ordinary
+		# ticks. Cells mutate in place; only completed death/division triggers
+		# one stable compaction pass at the end of the tick.
 		for cell in bacteria:
 			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
-	
+
 			if bool(cell.consumed):
 				bacteria_identity_changed = true
 				continue
-	
+
 			if int(cell.engulfed_by_id) >= 0:
-				next_population.append(cell)
 				continue
-	
+
 			if bool(cell.dying):
 				_advance_lysis(cell, agent_dt)
 				if float(cell.lysis_progress) >= 1.0:
 					bacteria_identity_changed = true
+					cell.alive = false
 					_recycle_dead_cell(cell)
-				else:
-					next_population.append(cell)
 				continue
-	
+
 			_advance_cell(cell, agent_dt)
-	
+
 			if bool(cell.dying):
-				next_population.append(cell)
 				continue
-	
+
 			if bool(cell.dividing):
 				cell.division_progress = minf(
 					1.0,
@@ -781,32 +781,26 @@ func step(dt: float) -> void:
 				)
 				if float(cell.division_progress) >= 1.0:
 					if available_bacterial_births > 0:
-						var daughters: Array = _divide(cell)
-						next_population.append_array(daughters)
+						pending_births.append_array(_divide(cell))
 						available_bacterial_births -= 1
 						bacteria_identity_changed = true
+						cell.alive = false
 					else:
 						# Explicit performance guard: suppress further fission at
 						# the CPU-reference ceiling without deleting live cells.
 						cell.dividing = false
 						cell.division_progress = 0.0
 						cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
-						next_population.append(cell)
-				else:
-					next_population.append(cell)
 				continue
-	
+
 			if _ready_to_begin_division(cell):
 				cell.begin_division()
-	
-			next_population.append(cell)
-	
-		var previous_population: Array = bacteria
-		bacteria = next_population
-		_population_buffer = previous_population
-		_population_buffer.clear()
+
 		if bacteria_identity_changed:
+			_compact_bacteria_population(pending_births)
 			_rebuild_bacteria_id_map()
+		else:
+			pending_births.clear()
 		agents_ms_last = float(Time.get_ticks_usec() - agents_start) / 1000.0
 	
 		var mechanics_start: int = Time.get_ticks_usec()
@@ -842,6 +836,30 @@ func step(dt: float) -> void:
 
 	simulation_time += dt
 	_advance_disturbance_schedule()
+
+
+func _compact_bacteria_population(pending_births: Array) -> void:
+	# Stable survivor compaction preserves relative order. New daughters are
+	# appended after survivors; biological IDs remain stable and authoritative.
+	var write_index: int = 0
+	var original_count: int = bacteria.size()
+	for read_index in range(original_count):
+		var cell: Variant = bacteria[read_index]
+		if (
+			cell == null
+			or bool(cell.consumed)
+			or not bool(cell.alive)
+		):
+			continue
+		if write_index != read_index:
+			bacteria[write_index] = cell
+		write_index += 1
+
+	if write_index < original_count:
+		bacteria.resize(write_index)
+	if not pending_births.is_empty():
+		bacteria.append_array(pending_births)
+		pending_births.clear()
 
 
 func _chemistry_dt_for_population() -> float:

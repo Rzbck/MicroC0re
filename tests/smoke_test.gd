@@ -154,6 +154,32 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Bacterial population compaction removes only dead/consumed cells,
+	# preserves survivor order and appends births once.
+	var compact_probe = PetriSimulationScript.new(73009)
+	compact_probe.seed_demo(6)
+	var survivor_a = compact_probe.bacteria[0]
+	var removed = compact_probe.bacteria[1]
+	var survivor_b = compact_probe.bacteria[2]
+	removed.consumed = true
+	var daughter = BacteriumScript.new(
+		990001,
+		Vector2(40.0, 40.0),
+		0.0
+	)
+	var births: Array = [daughter]
+	compact_probe._compact_bacteria_population(births)
+	if compact_probe.bacteria.size() != 6:
+		errors.append("performance: bacterial compaction produced wrong population size")
+	elif (
+		compact_probe.bacteria[0] != survivor_a
+		or compact_probe.bacteria[1] != survivor_b
+		or compact_probe.bacteria[-1] != daughter
+	):
+		errors.append("performance: bacterial compaction broke stable survivor order")
+	if not births.is_empty():
+		errors.append("performance: bacterial compaction failed to recycle birth buffer")
+
 	# Far-render bacteria are exported as packed dense state rather than
 	# requiring the renderer to traverse RefCounted cell objects.
 	var render_probe = PetriSimulationScript.new(73008)
