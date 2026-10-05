@@ -5359,6 +5359,21 @@ func ecology_event_metrics() -> Dictionary:
 	return ecology_events.duplicate(true)
 
 
+func dormancy_metrics() -> Dictionary:
+	var dormant_decomposers: int = 0
+	var dormant_hyphae: int = 0
+	for organism in decomposers:
+		if organism != null and bool(organism.dormant):
+			dormant_decomposers += 1
+	for colony in hyphae:
+		if colony != null and bool(colony.dormant):
+			dormant_hyphae += 1
+	return {
+		"decomposers": dormant_decomposers,
+		"hyphae": dormant_hyphae,
+	}
+
+
 func _prey_event_kind(prey: Variant) -> String:
 	if prey == null:
 		return "unknown"

@@ -100,6 +100,7 @@ func record_frame(
 	)
 	var evolution: Dictionary = sim.evolution_metrics()
 	var biome: Dictionary = terrain.biome_metrics()
+	var dormancy: Dictionary = sim.dormancy_metrics()
 	var sample := {
 		"t_s": int(round(_elapsed_seconds())),
 		"fps": roundf(
@@ -142,6 +143,8 @@ func record_frame(
 		"algae": sim.microalgae.size(),
 		"decomposers": sim.decomposers.size(),
 		"hyphae": sim.hyphae.size(),
+		"dormant_decomposers": int(dormancy["decomposers"]),
+		"dormant_hyphae": int(dormancy["hyphae"]),
 		"visible_tiles": visible_tiles,
 		"terrain_triangles": terrain_triangles,
 		"far_agent_count": far_agent_count,
@@ -202,6 +205,8 @@ func record_frame(
 			"algae": int(sample["algae"]),
 			"decomposers": int(sample["decomposers"]),
 			"hyphae": int(sample["hyphae"]),
+			"dormant_decomposers": int(sample["dormant_decomposers"]),
+			"dormant_hyphae": int(sample["dormant_hyphae"]),
 			"actual_speed": float(sample["actual_speed"]),
 			"soil_excavated": float(sample["soil_excavated"]),
 			"soil_deposited": float(sample["soil_deposited"]),

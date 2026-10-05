@@ -394,6 +394,20 @@ func _init() -> void:
 	if int(cached_cell.phenotype_species_cache) != recomputed_species:
 		errors.append("performance: phenotype species cache stored wrong value")
 
+	# Dormancy telemetry exposes current dormant populations independently
+	# from cumulative enter/wake events.
+	var dormancy_metrics_probe = PetriSimulationScript.new(73017)
+	dormancy_metrics_probe.seed_demo(0)
+	if not dormancy_metrics_probe.decomposers.is_empty():
+		dormancy_metrics_probe.decomposers[0].enter_dormancy()
+	if not dormancy_metrics_probe.hyphae.is_empty():
+		dormancy_metrics_probe.hyphae[0].enter_dormancy()
+	var dormancy_counts: Dictionary = dormancy_metrics_probe.dormancy_metrics()
+	if int(dormancy_counts.get("decomposers", 0)) != 1:
+		errors.append("telemetry: dormant decomposer count missing")
+	if int(dormancy_counts.get("hyphae", 0)) != 1:
+		errors.append("telemetry: dormant hypha count missing")
+
 	# Dormant basal guilds expose explicit state for renderer/telemetry.
 	var dormant_visual_probe = PetriSimulationScript.new(73016)
 	dormant_visual_probe.seed_demo(0)

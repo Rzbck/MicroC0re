@@ -88,6 +88,8 @@ foreach ($s in @($raw.samples)) {
         algae = I $s.algae
         decomposers = I $s.decomposers
         hyphae = I $s.hyphae
+        dormant_decomposers = I $s.dormant_decomposers
+        dormant_hyphae = I $s.dormant_hyphae
         visible_tiles = I $s.visible_tiles
         terrain_triangles = I $s.terrain_triangles
         far_agent_count = I $s.far_agent_count
@@ -150,6 +152,8 @@ foreach ($s in @($raw.long_samples)) {
         algae = I $s.algae
         decomposers = I $s.decomposers
         hyphae = I $s.hyphae
+        dormant_decomposers = I $s.dormant_decomposers
+        dormant_hyphae = I $s.dormant_hyphae
         actual_speed = [Math]::Round((N $s.actual_speed), 3)
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
@@ -198,6 +202,10 @@ foreach ($s in @($raw.long_samples)) {
             repro_algae = I $e.repro_algae
             repro_decomposers = I $e.repro_decomposers
             repro_hyphae = I $e.repro_hyphae
+            dormancy_decomposer = I $e.dormancy_decomposer
+            wake_decomposer = I $e.wake_decomposer
+            dormancy_hypha = I $e.dormancy_hypha
+            wake_hypha = I $e.wake_hypha
             refugia_bacteria = I $e.refugia_bacteria
             refugia_protozoa = I $e.refugia_protozoa
             refugia_ciliates = I $e.refugia_ciliates
@@ -342,30 +350,34 @@ if ($historySamples.Count -gt 0) {
 $timelineText = $timelineLines -join [Environment]::NewLine
 
 $diversityLines = New-Object System.Collections.Generic.List[string]
-$diversityLines.Add("t_s species bSp pSp cSp fSp aSp dSp hSp bioP bioB bioD bioF bioA bioX bioT")
+$diversityLines.Add("t_s species bSp pSp cSp fSp aSp dSp hSp dDorm hDorm bioP bioB bioD bioF bioA bioX bioT")
 if ($historySamples.Count -gt 0) {
     $divStride = [Math]::Max(1, [int][Math]::Ceiling($historySamples.Count / 180.0))
     for ($i = 0; $i -lt $historySamples.Count; $i += $divStride) {
         $s = $historySamples[$i]
         $diversityLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17}" -f
             (I $s.t_s),(I $s.species),(I $s.species_bacteria),(I $s.species_protozoa),
             (I $s.species_ciliates),(I $s.species_flagellates),(I $s.species_algae),
-            (I $s.species_decomposers),(I $s.species_hyphae),(I $s.biome_producer),
-            (I $s.biome_biofilm),(I $s.biome_detrital),(I $s.biome_fungal),
-            (I $s.biome_anoxic),(I $s.biome_disturbed),(I $s.biome_transitions)
+            (I $s.species_decomposers),(I $s.species_hyphae),
+            (I $s.dormant_decomposers),(I $s.dormant_hyphae),
+            (I $s.biome_producer),(I $s.biome_biofilm),(I $s.biome_detrital),
+            (I $s.biome_fungal),(I $s.biome_anoxic),(I $s.biome_disturbed),
+            (I $s.biome_transitions)
         ))
     }
     $lastIndex = $historySamples.Count - 1
     if (($lastIndex % $divStride) -ne 0) {
         $s = $historySamples[$lastIndex]
         $diversityLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17}" -f
             (I $s.t_s),(I $s.species),(I $s.species_bacteria),(I $s.species_protozoa),
             (I $s.species_ciliates),(I $s.species_flagellates),(I $s.species_algae),
-            (I $s.species_decomposers),(I $s.species_hyphae),(I $s.biome_producer),
-            (I $s.biome_biofilm),(I $s.biome_detrital),(I $s.biome_fungal),
-            (I $s.biome_anoxic),(I $s.biome_disturbed),(I $s.biome_transitions)
+            (I $s.species_decomposers),(I $s.species_hyphae),
+            (I $s.dormant_decomposers),(I $s.dormant_hyphae),
+            (I $s.biome_producer),(I $s.biome_biofilm),(I $s.biome_detrital),
+            (I $s.biome_fungal),(I $s.biome_anoxic),(I $s.biome_disturbed),
+            (I $s.biome_transitions)
         ))
     }
 }
@@ -419,6 +431,7 @@ Ecological history: $historyStart s → $historyEnd s ($([Math]::Round($historyC
 Evolution final/peak: species $(FinalValue "species")/$([Math]::Round((Percentile $speciesValues 1.0),0)), ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
 Terraforming final: excavated $([Math]::Round((N $lastSample.soil_excavated),2)), deposited $([Math]::Round((N $lastSample.soil_deposited),2)).  
 Biome final: producer $(FinalValue "biome_producer"), biofilm $(FinalValue "biome_biofilm"), detrital $(FinalValue "biome_detrital"), fungal $(FinalValue "biome_fungal"), anoxic $(FinalValue "biome_anoxic"), disturbed $(FinalValue "biome_disturbed"), recently modified $(FinalValue "biome_recently_modified"), transitions $(FinalValue "biome_transitions").  
+Dormancy final: decomposers $(FinalValue "dormant_decomposers")/$(FinalValue "decomposers"), hyphae $(FinalValue "dormant_hyphae")/$(FinalValue "hyphae").  
 Trophic final: protozoa $(FinalValue "protozoa")/$(FinalValue "capacity_protozoa"), ciliates $(FinalValue "ciliates")/$(FinalValue "capacity_ciliates"), flagellates $(FinalValue "flagellates")/$(FinalValue "capacity_flagellates").  
 Interactions final: proto predation $(PredProto $historyLast), ciliate predation $(PredCiliate $historyLast), flagellate predation $(PredFlagellate $historyLast), prey escapes $(EscapeTotal $historyLast).  
 Reproduction final: bacteria $(EventValue $historyLast "repro_bacteria"), protozoa $(EventValue $historyLast "repro_protozoa"), ciliates $(EventValue $historyLast "repro_ciliates"), flagellates $(EventValue $historyLast "repro_flagellates"), algae $(EventValue $historyLast "repro_algae"), decomposers $(EventValue $historyLast "repro_decomposers"), hyphae $(EventValue $historyLast "repro_hyphae").  
