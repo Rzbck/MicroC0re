@@ -58,6 +58,7 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 - The main bacterial loop routes cells directly to full-metabolism vs motion-only paths. Dense populations avoid a per-cell `_advance_cell → _should_run_metabolism → motion-only` dispatch chain on skipped metabolism cohorts.
 - Motion-only curvature uses a deterministic sine LUT (phase step ≈0.031 rad) instead of evaluating `sin()` per bacterial cell. Visual wandering remains smooth/coherent while dense-agent trig cost is removed.
 - A persistent `BacteriaHotStore` now mirrors dense-index hot state (stable ID, position, angle, energy, age, geometry, species/lineage hues and life flags). It is **lazy-synchronized for rendering** instead of mirrored on every biological sub-tick; identity changes only invalidate it. Mechanics keeps its dedicated packed position/radius/activity buffers, avoiding a second O(N) packed mirror tax. This preserves the SoA bridge without regressing the CPU core.
+- Dense movement lookup uses reciprocal field-cell multiplication, a pre-scaled direction LUT, non-negative integer modulo, and avoids zero-value adhesion writes. These preserve the same mapping while removing generic math/function overhead from the dominant motion path.
 
 This is the first explicit hot/cold split for #20; stable biological IDs remain unchanged.
 

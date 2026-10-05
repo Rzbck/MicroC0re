@@ -34,6 +34,8 @@ const EXACT_MECHANICS_LIMIT := 900
 const DENSITY_NEIGHBOR_VISIT_CAP := 18
 const DENSITY_NEIGHBOR_VISIT_CAP_ULTRA := 12
 const DIRECTION_LUT_SIZE := 1024
+const DIRECTION_LUT_SCALE := float(DIRECTION_LUT_SIZE) / TAU
+const FIELD_CELL_INV := 1.0 / FIELD_CELL_SIZE
 const DRIFT_LUT_SIZE := 608
 const DRIFT_LUT_PHASE_STEP := 3
 const REGULATION_BUCKETS := 6
@@ -776,7 +778,11 @@ func step(dt: float) -> void:
 		# render SoA is synchronized lazily outside this biological hot loop.
 		for cell_index in range(bacteria.size()):
 			var cell: Variant = bacteria[cell_index]
-			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
+			if float(cell.adhesion_timer) > 0.0:
+				cell.adhesion_timer = maxf(
+					0.0,
+					float(cell.adhesion_timer) - agent_dt
+				)
 
 			if bool(cell.consumed):
 				bacteria_identity_changed = true
@@ -795,9 +801,9 @@ func step(dt: float) -> void:
 
 			var run_metabolism: bool = (
 				_current_metabolic_stride <= 1
-				or posmod(
-					int(cell.id) + _agent_tick,
-					_current_metabolic_stride
+				or (
+					(int(cell.id) + _agent_tick)
+					% _current_metabolic_stride
 				) == 0
 			)
 			if run_metabolism:
@@ -934,7 +940,7 @@ func _metabolic_stride() -> int:
 func _should_run_metabolism(cell_id: int) -> bool:
 	return (
 		_current_metabolic_stride <= 1
-		or posmod(cell_id + _agent_tick, _current_metabolic_stride) == 0
+		or ((cell_id + _agent_tick) % _current_metabolic_stride) == 0
 	)
 
 
@@ -982,10 +988,9 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 			* clampf(float(cell.expression_matrix), 0.0, 1.0)
 		)
 
-	var drift_phase: int = posmod(
-		(int(cell.id) * 17 + _agent_tick * 11) * DRIFT_LUT_PHASE_STEP,
-		DRIFT_LUT_SIZE
-	)
+	var drift_phase: int = (
+		(int(cell.id) * 17 + _agent_tick * 11) * DRIFT_LUT_PHASE_STEP
+	) % DRIFT_LUT_SIZE
 	var drift_turn: float = float(_drift_lut[drift_phase]) * 0.16 * dt
 	cell.angle = wrapf(float(cell.angle) + drift_turn, -PI, PI)
 	var heading: Vector2 = _direction_for_angle(float(cell.angle))
@@ -999,13 +1004,15 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 
 
 func _direction_for_angle(angle: float) -> Vector2:
-	var normalized: float = wrapf(angle + PI, 0.0, TAU) / TAU
-	var index: int = posmod(
-		floori(normalized * float(DIRECTION_LUT_SIZE)),
-		DIRECTION_LUT_SIZE
+	var wrapped_angle: float = angle
+	if wrapped_angle < -PI or wrapped_angle > PI:
+		wrapped_angle = wrapf(wrapped_angle, -PI, PI)
+	var index: int = clampi(
+		floori((wrapped_angle + PI) * DIRECTION_LUT_SCALE),
+		0,
+		DIRECTION_LUT_SIZE - 1
 	)
 	return _direction_lut[index]
-
 
 func _advance_microalgae(dt: float) -> void:
 	var next_microalgae: Array = []
@@ -4312,17 +4319,16 @@ func _refresh_environment_caches() -> void:
 
 func _field_index_for_world(position: Vector2) -> int:
 	var x: int = clampi(
-		floori(position.x / FIELD_CELL_SIZE),
+		floori(position.x * FIELD_CELL_INV),
 		0,
 		FIELD_WIDTH - 1
 	)
 	var y: int = clampi(
-		floori(position.y / FIELD_CELL_SIZE),
+		floori(position.y * FIELD_CELL_INV),
 		0,
 		FIELD_HEIGHT - 1
 	)
 	return y * FIELD_WIDTH + x
-
 
 func _water_flow_for_field_index(field_index: int) -> Vector2:
 	return _flow_field_cache[

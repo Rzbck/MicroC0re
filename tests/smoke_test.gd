@@ -154,6 +154,43 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Hot lookup helpers preserve the original field/direction mapping.
+	var lookup_probe = PetriSimulationScript.new(73014)
+	lookup_probe.seed_demo(4)
+	for lookup_position in [
+		Vector2(0.0, 0.0),
+		Vector2(17.9, 23.4),
+		Vector2(95.9, 63.9),
+		Vector2(191.9, 127.9),
+	]:
+		var ref_x: int = clampi(
+			floori(lookup_position.x / PetriSimulationScript.FIELD_CELL_SIZE),
+			0,
+			PetriSimulationScript.FIELD_WIDTH - 1
+		)
+		var ref_y: int = clampi(
+			floori(lookup_position.y / PetriSimulationScript.FIELD_CELL_SIZE),
+			0,
+			PetriSimulationScript.FIELD_HEIGHT - 1
+		)
+		if lookup_probe._field_index_for_world(lookup_position) != (
+			ref_y * PetriSimulationScript.FIELD_WIDTH + ref_x
+		):
+			errors.append("performance: fast field index diverged")
+			break
+	for lookup_angle in [-PI, -2.4, -0.2, 0.0, 1.7, PI - 0.0001]:
+		var reference_angle: float = wrapf(lookup_angle + PI, 0.0, TAU) / TAU
+		var reference_index: int = posmod(
+			floori(
+				reference_angle
+				* float(PetriSimulationScript.DIRECTION_LUT_SIZE)
+			),
+			PetriSimulationScript.DIRECTION_LUT_SIZE
+		)
+		if lookup_probe._direction_for_angle(lookup_angle) != lookup_probe._direction_lut[reference_index]:
+			errors.append("performance: fast direction LUT index diverged")
+			break
+
 	# Dense motion drift uses a deterministic sine LUT with bounded error.
 	var drift_probe = PetriSimulationScript.new(73012)
 	drift_probe.seed_demo(4)
