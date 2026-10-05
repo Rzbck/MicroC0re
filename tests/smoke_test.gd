@@ -154,6 +154,17 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Packed field-flow cache must stay equivalent to position sampling.
+	var flow_probe = PetriSimulationScript.new(73007)
+	flow_probe.seed_demo(4)
+	flow_probe._refresh_environment_caches()
+	var flow_position := Vector2(77.25, 41.75)
+	var flow_index: int = flow_probe._field_index_for_world(flow_position)
+	if flow_probe._water_flow_for_field_index(flow_index).distance_to(
+		flow_probe.sample_water_flow(flow_position)
+	) > 0.0001:
+		errors.append("performance: packed field-flow cache diverged from world sampling")
+
 	# Cold phenotype classification cache: repeated reads should reuse the
 	# stable species ID, then recompute only after phenotype invalidation.
 	var species_cache_probe = PetriSimulationScript.new(73006)

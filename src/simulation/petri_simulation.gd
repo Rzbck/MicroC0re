@@ -154,6 +154,7 @@ var refugia_recoveries_total: int = 0
 var ecology_events: Dictionary = {}
 var _flow_x_rows: PackedFloat32Array = PackedFloat32Array()
 var _flow_y_cols: PackedFloat32Array = PackedFloat32Array()
+var _flow_field_cache: PackedVector2Array = PackedVector2Array()
 var _ambient_light_cache: PackedFloat32Array = PackedFloat32Array()
 var _vertical_light_rows: PackedFloat32Array = PackedFloat32Array()
 var _light_x_wave: PackedFloat32Array = PackedFloat32Array()
@@ -388,6 +389,7 @@ func _init(seed_value: int = 1) -> void:
 		_direction_lut[i] = Vector2(cos(lut_angle), sin(lut_angle))
 	_flow_x_rows.resize(FIELD_HEIGHT)
 	_flow_y_cols.resize(FIELD_WIDTH)
+	_flow_field_cache.resize(FIELD_WIDTH * FIELD_HEIGHT)
 	_ambient_light_cache.resize(FIELD_WIDTH * FIELD_HEIGHT)
 	_vertical_light_rows.resize(FIELD_HEIGHT)
 	_light_x_wave.resize(FIELD_WIDTH)
@@ -949,7 +951,7 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 	cell.position = (
 		cell_position
 		+ heading * speed * eps_drag * dt
-		+ _water_flow(cell_position) * dt * eps_drag
+		+ _water_flow_for_field_index(field_index) * dt * eps_drag
 	)
 	_constrain_to_world(cell)
 
@@ -3057,7 +3059,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		)
 
 	var heading: Vector2 = _direction_for_angle(float(cell.angle))
-	var flow: Vector2 = _water_flow(cell_position)
+	var flow: Vector2 = _water_flow_for_field_index(field_index)
 	var eps_drag: float = 1.0 / (1.0 + local_eps * 0.85)
 	cell.position = (
 		cell_position
@@ -3206,7 +3208,7 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 
 	var photo_gain: float = 0.0
 	if float(cell.expression_photo) > 0.04:
-		var local_light: float = _sample_light(cell_position)
+		var local_light: float = _light_value_for_index(field_index)
 		photo_gain = (
 			0.045
 			* local_light
@@ -4228,13 +4230,17 @@ func _refresh_environment_caches() -> void:
 		var base_light: float = float(_vertical_light_rows[y]) * daylight
 		var y_wave: float = float(_light_y_wave[y])
 		for x in range(FIELD_WIDTH):
-			_ambient_light_cache[row + x] = clampf(
+			var index: int = row + x
+			_ambient_light_cache[index] = clampf(
 				base_light
-				+ 0.08 * float(_light_x_wave[x]) * y_wave,
+					+ 0.08 * float(_light_x_wave[x]) * y_wave,
 				0.04,
 				1.0
 			)
-
+			_flow_field_cache[index] = Vector2(
+				float(_flow_x_rows[y]),
+				float(_flow_y_cols[x])
+			)
 
 func _field_index_for_world(position: Vector2) -> int:
 	var x: int = clampi(
@@ -4250,22 +4256,14 @@ func _field_index_for_world(position: Vector2) -> int:
 	return y * FIELD_WIDTH + x
 
 
-func _water_flow(position: Vector2) -> Vector2:
-	var x: int = clampi(
-		floori(position.x / FIELD_CELL_SIZE),
-		0,
-		FIELD_WIDTH - 1
-	)
-	var y: int = clampi(
-		floori(position.y / FIELD_CELL_SIZE),
-		0,
-		FIELD_HEIGHT - 1
-	)
-	return Vector2(
-		float(_flow_x_rows[y]),
-		float(_flow_y_cols[x])
-	)
+func _water_flow_for_field_index(field_index: int) -> Vector2:
+	return _flow_field_cache[
+		clampi(field_index, 0, _flow_field_cache.size() - 1)
+	]
 
+
+func _water_flow(position: Vector2) -> Vector2:
+	return _water_flow_for_field_index(_field_index_for_world(position))
 
 func _damage_cue_direction(position: Vector2) -> Vector2:
 	var gradient: Vector2 = Vector2(damage_cue.gradient_world(position))
