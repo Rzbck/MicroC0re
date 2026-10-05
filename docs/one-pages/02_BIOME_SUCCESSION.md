@@ -29,7 +29,7 @@ flowchart TD
 
 Open · Producer · Biofilm · Detrital · Fungal · Anoxic · Disturbed.
 
-Transitions require persistent field conditions (hysteresis); they are not frame-by-frame color labels.
+Transitions require persistent field conditions (hysteresis); they are not frame-by-frame color labels. **Disturbed is explicitly temporary:** excavation/deposition creates a decaying local disturbance memory, so engineered terrain later matures into another ecological state instead of remaining permanently tagged as damaged.
 
 ## Bidirectional rules
 
@@ -55,4 +55,4 @@ Each mature state gets a distinct but water-dominant material tint. Terrain chan
 
 Area per biome state, transitions, excavation/deposition, field maxima, guild/species occupancy by habitat (next), survival/reproduction correlated with habitat.
 
-**Current uncertainty:** tune thresholds so biofilm/anoxic/fungal regimes emerge naturally without making “disturbed” dominate the map.
+**Current decision:** recent terraforming drives a temporary pioneer/disturbance state; old height changes remain physically present but no longer force the ecological label. Next evidence gate is the 10-minute soak: disturbed area should peak and recover while producer/biofilm/detrital/fungal/anoxic states can replace it.

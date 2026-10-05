@@ -380,6 +380,32 @@ func _init() -> void:
 	):
 		errors.append("biome: adherent bacterium failed to prefer biofilm habitat")
 
+	# Terraforming is a transient succession driver, not a permanent biome.
+	var recovery_sim = PetriSimulationScript.new(88228)
+	recovery_sim.seed_demo(0)
+	var recovery_terrain = LivingTerrainScript.new(
+		99108,
+		Vector2(recovery_sim.world_size)
+	)
+	recovery_sim.producer_biomass.fill(0.0)
+	recovery_sim.eps.fill(0.0)
+	recovery_sim.detritus.fill(0.0)
+	recovery_sim.fungal_enzyme.fill(0.0)
+	recovery_sim.waste.fill(0.0)
+	recovery_sim.quorum_signal.fill(0.0)
+	recovery_sim.oxygen.fill(0.42)
+	recovery_terrain.excavate(Vector2(80.0, 60.0), 1.2, 3.0)
+	recovery_terrain._advance_biome_succession(
+		recovery_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	if int(recovery_terrain.biome_metrics().get("disturbed", 0)) <= 0:
+		errors.append("biome: recent terraforming failed to create disturbed habitat")
+	for _decay_step in range(7):
+		recovery_terrain._advance_biome_succession(recovery_sim, 10.0)
+	if int(recovery_terrain.biome_metrics().get("disturbed", 0)) > 0:
+		errors.append("biome: old terraforming remained permanently disturbed")
+
 	# Persistent biome succession regression: producer fields should mature into
 	# producer habitat and later transition under anoxic waste pressure.
 	var biome_sim = PetriSimulationScript.new(88230)

@@ -27,6 +27,8 @@ const BIOME_DISTURBED := 6
 const BIOME_STATE_COUNT := 7
 const BIOME_UPDATE_INTERVAL := 1.0
 const BIOME_TRANSITION_SECONDS := 9.0
+const BIOME_DISTURBANCE_DECAY := 0.018
+const BIOME_DISTURBANCE_THRESHOLD := 0.12
 
 var world_size := Vector2.ZERO
 var width: int = 0
@@ -49,6 +51,7 @@ var deposited_total: float = 0.0
 var biome_states: PackedByteArray = PackedByteArray()
 var biome_transition_pressure: PackedFloat32Array = PackedFloat32Array()
 var biome_ages: PackedFloat32Array = PackedFloat32Array()
+var biome_disturbance: PackedFloat32Array = PackedFloat32Array()
 var biome_transitions_total: int = 0
 var _biome_accumulator: float = 0.0
 var _biome_field_indices: PackedInt32Array = PackedInt32Array()
@@ -79,6 +82,8 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	biome_transition_pressure.fill(0.0)
 	biome_ages.resize(width * height)
 	biome_ages.fill(0.0)
+	biome_disturbance.resize(width * height)
+	biome_disturbance.fill(0.0)
 	_fragment_grid_width = maxi(
 		1,
 		ceili(world_size.x / FRAGMENT_BUCKET_SIZE)
@@ -150,6 +155,10 @@ func biome_metrics() -> Dictionary:
 	counts.fill(0)
 	for state in biome_states:
 		counts[int(state)] += 1
+	var disturbed_signal_cells: int = 0
+	for pressure in biome_disturbance:
+		if float(pressure) > BIOME_DISTURBANCE_THRESHOLD:
+			disturbed_signal_cells += 1
 	return {
 		"open": counts[BIOME_OPEN],
 		"producer": counts[BIOME_PRODUCER],
@@ -158,6 +167,7 @@ func biome_metrics() -> Dictionary:
 		"fungal": counts[BIOME_FUNGAL],
 		"anoxic": counts[BIOME_ANOXIC],
 		"disturbed": counts[BIOME_DISTURBED],
+		"recently_modified": disturbed_signal_cells,
 		"transitions": biome_transitions_total,
 	}
 
@@ -231,6 +241,7 @@ func _apply_radial_mass(
 			) / weight_sum
 			var index: int = y * width + x
 			var share: float = safe_amount * weight
+			var local_change: float = 0.0
 			if is_deposit:
 				var room: float = maxf(
 					0.0,
@@ -238,6 +249,7 @@ func _apply_radial_mass(
 				)
 				var add: float = minf(room, share)
 				heights[index] = float(heights[index]) + add
+				local_change = add
 				changed += add
 			else:
 				var available: float = maxf(
@@ -246,7 +258,13 @@ func _apply_radial_mass(
 				)
 				var take: float = minf(available, share)
 				heights[index] = float(heights[index]) - take
+				local_change = take
 				changed += take
+			if local_change > 0.0:
+				biome_disturbance[index] = maxf(
+					float(biome_disturbance[index]),
+					clampf(0.35 + local_change * 4.0, 0.35, 1.0)
+				)
 
 	if changed > 0.0:
 		if is_deposit:
@@ -331,9 +349,7 @@ func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
 	var oxygen_value: float = float(sim.oxygen.values[field_index])
 	var waste_value: float = float(sim.waste.values[field_index])
 	var quorum_value: float = float(sim.quorum_signal.values[field_index])
-	var disturbed: float = absf(
-		float(heights[terrain_index]) - float(baseline_heights[terrain_index])
-	)
+	var disturbed: float = float(biome_disturbance[terrain_index])
 
 	# These are regime thresholds, not visual-only labels. Hysteresis below
 	# still requires a signal to persist before the substrate changes state.
@@ -347,7 +363,7 @@ func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
 		return BIOME_PRODUCER
 	if detritus_value > 0.040:
 		return BIOME_DETRITAL
-	if disturbed > 0.22:
+	if disturbed > BIOME_DISTURBANCE_THRESHOLD:
 		return BIOME_DISTURBED
 	return BIOME_OPEN
 
@@ -357,6 +373,10 @@ func _advance_biome_succession(sim: Variant, dt: float) -> void:
 	for y in range(height):
 		for x in range(width):
 			var index: int = _index(x, y)
+			biome_disturbance[index] = maxf(
+				0.0,
+				float(biome_disturbance[index]) - BIOME_DISTURBANCE_DECAY * dt
+			)
 			var current: int = int(biome_states[index])
 			var candidate: int = _candidate_biome_state(sim, index)
 			biome_ages[index] = float(biome_ages[index]) + dt
