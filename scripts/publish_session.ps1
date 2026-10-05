@@ -149,35 +149,84 @@ $safe = [ordered]@{
     samples = $safeSamples
 }
 
+$firstSample = if ($safeSamples.Count -gt 0) { $safeSamples[0] } else { $null }
+$lastSample = if ($safeSamples.Count -gt 0) { $safeSamples[$safeSamples.Count - 1] } else { $null }
+$retainedStart = if ($null -ne $firstSample) { I $firstSample.t_s } else { 0 }
+$retainedEnd = if ($null -ne $lastSample) { I $lastSample.t_s } else { 0 }
+$retainedCoverage = [Math]::Max(0, $retainedEnd - $retainedStart)
+
+function FinalValue([string]$Name) {
+    if ($null -eq $lastSample) { return 0 }
+    return I $lastSample.$Name
+}
+
+$timelineLines = New-Object System.Collections.Generic.List[string]
+$timelineLines.Add("t_s bac pro cil fla alg dec hyp eco lin gen mut hgt tr mix ref soilE soilD speed")
+if ($safeSamples.Count -gt 0) {
+    $stride = [Math]::Max(1, [int][Math]::Ceiling($safeSamples.Count / 180.0))
+    for ($i = 0; $i -lt $safeSamples.Count; $i += $stride) {
+        $s = $safeSamples[$i]
+        $timelineLines.Add((
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16:N1} {17:N1} {18:N2}" -f
+            (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
+            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.lineage_bins),
+            (I $s.max_generation),(I $s.structural_mutations),(I $s.hgt_events),(I $s.transformations),
+            (I $s.capability_mix_events),(I $s.refugia_recoveries),(N $s.soil_excavated),
+            (N $s.soil_deposited),(N $s.actual_speed)
+        ))
+    }
+    $lastIndex = $safeSamples.Count - 1
+    if (($lastIndex % $stride) -ne 0) {
+        $s = $safeSamples[$lastIndex]
+        $timelineLines.Add((
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16:N1} {17:N1} {18:N2}" -f
+            (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
+            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.lineage_bins),
+            (I $s.max_generation),(I $s.structural_mutations),(I $s.hgt_events),(I $s.transformations),
+            (I $s.capability_mix_events),(I $s.refugia_recoveries),(N $s.soil_excavated),
+            (N $s.soil_deposited),(N $s.actual_speed)
+        ))
+    }
+}
+$timelineText = $timelineLines -join [Environment]::NewLine
+
 $summary = @"
 ### Session $sessionId
 
 Build ``$buildSha`` · Godot ``$godot`` · $osFamily · $gpuVendor · $renderer · $displayBucket  
-Duration: $($safe.duration_s)s · samples: $($safeSamples.Count) · agent max: $([Math]::Round((Percentile $agentValues 1.0),0))
+Duration: $($safe.duration_s)s · retained detailed window: $retainedStart s → $retainedEnd s ($([Math]::Round($retainedCoverage / 60.0, 1)) min) · samples: $($safeSamples.Count)
 
-| metric | p50 | p95 | max/min |
+> Note: schema 1 keeps at most 900 samples at 2-second cadence, so sessions longer than ~30 minutes retain only their final detailed window. Cumulative counters still reflect the running simulation where applicable.
+
+| performance | p50 | p95 | max/min |
 | --- | ---: | ---: | ---: |
 | frame max ms | $([Math]::Round((Percentile $frameValues 0.50),2)) | $([Math]::Round((Percentile $frameValues 0.95),2)) | $([Math]::Round((Percentile $frameValues 1.0),2)) |
 | sim step ms | $([Math]::Round((Percentile $simValues 0.50),2)) | $([Math]::Round((Percentile $simValues 0.95),2)) | $([Math]::Round((Percentile $simValues 1.0),2)) |
 | core sim ms | $([Math]::Round((Percentile $coreValues 0.50),2)) | $([Math]::Round((Percentile $coreValues 0.95),2)) | $([Math]::Round((Percentile $coreValues 1.0),2)) |
 | terrain agents ms | $([Math]::Round((Percentile $terrainSimValues 0.50),2)) | $([Math]::Round((Percentile $terrainSimValues 0.95),2)) | $([Math]::Round((Percentile $terrainSimValues 1.0),2)) |
-| bacteria update ms | $([Math]::Round((Percentile $agentsValues 0.50),2)) | $([Math]::Round((Percentile $agentsValues 0.95),2)) | $([Math]::Round((Percentile $agentsValues 1.0),2)) |
-| mechanics ms | $([Math]::Round((Percentile $mechanicsValues 0.50),2)) | $([Math]::Round((Percentile $mechanicsValues 0.95),2)) | $([Math]::Round((Percentile $mechanicsValues 1.0),2)) |
-| draw ms | $([Math]::Round((Percentile $drawValues 0.50),2)) | $([Math]::Round((Percentile $drawValues 0.95),2)) | $([Math]::Round((Percentile $drawValues 1.0),2)) |
-| terrain batch rebuild ms | $([Math]::Round((Percentile $terrainBuildValues 0.50),2)) | $([Math]::Round((Percentile $terrainBuildValues 0.95),2)) | $([Math]::Round((Percentile $terrainBuildValues 1.0),2)) |
 | FPS | $([Math]::Round((Percentile $fpsValues 0.50),1)) | — | $([Math]::Round((Percentile $fpsValues 0.0),1)) min |
-| requested speed | $([Math]::Round((Percentile $requestedSpeedValues 0.50),2)) | $([Math]::Round((Percentile $requestedSpeedValues 0.95),2)) | $([Math]::Round((Percentile $requestedSpeedValues 1.0),2)) |
 | achieved speed | $([Math]::Round((Percentile $actualSpeedValues 0.50),2)) | $([Math]::Round((Percentile $actualSpeedValues 0.95),2)) | $([Math]::Round((Percentile $actualSpeedValues 1.0),2)) |
 
-Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).  
-Evolution peaks: ecotypes $([Math]::Round((Percentile $ecotypeValues 1.0),0)), generation $([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $([Math]::Round((Percentile $hgtValues 1.0),0)), refugia recoveries $([Math]::Round((Percentile $refugiaValues 1.0),0)).
+| guild | min | max | final |
+| --- | ---: | ---: | ---: |
+| bacteria | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.bacteria }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.bacteria }) 1.0),0)) | $(FinalValue "bacteria") |
+| protozoa | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.protozoa }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.protozoa }) 1.0),0)) | $(FinalValue "protozoa") |
+| ciliates | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.ciliates }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.ciliates }) 1.0),0)) | $(FinalValue "ciliates") |
+| flagellates | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.flagellates }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.flagellates }) 1.0),0)) | $(FinalValue "flagellates") |
+| algae | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.algae }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.algae }) 1.0),0)) | $(FinalValue "algae") |
+| decomposers | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.decomposers }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.decomposers }) 1.0),0)) | $(FinalValue "decomposers") |
+| hyphae | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.hyphae }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.hyphae }) 1.0),0)) | $(FinalValue "hyphae") |
+
+Evolution final/peak: ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
+Terraforming final: excavated $([Math]::Round((N $lastSample.soil_excavated),2)), deposited $([Math]::Round((N $lastSample.soil_deposited),2)).  
+Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
 
 <details>
-<summary>Allowlisted 2-second samples</summary>
+<summary>Compact retained timeline (downsampled to ≤180 rows)</summary>
 
-~~~json
-$($safe | ConvertTo-Json -Depth 8 -Compress)
-~~~
+```text
+$timelineText
+```
 
 </details>
 "@
