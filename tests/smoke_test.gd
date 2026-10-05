@@ -208,25 +208,6 @@ func _init() -> void:
 	if worst_drift_error > 0.035:
 		errors.append("performance: drift LUT approximation exceeded motion tolerance")
 
-	# Motion boundary reflection remains inside the world after local-write
-	# integration replaces the generic constraint call.
-	var boundary_probe = PetriSimulationScript.new(73019)
-	boundary_probe.seed_demo(4)
-	var boundary_cell = boundary_probe.bacteria[0]
-	boundary_cell.position = Vector2(0.01, 0.01)
-	boundary_cell.angle = -2.4
-	boundary_probe._advance_cell_motion_only(boundary_cell, 0.125)
-	var boundary_margin: float = (
-		float(boundary_cell.length) * 0.5
-		+ float(boundary_cell.radius)
-		+ 0.5
-	)
-	if (
-		float(boundary_cell.position.x) < boundary_margin - 0.0001
-		or float(boundary_cell.position.y) < boundary_margin - 0.0001
-	):
-		errors.append("performance: local motion boundary escaped world")
-
 	# Motion helper remains a deterministic reference for dense-path edge
 	# cases (dormancy and phage lysis) after the hot loop is inlined.
 	var inline_motion_probe = PetriSimulationScript.new(73018)

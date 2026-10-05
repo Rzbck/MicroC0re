@@ -888,7 +888,7 @@ func step(dt: float) -> void:
 							+ _agent_tick * 11
 						) * DRIFT_LUT_PHASE_STEP
 					) % DRIFT_LUT_SIZE
-					var motion_angle: float = wrapf(
+					cell.angle = wrapf(
 						float(cell.angle)
 						+ float(_drift_lut[motion_drift_phase])
 						* motion_drift_scale,
@@ -896,37 +896,19 @@ func step(dt: float) -> void:
 						PI
 					)
 					var motion_heading: Vector2 = _direction_for_angle(
-						motion_angle
+						float(cell.angle)
 					)
 					var motion_scale: float = (
 						agent_dt / (1.0 + motion_eps * 0.85)
 					)
-					var next_motion_position: Vector2 = (
+					cell.position = (
 						motion_position
 						+ motion_heading * motion_speed * motion_scale
 						+ _water_flow_for_field_index(
 							motion_field_index
 						) * motion_scale
 					)
-					var motion_margin: float = (
-						float(cell.length) * 0.5
-						+ float(cell.radius)
-						+ 0.5
-					)
-					if next_motion_position.x < motion_margin:
-						next_motion_position.x = motion_margin
-						motion_angle = PI - motion_angle
-					elif next_motion_position.x > world_size.x - motion_margin:
-						next_motion_position.x = world_size.x - motion_margin
-						motion_angle = PI - motion_angle
-					if next_motion_position.y < motion_margin:
-						next_motion_position.y = motion_margin
-						motion_angle = -motion_angle
-					elif next_motion_position.y > world_size.y - motion_margin:
-						next_motion_position.y = world_size.y - motion_margin
-						motion_angle = -motion_angle
-					cell.position = next_motion_position
-					cell.angle = wrapf(motion_angle, -PI, PI)
+					_constrain_to_world(cell)
 
 			if bool(cell.dying):
 				continue
@@ -1109,33 +1091,15 @@ func _advance_cell_motion_only(cell: Variant, dt: float) -> void:
 		(int(cell.id) * 17 + _agent_tick * 11) * DRIFT_LUT_PHASE_STEP
 	) % DRIFT_LUT_SIZE
 	var drift_turn: float = float(_drift_lut[drift_phase]) * 0.16 * dt
-	var motion_angle: float = wrapf(
-		float(cell.angle) + drift_turn,
-		-PI,
-		PI
-	)
-	var heading: Vector2 = _direction_for_angle(motion_angle)
+	cell.angle = wrapf(float(cell.angle) + drift_turn, -PI, PI)
+	var heading: Vector2 = _direction_for_angle(float(cell.angle))
 	var motion_scale: float = dt / (1.0 + local_eps * 0.85)
-	var next_position: Vector2 = (
+	cell.position = (
 		cell_position
 		+ heading * speed * motion_scale
 		+ _water_flow_for_field_index(field_index) * motion_scale
 	)
-	var margin: float = float(cell.length) * 0.5 + float(cell.radius) + 0.5
-	if next_position.x < margin:
-		next_position.x = margin
-		motion_angle = PI - motion_angle
-	elif next_position.x > world_size.x - margin:
-		next_position.x = world_size.x - margin
-		motion_angle = PI - motion_angle
-	if next_position.y < margin:
-		next_position.y = margin
-		motion_angle = -motion_angle
-	elif next_position.y > world_size.y - margin:
-		next_position.y = world_size.y - margin
-		motion_angle = -motion_angle
-	cell.position = next_position
-	cell.angle = wrapf(motion_angle, -PI, PI)
+	_constrain_to_world(cell)
 
 
 func _direction_for_angle(angle: float) -> Vector2:

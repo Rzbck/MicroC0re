@@ -60,7 +60,6 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 - A persistent `BacteriaHotStore` now mirrors dense-index hot state (stable ID, position, angle, energy, age, geometry, species/lineage hues and life flags). It is **lazy-synchronized for rendering** instead of mirrored on every biological sub-tick; identity changes only invalidate it. Mechanics keeps its dedicated packed position/radius/activity buffers, avoiding a second O(N) packed mirror tax. This preserves the SoA bridge without regressing the CPU core.
 - Dense movement lookup uses reciprocal field-cell multiplication, a pre-scaled direction LUT, non-negative integer modulo, and avoids zero-value adhesion writes. These preserve the same mapping while removing generic math/function overhead from the dominant motion path.
 - The ultra-density motion-only path is now inlined in the bacterial loop. Its dt-only phage/drift factors are computed once per agent tick and its EPS drag is collapsed to one motion scale, avoiding ~80% of per-cell GDScript motion dispatches at 10k.
-- Motion-only boundary response now keeps position/angle local through integration and writes each back once, instead of writing object state and immediately re-reading it inside `_constrain_to_world()`.
 
 This is the first explicit hot/cold split for #20; stable biological IDs remain unchanged.
 
