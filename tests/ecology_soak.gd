@@ -55,15 +55,23 @@ func _init() -> void:
 		min_active_guilds = mini(min_active_guilds, active_guilds)
 
 		if elapsed + 0.0001 >= next_report:
+			var biome: Dictionary = terrain.biome_metrics()
 			print(
-				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d eco=%d gen=%d refuge=%d soil=%.1f/%.1f"
+				"ecology_soak t=%ds bac=%d pro=%d cil=%d fla=%d alg=%d dec=%d hyp=%d sp=%d eco=%d gen=%d refuge=%d biome=%d/%d/%d/%d/%d/%d soil=%.1f/%.1f"
 				% [
 					int(round(elapsed)), sim.bacteria.size(), sim.protozoa.size(),
 					sim.ciliates.size(), sim.flagellates.size(), sim.microalgae.size(),
 					sim.decomposers.size(), sim.hyphae.size(),
+					int(evolution.get("species", 0)),
 					int(evolution.get("ecotypes", 0)),
 					int(evolution.get("max_generation", 0)),
 					int(sim.refugia_recoveries_total),
+					int(biome.get("producer", 0)),
+					int(biome.get("biofilm", 0)),
+					int(biome.get("detrital", 0)),
+					int(biome.get("fungal", 0)),
+					int(biome.get("anoxic", 0)),
+					int(biome.get("disturbed", 0)),
 					float(terrain.excavated_total), float(terrain.deposited_total),
 				]
 			)

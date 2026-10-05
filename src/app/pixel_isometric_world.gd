@@ -97,6 +97,7 @@ var far_agent_layer: Node2D
 var far_agent_accumulator: float = 0.0
 var last_far_agent_count: int = 0
 var evolution_metrics_cache: Dictionary = {}
+var biome_metrics_cache: Dictionary = {}
 var evolution_metrics_accumulator: float = 0.0
 
 
@@ -157,6 +158,7 @@ func _start_seed(seed_value: int) -> void:
 	visual_time = 0.0
 	actual_sim_speed = 0.0
 	evolution_metrics_cache = sim.evolution_metrics()
+	biome_metrics_cache = terrain.biome_metrics()
 	evolution_metrics_accumulator = 0.0
 	_speed_wall_accumulator = 0.0
 	_speed_sim_time_start = float(sim.simulation_time)
@@ -273,6 +275,7 @@ func _process(delta: float) -> void:
 		if evolution_metrics_accumulator >= 0.5:
 			evolution_metrics_accumulator = fmod(evolution_metrics_accumulator, 0.5)
 			evolution_metrics_cache = sim.evolution_metrics()
+			biome_metrics_cache = terrain.biome_metrics()
 
 	_update_terrain_layer_transform()
 
@@ -881,33 +884,35 @@ func _batch_far_group(
 			0:
 				half_length = 1.42 + clampf(float(agent.length) * 0.10, 0.0, 0.55)
 				half_width = 0.50 + clampf(float(agent.radius) * 0.24, 0.0, 0.24)
-				color = _lineage_color(float(agent.lineage_hue))
+				color = _evolved_lineage_tint(
+					Color(0.66, 0.74, 0.64), agent, 0.72, "bacterium"
+				)
 				if bool(agent.dying):
 					color = color.lerp(Color(0.72, 0.30, 0.18), 0.62)
 			1:
 				half_length = 2.35
 				half_width = 1.30
-				color = _evolved_lineage_tint(Color(0.62, 0.82, 0.76), agent, 0.34)
+				color = _evolved_lineage_tint(Color(0.62, 0.82, 0.76), agent, 0.48, "amoeba")
 			2:
 				half_length = 2.05
 				half_width = 0.92
-				color = _evolved_lineage_tint(Color(0.69, 0.69, 0.88), agent, 0.38)
+				color = _evolved_lineage_tint(Color(0.69, 0.69, 0.88), agent, 0.50, "ciliate")
 			3:
 				half_length = 1.65
 				half_width = 0.66
-				color = _evolved_lineage_tint(Color(0.82, 0.72, 0.44), agent, 0.42)
+				color = _evolved_lineage_tint(Color(0.82, 0.72, 0.44), agent, 0.54, "flagellate")
 			4:
 				half_length = 1.28
 				half_width = 0.88
-				color = _evolved_lineage_tint(Color(0.38, 0.68, 0.34), agent, 0.44)
+				color = _evolved_lineage_tint(Color(0.38, 0.68, 0.34), agent, 0.56, "alga")
 			5:
 				half_length = 1.36
 				half_width = 0.88
-				color = _evolved_lineage_tint(Color(0.72, 0.57, 0.35), agent, 0.44)
+				color = _evolved_lineage_tint(Color(0.72, 0.57, 0.35), agent, 0.56, "yeast")
 			6:
 				half_length = 1.90
 				half_width = 0.72
-				color = _evolved_lineage_tint(Color(0.64, 0.56, 0.38), agent, 0.40)
+				color = _evolved_lineage_tint(Color(0.64, 0.56, 0.38), agent, 0.52, "hypha")
 
 		var morph_scale: float = (
 			clampf(float(agent.gene_size), 0.74, 1.38)
@@ -1161,34 +1166,61 @@ func _agent_texture(kind: String, agent: Variant) -> Texture2D:
 	return null
 
 
-func _evolved_lineage_tint(base: Color, agent: Variant, amount: float = 0.38) -> Color:
+func _species_family_code(kind: String) -> int:
+	match kind:
+		"bacterium": return 0
+		"amoeba": return 1
+		"ciliate": return 2
+		"flagellate": return 3
+		"alga": return 4
+		"yeast": return 5
+		"hypha": return 6
+	return 0
+
+
+func _evolved_lineage_tint(
+	base: Color,
+	agent: Variant,
+	amount: float = 0.38,
+	kind: String = ""
+) -> Color:
 	if not "lineage_hue" in agent:
 		return base
+	var family_code: int = _species_family_code(kind)
+	var species_hue: float = (
+		sim.species_visual_hue(agent, family_code)
+		if sim != null
+		else float(agent.lineage_hue)
+	)
+	var species_color: Color = _lineage_color(species_hue)
+	var lineage_color: Color = _lineage_color(float(agent.lineage_hue))
 	return base.lerp(
-		_lineage_color(float(agent.lineage_hue)),
-		clampf(amount, 0.0, 0.72)
+		species_color.lerp(lineage_color, 0.22),
+		clampf(amount, 0.0, 0.78)
 	)
 
 
 func _agent_tint(kind: String, agent: Variant) -> Color:
 	match kind:
 		"bacterium":
-			var color: Color = _lineage_color(float(agent.lineage_hue))
+			var color: Color = _evolved_lineage_tint(
+				Color(0.70, 0.78, 0.68), agent, 0.72, "bacterium"
+			)
 			if bool(agent.dying):
 				color = color.lerp(Color(0.74, 0.34, 0.22), 0.62)
 			elif bool(agent.dormant):
 				color = color.lerp(Color(0.34, 0.42, 0.40), 0.62)
 			return color
 		"amoeba":
-			return _evolved_lineage_tint(Color(0.78, 0.90, 0.84), agent, 0.34)
+			return _evolved_lineage_tint(Color(0.78, 0.90, 0.84), agent, 0.48, "amoeba")
 		"ciliate":
-			return _evolved_lineage_tint(Color(0.84, 0.84, 0.95), agent, 0.38)
+			return _evolved_lineage_tint(Color(0.84, 0.84, 0.95), agent, 0.50, "ciliate")
 		"flagellate":
-			return _evolved_lineage_tint(Color(0.92, 0.84, 0.62), agent, 0.42)
+			return _evolved_lineage_tint(Color(0.92, 0.84, 0.62), agent, 0.54, "flagellate")
 		"alga":
-			return _evolved_lineage_tint(Color(0.90, 0.96, 0.86), agent, 0.44)
+			return _evolved_lineage_tint(Color(0.90, 0.96, 0.86), agent, 0.56, "alga")
 		"yeast":
-			return _evolved_lineage_tint(Color(0.94, 0.88, 0.78), agent, 0.44)
+			return _evolved_lineage_tint(Color(0.94, 0.88, 0.78), agent, 0.56, "yeast")
 	return Color.WHITE
 
 
@@ -1220,7 +1252,7 @@ func _draw_hypha(colony: Variant) -> void:
 		draw_line(
 			a,
 			b,
-			_evolved_lineage_tint(Color(0.64, 0.56, 0.38), colony, 0.42),
+			_evolved_lineage_tint(Color(0.64, 0.56, 0.38), colony, 0.52, "hypha"),
 			width_px,
 			false
 		)
@@ -1239,7 +1271,7 @@ func _draw_hypha(colony: Variant) -> void:
 				tip - Vector2.ONE * px,
 				Vector2.ONE * px * 2.0
 			),
-			_evolved_lineage_tint(Color(0.78, 0.72, 0.50), colony, 0.34),
+			_evolved_lineage_tint(Color(0.78, 0.72, 0.50), colony, 0.44, "hypha"),
 			true
 		)
 
@@ -2048,8 +2080,8 @@ func _draw_inspector() -> void:
 func _draw_metrics_panel() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var panel := Rect2(
-		Vector2(12.0, viewport_size.y - 108.0),
-		Vector2(390.0, 90.0)
+		Vector2(12.0, viewport_size.y - 128.0),
+		Vector2(430.0, 110.0)
 	)
 	draw_rect(panel, Color(0.010, 0.022, 0.024, 0.88), true)
 	_ui_text(
@@ -2089,7 +2121,8 @@ func _draw_metrics_panel() -> void:
 	var evo: Dictionary = evolution_metrics_cache
 	_ui_text(
 		panel.position + Vector2(10.0, 75.0),
-		"evolution eco %d  gen %d  struct %d  HGT %d  refuge %d" % [
+		"evolution sp %d / eco %d  gen %d  struct %d  HGT %d  refuge %d" % [
+			int(evo.get("species", 0)),
 			int(evo.get("ecotypes", 0)),
 			int(evo.get("max_generation", 0)),
 			int(evo.get("structural_mutations", 0)),
@@ -2098,6 +2131,21 @@ func _draw_metrics_panel() -> void:
 		],
 		11,
 		Color(0.78, 0.67, 0.82)
+	)
+	var biome: Dictionary = biome_metrics_cache
+	_ui_text(
+		panel.position + Vector2(10.0, 94.0),
+		"biome P%d B%d D%d F%d A%d X%d  transitions %d" % [
+			int(biome.get("producer", 0)),
+			int(biome.get("biofilm", 0)),
+			int(biome.get("detrital", 0)),
+			int(biome.get("fungal", 0)),
+			int(biome.get("anoxic", 0)),
+			int(biome.get("disturbed", 0)),
+			int(biome.get("transitions", 0)),
+		],
+		11,
+		Color(0.62, 0.80, 0.66)
 	)
 
 func _handle_ui_click(position: Vector2) -> bool:
