@@ -262,7 +262,7 @@ if ($historySamples.Count -gt 0) {
     for ($i = 0; $i -lt $historySamples.Count; $i += $stride) {
         $s = $historySamples[$i]
         $timelineLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25:N1} {26:N1} {27:N2}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24:N1} {25:N1} {26:N2}" -f
             (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
             (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.max_generation),
             (I $s.structural_mutations),(I $s.hgt_events),(I $s.refugia_recoveries),
@@ -278,7 +278,7 @@ if ($historySamples.Count -gt 0) {
     if (($lastIndex % $stride) -ne 0) {
         $s = $historySamples[$lastIndex]
         $timelineLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25:N1} {26:N1} {27:N2}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24:N1} {25:N1} {26:N2}" -f
             (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
             (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.max_generation),
             (I $s.structural_mutations),(I $s.hgt_events),(I $s.refugia_recoveries),
