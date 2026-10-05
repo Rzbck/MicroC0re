@@ -262,7 +262,14 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 	var terrain_dt: float = _terrain_agent_dt(sim)
 	while _agent_accumulator >= terrain_dt:
 		_terrain_tick += 1
-		_advance_group(sim, sim.bacteria, terrain_dt, true)
+		var bacteria_stride: int = _terrain_bacteria_stride(sim)
+		_advance_group(
+			sim,
+			sim.bacteria,
+			terrain_dt,
+			true,
+			bacteria_stride
+		)
 		_advance_group(sim, sim.protozoa, terrain_dt, true)
 		_advance_group(sim, sim.ciliates, terrain_dt, true)
 		_advance_group(sim, sim.flagellates, terrain_dt, true)
@@ -388,8 +395,20 @@ func _biome_stability(index: int) -> float:
 	return 0.0
 
 
+func _terrain_population(sim: Variant) -> int:
+	return (
+		sim.bacteria.size()
+		+ sim.protozoa.size()
+		+ sim.ciliates.size()
+		+ sim.flagellates.size()
+		+ sim.microalgae.size()
+		+ sim.decomposers.size()
+		+ sim.hyphae.size()
+	)
+
+
 func _terrain_agent_dt(sim: Variant) -> float:
-	var count: int = sim.bacteria.size()
+	var count: int = _terrain_population(sim)
 	if count >= TERRAIN_ULTRA_THRESHOLD:
 		return TERRAIN_AGENT_DT_ULTRA
 	if count >= TERRAIN_MASS_THRESHOLD:
@@ -399,8 +418,17 @@ func _terrain_agent_dt(sim: Variant) -> float:
 	return TERRAIN_AGENT_DT_SMALL
 
 
-func _fragment_scan_interval(sim: Variant) -> float:
+func _terrain_bacteria_stride(sim: Variant) -> int:
 	var count: int = sim.bacteria.size()
+	if count >= TERRAIN_ULTRA_THRESHOLD:
+		return 4
+	if count >= TERRAIN_MASS_THRESHOLD:
+		return 2
+	return 1
+
+
+func _fragment_scan_interval(sim: Variant) -> float:
+	var count: int = _terrain_population(sim)
 	if count >= TERRAIN_ULTRA_THRESHOLD:
 		return 1.5
 	if count >= TERRAIN_MASS_THRESHOLD:
@@ -628,14 +656,26 @@ func _advance_group(
 	sim: Variant,
 	group: Array,
 	dt: float,
-	can_move: bool
+	can_move: bool,
+	stride: int = 1
 ) -> void:
+	var effective_stride: int = maxi(1, stride)
 	for agent in group:
 		if agent == null or bool(agent.dying):
 			continue
 		if agent.physical_genome == null:
 			continue
-		_advance_agent(sim, agent, dt, can_move)
+		if (
+			effective_stride > 1
+			and posmod(int(agent.id) + _terrain_tick, effective_stride) != 0
+		):
+			continue
+		_advance_agent(
+			sim,
+			agent,
+			dt * float(effective_stride),
+			can_move
+		)
 
 
 func _biome_affinity(agent: Variant, state: int) -> float:
