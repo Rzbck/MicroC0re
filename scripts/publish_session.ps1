@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $raw = Get-Content -Raw -Path $ReportPath | ConvertFrom-Json
-if ([int]$raw.schema -ne 1) {
+if ([int]$raw.schema -notin @(1, 2)) {
     throw "Unsupported session telemetry schema."
 }
 
@@ -108,6 +108,64 @@ foreach ($s in @($raw.samples)) {
     }
 }
 
+$safeLongSamples = @()
+foreach ($s in @($raw.long_samples)) {
+    $e = $s.events
+    $safeLongSamples += [ordered]@{
+        t_s = I $s.t_s
+        agents = I $s.agents
+        bacteria = I $s.bacteria
+        protozoa = I $s.protozoa
+        ciliates = I $s.ciliates
+        flagellates = I $s.flagellates
+        algae = I $s.algae
+        decomposers = I $s.decomposers
+        hyphae = I $s.hyphae
+        actual_speed = [Math]::Round((N $s.actual_speed), 3)
+        soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
+        soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
+        ecotypes = I $s.ecotypes
+        lineage_bins = I $s.lineage_bins
+        max_generation = I $s.max_generation
+        structural_mutations = I $s.structural_mutations
+        hgt_events = I $s.hgt_events
+        transformations = I $s.transformations
+        capability_mix_events = I $s.capability_mix_events
+        refugia_recoveries = I $s.refugia_recoveries
+        events = [ordered]@{
+            pred_proto_bacteria = I $e.pred_proto_bacteria
+            pred_proto_ciliate = I $e.pred_proto_ciliate
+            pred_proto_flagellate = I $e.pred_proto_flagellate
+            pred_proto_algae = I $e.pred_proto_algae
+            pred_proto_decomposer = I $e.pred_proto_decomposer
+            pred_ciliate_bacteria = I $e.pred_ciliate_bacteria
+            pred_ciliate_flagellate = I $e.pred_ciliate_flagellate
+            pred_ciliate_algae = I $e.pred_ciliate_algae
+            pred_ciliate_decomposer = I $e.pred_ciliate_decomposer
+            pred_flagellate_bacteria = I $e.pred_flagellate_bacteria
+            escape_proto = I $e.escape_proto
+            escape_ciliate = I $e.escape_ciliate
+            escape_flagellate = I $e.escape_flagellate
+            repro_bacteria = I $e.repro_bacteria
+            repro_protozoa = I $e.repro_protozoa
+            repro_ciliates = I $e.repro_ciliates
+            repro_flagellates = I $e.repro_flagellates
+            repro_algae = I $e.repro_algae
+            repro_decomposers = I $e.repro_decomposers
+            repro_hyphae = I $e.repro_hyphae
+            refugia_protozoa = I $e.refugia_protozoa
+            refugia_ciliates = I $e.refugia_ciliates
+            refugia_flagellates = I $e.refugia_flagellates
+            refugia_algae = I $e.refugia_algae
+            refugia_decomposers = I $e.refugia_decomposers
+            refugia_hyphae = I $e.refugia_hyphae
+            disturbance_resource = I $e.disturbance_resource
+            disturbance_washout = I $e.disturbance_washout
+            disturbance_organic = I $e.disturbance_organic
+        }
+    }
+}
+
 $frameValues = @($safeSamples | ForEach-Object { [double]$_.frame_ms_max })
 $simValues = @($safeSamples | ForEach-Object { [double]$_.sim_ms })
 $coreValues = @($safeSamples | ForEach-Object { [double]$_.core_sim_ms })
@@ -136,7 +194,7 @@ $counters = [ordered]@{
 }
 
 $safe = [ordered]@{
-    schema = 1
+    schema = I $raw.schema
     session_id = $sessionId
     build_sha = $buildSha
     godot = $godot
@@ -147,6 +205,43 @@ $safe = [ordered]@{
     duration_s = I $raw.duration_s
     counters = $counters
     samples = $safeSamples
+}
+
+$historySamples = if ($safeLongSamples.Count -gt 0) { $safeLongSamples } else { $safeSamples }
+$historyFirst = if ($historySamples.Count -gt 0) { $historySamples[0] } else { $null }
+$historyLast = if ($historySamples.Count -gt 0) { $historySamples[$historySamples.Count - 1] } else { $null }
+$historyStart = if ($null -ne $historyFirst) { I $historyFirst.t_s } else { 0 }
+$historyEnd = if ($null -ne $historyLast) { I $historyLast.t_s } else { 0 }
+$historyCoverage = [Math]::Max(0, $historyEnd - $historyStart)
+
+function EventValue([object]$Sample, [string]$Name) {
+    if ($null -eq $Sample -or $null -eq $Sample.events) { return 0 }
+    return I $Sample.events.$Name
+}
+
+function PredProto([object]$Sample) {
+    return (EventValue $Sample "pred_proto_bacteria") +
+        (EventValue $Sample "pred_proto_ciliate") +
+        (EventValue $Sample "pred_proto_flagellate") +
+        (EventValue $Sample "pred_proto_algae") +
+        (EventValue $Sample "pred_proto_decomposer")
+}
+
+function PredCiliate([object]$Sample) {
+    return (EventValue $Sample "pred_ciliate_bacteria") +
+        (EventValue $Sample "pred_ciliate_flagellate") +
+        (EventValue $Sample "pred_ciliate_algae") +
+        (EventValue $Sample "pred_ciliate_decomposer")
+}
+
+function PredFlagellate([object]$Sample) {
+    return (EventValue $Sample "pred_flagellate_bacteria")
+}
+
+function EscapeTotal([object]$Sample) {
+    return (EventValue $Sample "escape_proto") +
+        (EventValue $Sample "escape_ciliate") +
+        (EventValue $Sample "escape_flagellate")
 }
 
 $firstSample = if ($safeSamples.Count -gt 0) { $safeSamples[0] } else { $null }
@@ -161,30 +256,38 @@ function FinalValue([string]$Name) {
 }
 
 $timelineLines = New-Object System.Collections.Generic.List[string]
-$timelineLines.Add("t_s bac pro cil fla alg dec hyp eco lin gen mut hgt tr mix ref soilE soilD speed")
-if ($safeSamples.Count -gt 0) {
-    $stride = [Math]::Max(1, [int][Math]::Ceiling($safeSamples.Count / 180.0))
-    for ($i = 0; $i -lt $safeSamples.Count; $i += $stride) {
-        $s = $safeSamples[$i]
+$timelineLines.Add("t_s bac pro cil fla alg dec hyp eco gen mut hgt ref predP predC predF esc rB rP rC rF rA rD rH soilE soilD speed")
+if ($historySamples.Count -gt 0) {
+    $stride = [Math]::Max(1, [int][Math]::Ceiling($historySamples.Count / 180.0))
+    for ($i = 0; $i -lt $historySamples.Count; $i += $stride) {
+        $s = $historySamples[$i]
         $timelineLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16:N1} {17:N1} {18:N2}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25:N1} {26:N1} {27:N2}" -f
             (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
-            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.lineage_bins),
-            (I $s.max_generation),(I $s.structural_mutations),(I $s.hgt_events),(I $s.transformations),
-            (I $s.capability_mix_events),(I $s.refugia_recoveries),(N $s.soil_excavated),
-            (N $s.soil_deposited),(N $s.actual_speed)
+            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.max_generation),
+            (I $s.structural_mutations),(I $s.hgt_events),(I $s.refugia_recoveries),
+            (PredProto $s),(PredCiliate $s),(PredFlagellate $s),(EscapeTotal $s),
+            (EventValue $s "repro_bacteria"),(EventValue $s "repro_protozoa"),
+            (EventValue $s "repro_ciliates"),(EventValue $s "repro_flagellates"),
+            (EventValue $s "repro_algae"),(EventValue $s "repro_decomposers"),
+            (EventValue $s "repro_hyphae"),(N $s.soil_excavated),(N $s.soil_deposited),
+            (N $s.actual_speed)
         ))
     }
-    $lastIndex = $safeSamples.Count - 1
+    $lastIndex = $historySamples.Count - 1
     if (($lastIndex % $stride) -ne 0) {
-        $s = $safeSamples[$lastIndex]
+        $s = $historySamples[$lastIndex]
         $timelineLines.Add((
-            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16:N1} {17:N1} {18:N2}" -f
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25:N1} {26:N1} {27:N2}" -f
             (I $s.t_s),(I $s.bacteria),(I $s.protozoa),(I $s.ciliates),(I $s.flagellates),
-            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.lineage_bins),
-            (I $s.max_generation),(I $s.structural_mutations),(I $s.hgt_events),(I $s.transformations),
-            (I $s.capability_mix_events),(I $s.refugia_recoveries),(N $s.soil_excavated),
-            (N $s.soil_deposited),(N $s.actual_speed)
+            (I $s.algae),(I $s.decomposers),(I $s.hyphae),(I $s.ecotypes),(I $s.max_generation),
+            (I $s.structural_mutations),(I $s.hgt_events),(I $s.refugia_recoveries),
+            (PredProto $s),(PredCiliate $s),(PredFlagellate $s),(EscapeTotal $s),
+            (EventValue $s "repro_bacteria"),(EventValue $s "repro_protozoa"),
+            (EventValue $s "repro_ciliates"),(EventValue $s "repro_flagellates"),
+            (EventValue $s "repro_algae"),(EventValue $s "repro_decomposers"),
+            (EventValue $s "repro_hyphae"),(N $s.soil_excavated),(N $s.soil_deposited),
+            (N $s.actual_speed)
         ))
     }
 }
@@ -194,9 +297,10 @@ $summary = @"
 ### Session $sessionId
 
 Build ``$buildSha`` · Godot ``$godot`` · $osFamily · $gpuVendor · $renderer · $displayBucket  
-Duration: $($safe.duration_s)s · retained detailed window: $retainedStart s → $retainedEnd s ($([Math]::Round($retainedCoverage / 60.0, 1)) min) · samples: $($safeSamples.Count)
+Duration: $($safe.duration_s)s · retained detailed window: $retainedStart s → $retainedEnd s ($([Math]::Round($retainedCoverage / 60.0, 1)) min) · samples: $($safeSamples.Count)  
+Ecological history: $historyStart s → $historyEnd s ($([Math]::Round($historyCoverage / 3600.0, 2)) h) · long samples: $($safeLongSamples.Count)
 
-> Note: schema 1 keeps at most 900 samples at 2-second cadence, so sessions longer than ~30 minutes retain only their final detailed window. Cumulative counters still reflect the running simulation where applicable.
+> Schema 1 sessions retain only the final ~30 minutes in detail. Schema 2 additionally records a one-minute ecological history for up to 7 days.
 
 | performance | p50 | p95 | max/min |
 | --- | ---: | ---: | ---: |
@@ -219,10 +323,12 @@ Duration: $($safe.duration_s)s · retained detailed window: $retainedStart s →
 
 Evolution final/peak: ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
 Terraforming final: excavated $([Math]::Round((N $lastSample.soil_excavated),2)), deposited $([Math]::Round((N $lastSample.soil_deposited),2)).  
+Interactions final: proto predation $(PredProto $historyLast), ciliate predation $(PredCiliate $historyLast), flagellate predation $(PredFlagellate $historyLast), prey escapes $(EscapeTotal $historyLast).  
+Reproduction final: bacteria $(EventValue $historyLast "repro_bacteria"), protozoa $(EventValue $historyLast "repro_protozoa"), ciliates $(EventValue $historyLast "repro_ciliates"), flagellates $(EventValue $historyLast "repro_flagellates"), algae $(EventValue $historyLast "repro_algae"), decomposers $(EventValue $historyLast "repro_decomposers"), hyphae $(EventValue $historyLast "repro_hyphae").  
 Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
 
 <details>
-<summary>Compact retained timeline (downsampled to ≤180 rows)</summary>
+<summary>Compact ecological timeline (full long history when schema 2; ≤180 rows)</summary>
 
 ```text
 $timelineText
