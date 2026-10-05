@@ -154,6 +154,45 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Trophic capacity regression: safety ceilings are guards, not population
+	# targets. Predator carrying capacities must respond to prey abundance.
+	var capacity_probe = PetriSimulationScript.new(73004)
+	capacity_probe.seed_demo(72)
+	var low_flag_capacity: int = capacity_probe._flagellate_carrying_capacity()
+	var low_proto_capacity: int = capacity_probe._protozoan_carrying_capacity()
+	if low_flag_capacity >= PetriSimulationScript.FLAGELLATE_SAFETY_LIMIT:
+		errors.append("ecology: flagellate safety ceiling still acts as carrying capacity")
+	if low_proto_capacity >= PetriSimulationScript.PROTOZOAN_SAFETY_LIMIT:
+		errors.append("ecology: protozoan safety ceiling still acts as carrying capacity")
+	for extra in range(1200):
+		var prey = BacteriumScript.new(
+			900000 + extra,
+			Vector2(20.0 + float(extra % 80), 20.0 + float(extra % 40)),
+			0.0
+		)
+		capacity_probe.bacteria.append(prey)
+	if capacity_probe._flagellate_carrying_capacity() <= low_flag_capacity:
+		errors.append("ecology: flagellate capacity failed to follow prey abundance")
+	if capacity_probe._protozoan_carrying_capacity() <= low_proto_capacity:
+		errors.append("ecology: protozoan capacity failed to follow prey abundance")
+
+	# Basal seed-bank wake-up is niche-driven. Predators may coexist with dormant
+	# producers/decomposers instead of globally suppressing their germination.
+	var niche_wake_probe = PetriSimulationScript.new(73005)
+	niche_wake_probe.seed_demo(24)
+	niche_wake_probe.microalgae.clear()
+	niche_wake_probe.decomposers.clear()
+	niche_wake_probe.hyphae.clear()
+	niche_wake_probe.producer_biomass.fill(0.08)
+	niche_wake_probe.oxygen.fill(0.40)
+	niche_wake_probe.detritus.fill(0.10)
+	if not niche_wake_probe._refugia_can_wake(3):
+		errors.append("ecology: viable producer niche failed to wake algal refugia")
+	if not niche_wake_probe._refugia_can_wake(4):
+		errors.append("ecology: detrital niche failed to wake decomposer refugia")
+	if not niche_wake_probe._refugia_can_wake(5):
+		errors.append("ecology: detrital niche failed to wake fungal refugia")
+
 	# Multi-species seed-bank regression: guild crashes must not collapse all
 	# dormant diversity to one remembered clone.
 	var guild_bank_probe = PetriSimulationScript.new(73003)

@@ -1526,11 +1526,64 @@ func _sporulate_hypha(parent: Variant) -> Variant:
 	return daughter
 
 
+func _flagellate_carrying_capacity() -> int:
+	# Safety limits remain hard CPU guards. Ecological capacity follows prey.
+	return clampi(
+		2 + floori(float(bacteria.size()) / 110.0),
+		2,
+		FLAGELLATE_SAFETY_LIMIT
+	)
+
+
+func _ciliate_carrying_capacity() -> int:
+	var prey_units: float = (
+		float(bacteria.size())
+		+ float(flagellates.size()) * 18.0
+		+ float(microalgae.size()) * 12.0
+		+ float(decomposers.size()) * 10.0
+	)
+	return clampi(
+		1 + floori(prey_units / 240.0),
+		1,
+		CILIATE_SAFETY_LIMIT
+	)
+
+
+func _protozoan_carrying_capacity() -> int:
+	var prey_units: float = (
+		float(bacteria.size())
+		+ float(flagellates.size()) * 18.0
+		+ float(ciliates.size()) * 24.0
+		+ float(microalgae.size()) * 14.0
+		+ float(decomposers.size()) * 12.0
+	)
+	return clampi(
+		1 + floori(prey_units / 360.0),
+		1,
+		PROTOZOAN_SAFETY_LIMIT
+	)
+
+
+func _crowding_maintenance_multiplier(current: int, capacity: int) -> float:
+	if current <= capacity:
+		return 1.0
+	return 1.0 + clampf(
+		float(current - capacity) / float(maxi(1, capacity)) * 0.55,
+		0.0,
+		2.0
+	)
+
+
 func _advance_flagellates(dt: float) -> void:
 	var next_flagellates: Array = []
+	var trophic_capacity: int = _flagellate_carrying_capacity()
 	var available_births: int = maxi(
 		0,
-		FLAGELLATE_SAFETY_LIMIT - flagellates.size()
+		mini(FLAGELLATE_SAFETY_LIMIT, trophic_capacity) - flagellates.size()
+	)
+	var crowding_multiplier: float = _crowding_maintenance_multiplier(
+		flagellates.size(),
+		trophic_capacity
 	)
 
 	for flagellate in flagellates:
@@ -1565,6 +1618,7 @@ func _advance_flagellates(dt: float) -> void:
 			flagellate_maintenance
 			* float(flagellate.gene_metabolism)
 			* (0.82 + 0.18 * float(flagellate.gene_size))
+			* crowding_multiplier
 		)
 		flagellate.energy = float(flagellate.energy) - maintenance * dt
 
@@ -1780,7 +1834,15 @@ func _constrain_flagellate(flagellate: Variant) -> void:
 
 func _advance_protozoa(dt: float) -> void:
 	var next_protozoa: Array = []
-	var available_births: int = maxi(0, PROTOZOAN_SAFETY_LIMIT - protozoa.size())
+	var trophic_capacity: int = _protozoan_carrying_capacity()
+	var available_births: int = maxi(
+		0,
+		mini(PROTOZOAN_SAFETY_LIMIT, trophic_capacity) - protozoa.size()
+	)
+	var crowding_multiplier: float = _crowding_maintenance_multiplier(
+		protozoa.size(),
+		trophic_capacity
+	)
 
 	for proto in protozoa:
 		if bool(proto.dying):
@@ -1811,6 +1873,7 @@ func _advance_protozoa(dt: float) -> void:
 			protozoan_maintenance
 			* float(proto.gene_metabolism)
 			* (0.75 + 0.25 * float(proto.gene_size))
+			* crowding_multiplier
 		)
 		proto.energy = float(proto.energy) - maintenance * dt
 
@@ -2190,7 +2253,15 @@ func _constrain_protozoan(proto: Variant) -> void:
 
 func _advance_ciliates(dt: float) -> void:
 	var next_ciliates: Array = []
-	var available_births: int = maxi(0, CILIATE_SAFETY_LIMIT - ciliates.size())
+	var trophic_capacity: int = _ciliate_carrying_capacity()
+	var available_births: int = maxi(
+		0,
+		mini(CILIATE_SAFETY_LIMIT, trophic_capacity) - ciliates.size()
+	)
+	var crowding_multiplier: float = _crowding_maintenance_multiplier(
+		ciliates.size(),
+		trophic_capacity
+	)
 
 	for ciliate in ciliates:
 		if bool(ciliate.consumed):
@@ -2227,6 +2298,7 @@ func _advance_ciliates(dt: float) -> void:
 			ciliate_maintenance
 			* float(ciliate.gene_metabolism)
 			* (0.80 + 0.20 * float(ciliate.gene_size))
+			* crowding_multiplier
 		)
 		ciliate.energy = float(ciliate.energy) - maintenance * dt
 
@@ -4415,22 +4487,32 @@ func _refugia_can_wake(kind: int) -> bool:
 	var all_predators: int = apex_pressure + flagellates.size()
 	match kind:
 		0:
-			# Large grazers return only after a prey base has re-established.
-			return (
-				protozoa.is_empty()
-				and bacteria.size() + flagellates.size() + microalgae.size() + decomposers.size() >= 24
-			)
+			# Large grazers return only when the prey web can support more than
+			# one individual; the hard safety ceiling is not the ecological target.
+			return protozoa.is_empty() and _protozoan_carrying_capacity() >= 2
 		1:
-			return (
-				ciliates.is_empty()
-				and bacteria.size() + flagellates.size() + microalgae.size() + decomposers.size() >= 20
-			)
+			return ciliates.is_empty() and _ciliate_carrying_capacity() >= 2
 		2:
-			return flagellates.is_empty() and bacteria.size() >= 18
-		3, 4, 5:
-			# Dormant basal guilds wait out a predator bloom instead of being
-			# injected directly into it as endless food.
-			return apex_pressure <= 3
+			return flagellates.is_empty() and _flagellate_carrying_capacity() >= 2
+		3:
+			# Producer cysts germinate when a real oxic producer niche exists.
+			return (
+				microalgae.is_empty()
+				and producer_biomass.max_value() > 0.025
+				and oxygen.max_value() > 0.10
+			)
+		4:
+			# Decomposer spores respond to carrion/substrate rather than waiting
+			# for every grazer to disappear.
+			return (
+				decomposers.is_empty()
+				and detritus.max_value() > 0.040
+			)
+		5:
+			return (
+				hyphae.is_empty()
+				and detritus.max_value() > 0.060
+			)
 		6:
 			return bacteria.is_empty() and all_predators <= 4
 	return false
