@@ -160,6 +160,7 @@ foreach ($s in @($raw.long_samples)) {
             repro_algae = I $e.repro_algae
             repro_decomposers = I $e.repro_decomposers
             repro_hyphae = I $e.repro_hyphae
+            refugia_bacteria = I $e.refugia_bacteria
             refugia_protozoa = I $e.refugia_protozoa
             refugia_ciliates = I $e.refugia_ciliates
             refugia_flagellates = I $e.refugia_flagellates

@@ -154,6 +154,34 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Refugia regression: a fully lost bacterial guild must be recoverable from
+	# the seed bank, and germination must not fake a reproductive generation.
+	var refuge_probe = PetriSimulationScript.new(73002)
+	refuge_probe.seed_demo(12)
+	refuge_probe._refresh_refugia_memory()
+	var bank_generation: int = int(refuge_probe._refugia_bacteria[0].generation)
+	refuge_probe.bacteria.clear()
+	refuge_probe.protozoa.clear()
+	refuge_probe.ciliates.clear()
+	refuge_probe.flagellates.clear()
+	refuge_probe._maintain_ecological_refugia(
+		PetriSimulationScript.REFUGIA_RECOVERY_INTERVAL
+	)
+	if refuge_probe.bacteria.is_empty():
+		errors.append("ecology: bacterial seed bank failed to recover extinction")
+	else:
+		if int(refuge_probe.bacteria[0].generation) != bank_generation:
+			errors.append("ecology: refuge wake incorrectly advanced generation")
+		if int(refuge_probe.ecology_events.get("refugia_bacteria", 0)) != 1:
+			errors.append("ecology: bacterial refuge wake was not counted")
+	var refuge_count_before: int = refuge_probe.refugia_recoveries_total
+	refuge_probe.bacteria.clear()
+	refuge_probe._maintain_ecological_refugia(
+		PetriSimulationScript.REFUGIA_RECOVERY_INTERVAL
+	)
+	if refuge_probe.refugia_recoveries_total != refuge_count_before:
+		errors.append("ecology: refuge cooldown allowed immediate reinjection churn")
+
 	var id_probe = PetriSimulationScript.new(73001)
 	id_probe.seed_demo(24)
 	id_probe.step(1.0 / 30.0)
