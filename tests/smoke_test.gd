@@ -33,6 +33,7 @@ const PixelEffectAtlasScript = preload("res://src/app/pixel_effect_atlas.gd")
 const PixelDNAAtlasScript = preload("res://src/app/pixel_dna_atlas.gd")
 const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
 const PixelPhageAtlasScript = preload("res://src/app/pixel_phage_atlas.gd")
+const PixelTerrainPropAtlasScript = preload("res://src/app/pixel_terrain_prop_atlas.gd")
 
 const STEPS := 600
 const DT := 1.0 / 60.0
@@ -44,6 +45,21 @@ func _init() -> void:
 
 	if WaterBackgroundShader == null or BiomeMaterialShader == null:
 		errors.append("render: biome shader resources failed to preload")
+
+	var terrain_prop_assets = PixelTerrainPropAtlasScript.new()
+	for prop_kind in range(PixelTerrainPropAtlasScript.PROP_COUNT):
+		var prop_texture: Texture2D = terrain_prop_assets.get_texture(
+			prop_kind,
+			prop_kind,
+			prop_kind
+		)
+		if (
+			prop_texture == null
+			or prop_texture.get_width() != PixelTerrainPropAtlasScript.WIDTH
+			or prop_texture.get_height() != PixelTerrainPropAtlasScript.HEIGHT
+		):
+			errors.append("render: terrain prop atlas texture missing")
+			break
 
 	var effect_assets = PixelEffectAtlasScript.new()
 	var lysis_fx: Texture2D = effect_assets.get_texture(
@@ -640,6 +656,17 @@ func _init() -> void:
 		!= LivingTerrainScript.HABITAT_MARSH
 	):
 		errors.append("biome: wet producer edge should derive a marsh habitat")
+
+	var hydro_equilibrium = LivingTerrainScript.new(
+		73022,
+		Vector2(30.0, 30.0)
+	)
+	hydro_equilibrium.water_depths.fill(0.50)
+	hydro_equilibrium.soil_moisture.fill(0.65)
+	var water_before: float = float(hydro_equilibrium.water_depths[0])
+	hydro_equilibrium._advance_hydrology(1.0)
+	if float(hydro_equilibrium.water_depths[0]) >= water_before:
+		errors.append("biome: excess surface water failed to infiltrate")
 
 	# Trophic capacity regression: safety ceilings are guards, not population
 	# targets. Predator carrying capacities must respond to prey abundance.

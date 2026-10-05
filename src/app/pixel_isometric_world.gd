@@ -10,6 +10,7 @@ const PixelCiliateAtlasScript = preload("res://src/app/pixel_ciliate_atlas.gd")
 const PixelFlagellateAtlasScript = preload("res://src/app/pixel_flagellate_atlas.gd")
 const PixelEcologyAtlasScript = preload("res://src/app/pixel_ecology_atlas.gd")
 const PixelHyphaAtlasScript = preload("res://src/app/pixel_hypha_atlas.gd")
+const PixelTerrainPropAtlasScript = preload("res://src/app/pixel_terrain_prop_atlas.gd")
 const SessionTelemetryScript = preload("res://src/app/session_telemetry.gd")
 
 const FIXED_DT := 1.0 / 60.0
@@ -72,6 +73,7 @@ var ciliate_atlas: Variant
 var flagellate_atlas: Variant
 var ecology_atlas: Variant
 var hypha_atlas: Variant
+var terrain_prop_atlas: Variant
 
 var rotation_quarter: int = 0
 var fit_zoom: float = 1.0
@@ -148,6 +150,7 @@ func _ready() -> void:
 	flagellate_atlas = PixelFlagellateAtlasScript.new()
 	ecology_atlas = PixelEcologyAtlasScript.new()
 	hypha_atlas = PixelHyphaAtlasScript.new()
+	terrain_prop_atlas = PixelTerrainPropAtlasScript.new()
 
 	_start_seed(current_seed)
 	telemetry = SessionTelemetryScript.new()
@@ -524,128 +527,7 @@ func _rebuild_terrain_batch() -> void:
 						_round_vec(mark_center + Vector2(-1.0, 0.5)),
 						mark_color
 					)
-				elif mark == 4:
-					# Grass: low two-pixel tuft.
-					_batch_quad(
-						mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-1.4, -0.8)),
-						_round_vec(mark_center + Vector2(1.4, -0.8)),
-						_round_vec(mark_center + Vector2(1.0, 0.2)),
-						_round_vec(mark_center + Vector2(-1.0, 0.2)),
-						Color(0.28, 0.58, 0.24, 0.92)
-					)
-				elif mark == 5:
-					var shrub_spread: float = 2.4 + flora_variant * 0.35
-					var shrub_dark: Color = _season_palette(Color(0.16, 0.42, 0.18), 0.55)
-					var shrub_light: Color = _season_palette(Color(0.34, 0.64, 0.27), 0.62)
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-2.6, 0.0)),
-						_round_vec(mark_center + Vector2(2.6, 0.0)),
-						_round_vec(mark_center + Vector2(1.8, 0.8)),
-						_round_vec(mark_center + Vector2(-1.8, 0.8)),
-						Color(0.03, 0.05, 0.03, 0.30))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-shrub_spread, -1.5)),
-						_round_vec(mark_center + Vector2(shrub_spread, -1.5)),
-						_round_vec(mark_center + Vector2(1.9, 0.3)),
-						_round_vec(mark_center + Vector2(-1.9, 0.3)),
-						shrub_dark)
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-1.6, -2.5 - flora_variant * 0.25)),
-						_round_vec(mark_center + Vector2(1.6, -2.5 - flora_variant * 0.25)),
-						_round_vec(mark_center + Vector2(1.25, -0.8)),
-						_round_vec(mark_center + Vector2(-1.25, -0.8)),
-						shrub_light)
-				elif mark == 6:
-					var tree_height: float = 5.4 + flora_variant * 0.7
-					var canopy_w: float = 3.3 + flora_variant * 0.35
-					var canopy_dark: Color = _season_palette(Color(0.12, 0.38, 0.16), 0.78)
-					var canopy_light: Color = _season_palette(Color(0.26, 0.58, 0.22), 0.86)
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-3.2, 0.1)),
-						_round_vec(mark_center + Vector2(3.2, 0.1)),
-						_round_vec(mark_center + Vector2(2.0, 1.1)),
-						_round_vec(mark_center + Vector2(-2.0, 1.1)),
-						Color(0.03, 0.04, 0.025, 0.34))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-0.65, -tree_height + 2.0)),
-						_round_vec(mark_center + Vector2(0.65, -tree_height + 2.0)),
-						_round_vec(mark_center + Vector2(0.55, 0.4)),
-						_round_vec(mark_center + Vector2(-0.55, 0.4)),
-						Color(0.38, 0.24, 0.12, 1.0))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-canopy_w, -tree_height)),
-						_round_vec(mark_center + Vector2(canopy_w, -tree_height)),
-						_round_vec(mark_center + Vector2(canopy_w * 0.78, -tree_height + 2.8)),
-						_round_vec(mark_center + Vector2(-canopy_w * 0.78, -tree_height + 2.8)),
-						canopy_dark)
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-canopy_w * 0.62, -tree_height - 1.4)),
-						_round_vec(mark_center + Vector2(canopy_w * 0.62, -tree_height - 1.4)),
-						_round_vec(mark_center + Vector2(canopy_w * 0.48, -tree_height + 0.5)),
-						_round_vec(mark_center + Vector2(-canopy_w * 0.48, -tree_height + 0.5)),
-						canopy_light)
-				elif mark == 7:
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-2.4, 0.2)),
-						_round_vec(mark_center + Vector2(2.4, 0.2)),
-						_round_vec(mark_center + Vector2(1.5, 0.9)),
-						_round_vec(mark_center + Vector2(-1.5, 0.9)),
-						Color(0.025, 0.03, 0.028, 0.34))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(0.0, -2.0 - flora_variant * 0.25)),
-						_round_vec(mark_center + Vector2(2.3, -0.25)),
-						_round_vec(mark_center + Vector2(0.0, 1.0)),
-						_round_vec(mark_center + Vector2(-2.3, -0.25)),
-						Color(0.39, 0.43, 0.40, 0.98))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-0.3, -1.75)),
-						_round_vec(mark_center + Vector2(1.45, -0.35)),
-						_round_vec(mark_center + Vector2(0.3, 0.0)),
-						_round_vec(mark_center + Vector2(-1.25, -0.45)),
-						Color(0.56, 0.59, 0.54, 0.88))
-				elif mark == 8:
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-2.8, 0.0)),
-						_round_vec(mark_center + Vector2(2.8, 0.0)),
-						_round_vec(mark_center + Vector2(1.9, 0.8)),
-						_round_vec(mark_center + Vector2(-1.9, 0.8)),
-						Color(0.08, 0.20, 0.14, 0.76))
-					for reed in range(3):
-						var reed_x: float = -1.7 + float(reed) * 1.7 + (flora_variant - 1.0) * 0.25
-						var reed_h: float = 2.8 + float(posmod(cache_index + reed * 5, 3))
-						_batch_quad(mark_points, mark_colors, mark_indices,
-							_round_vec(mark_center + Vector2(reed_x - 0.35, -reed_h)),
-							_round_vec(mark_center + Vector2(reed_x + 0.35, -reed_h - 0.5)),
-							_round_vec(mark_center + Vector2(reed_x + 0.30, 0.3)),
-							_round_vec(mark_center + Vector2(reed_x - 0.30, 0.3)),
-							_season_palette(Color(0.30, 0.54, 0.24), 0.52))
-				elif mark == 9:
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-3.0, -0.5)),
-						_round_vec(mark_center + Vector2(2.2, -0.8)),
-						_round_vec(mark_center + Vector2(3.0, 0.2)),
-						_round_vec(mark_center + Vector2(-1.8, 0.7)),
-						Color(0.68, 0.54, 0.30, 0.72))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-1.2, -1.0)),
-						_round_vec(mark_center + Vector2(1.8, -0.7)),
-						_round_vec(mark_center + Vector2(0.9, -0.1)),
-						_round_vec(mark_center + Vector2(-1.7, -0.3)),
-						Color(0.82, 0.67, 0.38, 0.78))
-				elif mark == 10:
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-3.1, 0.5)),
-						_round_vec(mark_center + Vector2(3.2, 0.4)),
-						_round_vec(mark_center + Vector2(1.7, -2.2)),
-						_round_vec(mark_center + Vector2(-2.0, -1.6)),
-						Color(0.31, 0.34, 0.32, 0.98))
-					_batch_quad(mark_points, mark_colors, mark_indices,
-						_round_vec(mark_center + Vector2(-1.8, -1.5)),
-						_round_vec(mark_center + Vector2(1.6, -2.2)),
-						_round_vec(mark_center + Vector2(0.3, -4.8 - flora_variant * 0.4)),
-						_round_vec(mark_center + Vector2(-0.9, -3.5)),
-						Color(0.51, 0.54, 0.50, 0.94))
+				# Cover/habitat marks 4+ are rendered as authored pixel-art props.
 
 	var terrain_rid: RID = terrain_batch_layer.get_canvas_item()
 	var mark_rid: RID = terrain_mark_layer.get_canvas_item()
@@ -666,12 +548,133 @@ func _rebuild_terrain_batch() -> void:
 			mark_points,
 			mark_colors
 		)
+	_draw_terrain_prop_batch(mark_rid, dims)
 
 	last_visible_tiles = tile_count
 	last_terrain_triangles = indices.size() / 3
 	last_terrain_build_ms = (
 		float(Time.get_ticks_usec() - started) / 1000.0
 	)
+
+
+
+func _draw_terrain_prop_batch(mark_rid: RID, dims: Vector2i) -> void:
+	if terrain_prop_atlas == null:
+		return
+	var max_diag: int = dims.x + dims.y - 2
+	var cx: float = float(dims.x - 1) * 0.5
+	var cy: float = float(dims.y - 1) * 0.5
+	for diag in range(max_diag + 1):
+		var rx_min: int = maxi(0, diag - (dims.y - 1))
+		var rx_max: int = mini(dims.x - 1, diag)
+		for rx in range(rx_min, rx_max + 1):
+			var ry: int = diag - rx
+			var source: Vector2i = _rotated_to_source(rx, ry)
+			var cache_index: int = source.y * terrain.width + source.x
+			if (
+				cache_index < 0
+				or cache_index >= terrain_mark_cache.size()
+			):
+				continue
+			var mark: int = int(terrain_mark_cache[cache_index])
+			if mark < 4 or not _should_draw_terrain_prop(
+				mark,
+				source,
+				cache_index
+			):
+				continue
+			var kind: int = _terrain_prop_kind(mark)
+			if kind < 0:
+				continue
+			var height_value: float = terrain.height_at_grid(
+				source.x,
+				source.y
+			)
+			var dx: float = float(rx) - cx
+			var dy: float = float(ry) - cy
+			var center := Vector2(
+				(dx - dy) * TILE_HALF_W,
+				(dx + dy) * TILE_HALF_H
+				- (height_value - 0.60) * HEIGHT_PIXELS
+			)
+			var variant: int = posmod(
+				cache_index * 37 + current_seed * 11,
+				PixelTerrainPropAtlasScript.VARIANTS
+			)
+			var texture: Texture2D = terrain_prop_atlas.get_texture(
+				kind,
+				variant,
+				int(terrain.season_index)
+			)
+			var size: Vector2 = texture.get_size()
+			var baseline: Vector2 = center + Vector2(0.0, 1.2)
+			var rect := Rect2(
+				_round_vec(
+					baseline
+					- Vector2(size.x * 0.5, size.y - 2.0)
+				),
+				size
+			)
+			RenderingServer.canvas_item_add_texture_rect(
+				mark_rid,
+				rect,
+				texture.get_rid(),
+				false,
+				Color.WHITE,
+				false
+			)
+
+
+func _terrain_prop_kind(mark: int) -> int:
+	match mark:
+		4:
+			return PixelTerrainPropAtlasScript.PROP_GRASS
+		5:
+			return PixelTerrainPropAtlasScript.PROP_SHRUB
+		6:
+			return PixelTerrainPropAtlasScript.PROP_TREE
+		7:
+			return PixelTerrainPropAtlasScript.PROP_ROCK
+		8:
+			return PixelTerrainPropAtlasScript.PROP_MARSH
+		9:
+			return PixelTerrainPropAtlasScript.PROP_SAND
+		10:
+			return PixelTerrainPropAtlasScript.PROP_CRAG
+		11:
+			return PixelTerrainPropAtlasScript.PROP_RIDGE
+	return -1
+
+
+func _should_draw_terrain_prop(
+	mark: int,
+	source: Vector2i,
+	cache_index: int
+) -> bool:
+	var divisor: int = 1
+	match mark:
+		4:
+			divisor = 2
+		5, 6:
+			divisor = 2
+		7:
+			divisor = 3
+		8:
+			divisor = 3
+		9:
+			divisor = 4
+		10:
+			divisor = 3
+		11:
+			divisor = 5
+	var stable_hash: int = posmod(
+		cache_index * 73
+		+ source.x * 31
+		+ source.y * 47
+		+ current_seed * 19,
+		9973
+	)
+	return posmod(stable_hash, divisor) == 0
 
 
 func _batch_quad(
@@ -959,6 +962,8 @@ func _terrain_top_color(
 			base = base.lerp(Color(0.61, 0.47, 0.26), 0.58)
 		LivingTerrainScript.HABITAT_CRAG:
 			base = base.lerp(Color(0.35, 0.37, 0.34), 0.62)
+		LivingTerrainScript.HABITAT_RIDGE:
+			base = base.lerp(Color(0.30, 0.33, 0.33), 0.74)
 
 	base = _season_palette(base, 0.18)
 
@@ -2300,6 +2305,8 @@ func _refresh_terrain_visual_cache() -> void:
 					mark = 9
 				LivingTerrainScript.HABITAT_CRAG:
 					mark = 10
+				LivingTerrainScript.HABITAT_RIDGE:
+					mark = 11
 				_:
 					if cover_state > LivingTerrainScript.COVER_BARE:
 						mark = 3 + cover_state

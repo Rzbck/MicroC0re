@@ -41,6 +41,9 @@ const HYDROLOGY_INTERVAL := 0.50
 const SEASON_CYCLE_SECONDS := 240.0
 const RAIN_RATE := 0.0032
 const EVAPORATION_RATE := 0.0022
+# Surface water must reach equilibrium. Without infiltration, seasonal rain
+# accumulated indefinitely until almost the whole dish became anoxic.
+const SURFACE_INFILTRATION_RATE := 0.0030
 const WATER_FLOW_RATE := 0.34
 const WATER_FLOW_CELL_FRACTION := 0.18
 const WATER_EPSILON := 0.008
@@ -55,11 +58,12 @@ const HABITAT_NONE := 0
 const HABITAT_MARSH := 1
 const HABITAT_SAND := 2
 const HABITAT_CRAG := 3
+const HABITAT_RIDGE := 4
 
 const COVER_UPDATE_INTERVAL := 2.0
-const COVER_GRASS_SECONDS := 8.0
-const COVER_SHRUB_SECONDS := 28.0
-const COVER_TREE_SECONDS := 70.0
+const COVER_GRASS_SECONDS := 6.0
+const COVER_SHRUB_SECONDS := 20.0
+const COVER_TREE_SECONDS := 52.0
 
 var world_size := Vector2.ZERO
 var width: int = 0
@@ -343,10 +347,10 @@ func habitat_state_at_grid(sim: Variant, x: int, y: int) -> int:
 		absf(local_height - down_height)
 	)
 	if (
-		local_water >= 0.018
-		and local_water <= 0.18
-		and local_moisture >= 0.34
-		and producer >= 0.030
+		local_water >= 0.012
+		and local_water <= 0.24
+		and local_moisture >= 0.30
+		and producer >= 0.020
 	):
 		return HABITAT_MARSH
 	if (
@@ -358,8 +362,13 @@ func habitat_state_at_grid(sim: Variant, x: int, y: int) -> int:
 	):
 		return HABITAT_SAND
 	if (
-		local_height >= WATER_LEVEL + 0.92
-		and slope >= 0.22
+		local_height >= WATER_LEVEL + 0.82
+		and slope >= 0.10
+	):
+		return HABITAT_RIDGE
+	if (
+		local_height >= WATER_LEVEL + 0.58
+		and slope >= 0.14
 	):
 		return HABITAT_CRAG
 	return HABITAT_NONE
@@ -392,13 +401,13 @@ func _habitat_affinity(agent: Variant, state: int) -> float:
 				else 0.0
 			)
 			return 0.36 + clampf(burrow_value * 0.24, 0.0, 0.34)
-		HABITAT_CRAG:
+		HABITAT_CRAG, HABITAT_RIDGE:
 			var climb_value: float = (
 				float(agent.physical_climb)
 				if "physical_climb" in agent
 				else 0.0
 			)
-			return 0.30 + clampf(climb_value * 0.30, 0.0, 0.42)
+			return 0.28 + clampf(climb_value * 0.34, 0.0, 0.48)
 	return 0.50
 
 
@@ -681,6 +690,21 @@ func _advance_hydrology(dt: float) -> void:
 		)
 		if lowland_floor > 0.0:
 			depth = maxf(depth, minf(1.5, lowland_floor))
+		var excess_surface: float = maxf(
+			0.0,
+			depth - lowland_floor
+		)
+		var infiltration: float = minf(
+			excess_surface,
+			SURFACE_INFILTRATION_RATE
+			* lerpf(
+				1.20,
+				0.72,
+				clampf(float(soil_moisture[i]), 0.0, 1.0)
+			)
+			* dt
+		)
+		depth = maxf(lowland_floor, depth - infiltration)
 		water_depths[i] = depth
 
 	# One right/down pair per edge; direction is chosen from the current water
@@ -747,7 +771,7 @@ func _advance_cover(sim: Variant, dt: float) -> void:
 		var disturbance: float = float(biome_disturbance[i])
 		var stress: float = float(cover_stress[i])
 
-		var bad_water: bool = water > 0.16
+		var bad_water: bool = water > 0.26
 		var too_dry: bool = moisture < 0.075
 		var disturbed: bool = disturbance > 0.42
 		if bad_water or too_dry or disturbed:
@@ -778,7 +802,7 @@ func _advance_cover(sim: Variant, dt: float) -> void:
 			0.0,
 			1.0
 		)
-		growth *= lerpf(0.08, 1.14, producer_support)
+		growth *= lerpf(0.16, 1.18, producer_support)
 		growth *= lerpf(0.45, 1.10, season_warmth)
 		if season_index == 3:
 			growth *= 0.58
@@ -803,16 +827,18 @@ func _advance_cover(sim: Variant, dt: float) -> void:
 		elif (
 			state == COVER_GRASS
 			and float(cover_age[i]) >= COVER_SHRUB_SECONDS
-			and moisture >= 0.16
+			and moisture >= 0.14
 			and moisture <= 0.82
+			and water < 0.14
 		):
 			cover_states[i] = COVER_SHRUB
 			transitioned = true
 		elif (
 			state == COVER_SHRUB
 			and float(cover_age[i]) >= COVER_TREE_SECONDS
-			and moisture >= 0.22
-			and moisture <= 0.72
+			and moisture >= 0.18
+			and moisture <= 0.74
+			and water < 0.08
 			and disturbance < 0.08
 		):
 			cover_states[i] = COVER_TREE
@@ -942,10 +968,14 @@ func _candidate_biome_state(sim: Variant, terrain_index: int) -> int:
 	# These are regime thresholds, not visual-only labels. Hysteresis below
 	# still requires a signal to persist before the substrate changes state.
 	if (
-		(local_water > 0.20 and oxygen_value < 0.24)
+		(local_water > 0.32 and oxygen_value < 0.18)
 		or (
-			oxygen_value < 0.16
-			and (waste_value > 0.035 or detritus_value > 0.045)
+			local_water > 0.10
+			and oxygen_value < 0.080
+			and (
+				waste_value > 0.050
+				or detritus_value > 0.060
+			)
 		)
 	):
 		return BIOME_ANOXIC
@@ -1522,6 +1552,8 @@ func _advance_agent(
 			substrate_factor *= 1.12
 		HABITAT_CRAG:
 			substrate_factor *= 0.46
+		HABITAT_RIDGE:
+			substrate_factor *= 0.30
 
 	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (

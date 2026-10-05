@@ -688,3 +688,26 @@ habitats are derived from actual hydrology, producer fields and relief, feed
 back into habitat preference/substrate cost, and receive dedicated pixel
 silhouettes. They are therefore consequences of the simulated landscape and
 organism activity rather than decorative stickers.
+
+
+## Authored terrain props and hydrology equilibrium
+
+The 21964d0 local run confirmed the ecology balance fix (predators now reproduce)
+but showed that vegetation/relief still read as tiny procedural glyphs. It also
+ended with 2204 anoxic terrain cells, only 7 grass cells, no shrubs/trees, and
+widespread standing water.
+
+This pass replaces the cover/habitat glyphs with a dedicated code-authored
+pixel-art atlas: grass tufts, multi-lobed shrubs, branched seasonal trees,
+faceted rocks, reed/cattail marsh clusters, sand bars, crags, and full mountain
+ridge silhouettes. Stable terrain-cell hashes select four variants; seasons
+change foliage while preserving form. Props are sparse cluster anchors rather
+than one icon per tile, so the terrain gains recognizable objects without
+becoming a new wall of visual noise.
+
+Hydrology now has explicit surface infiltration so rain can reach equilibrium
+instead of accumulating forever. Anoxic succession requires substantially
+stronger water/oxygen stress, marsh occupies the wet oxic transition zone, and
+cover succession is faster but now blocks shrubs/trees in standing water. A new
+derived RIDGE habitat exposes the highest real relief as large mountain pixel
+art and feeds back into climbing/substrate mechanics.

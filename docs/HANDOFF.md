@@ -357,9 +357,9 @@ feeding capped energy at 16.0 while reproduction required 16.5.
 This run directly motivated:
 - `51e0a7d Rebalance living biome readability`
 
-Therefore **do not treat 2222688 as the current target**. The next required
-product-validation gate is a fresh local run on `51e0a7d` (or a newer
-documentation-only HEAD above it).
+Therefore **do not treat 2222688 as the current target**. That run is now complete and exposed the next gate: vegetation/mountains must
+read as real pixel-art creations, while standing water/anoxia need equilibrium.
+Validate the authored terrain-prop pass after pulling the newest code commit.
 
 ---
 
@@ -367,6 +367,7 @@ documentation-only HEAD above it).
 
 Newest first:
 
+- **current code pass after 21964d0** — authored terrain pixel-art props + hydrology equilibrium + ridge habitat; validate locally after CI.
 - `51e0a7d` — **Rebalance living biome readability**
   - removes enclosing armor/reproduction geometry;
   - density-aware overview batching with close-zoom detail recovery;
