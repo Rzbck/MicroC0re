@@ -254,6 +254,43 @@ func _init() -> void:
 	if mat_probe.producer_biomass.total() <= seeded_before:
 		errors.append("biome: seeded producer mat failed to grow")
 
+	# Persistent biome succession regression: producer fields should mature into
+	# producer habitat and later transition under anoxic waste pressure.
+	var biome_sim = PetriSimulationScript.new(88230)
+	biome_sim.seed_demo(0)
+	var biome_terrain = LivingTerrainScript.new(
+		99110,
+		Vector2(biome_sim.world_size)
+	)
+	biome_sim.producer_biomass.fill(0.80)
+	biome_sim.oxygen.fill(0.80)
+	biome_sim.detritus.fill(0.0)
+	biome_sim.eps.fill(0.0)
+	biome_sim.fungal_enzyme.fill(0.0)
+	biome_sim.waste.fill(0.0)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	var biome_counts: Dictionary = biome_terrain.biome_metrics()
+	if int(biome_counts.get("producer", 0)) <= 0:
+		errors.append("biome: producer habitat failed to establish")
+	biome_sim.producer_biomass.fill(0.0)
+	biome_sim.oxygen.fill(0.02)
+	biome_sim.waste.fill(0.30)
+	biome_sim.detritus.fill(0.12)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	biome_terrain._advance_biome_succession(
+		biome_sim,
+		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
+	)
+	biome_counts = biome_terrain.biome_metrics()
+	if int(biome_counts.get("anoxic", 0)) <= 0:
+		errors.append("biome: anoxic succession failed to replace producer habitat")
+
 	# Cross-feeding / dormancy regression.
 	var interaction_probe = PetriSimulationScript.new(88231)
 	interaction_probe.seed_demo(1)

@@ -735,6 +735,7 @@ func _terrain_top_color(
 	var detritus_value: float = float(sim.detritus.sample_world(world))
 	var eps_value: float = float(sim.eps.sample_world(world))
 	var nutrient: float = float(sim.nutrient.sample_world(world))
+	var biome_state: int = terrain.biome_state_at_grid(source.x, source.y)
 
 	if height_value < LivingTerrainScript.WATER_LEVEL:
 		var water := Color(0.075, 0.22, 0.24)
@@ -761,6 +762,19 @@ func _terrain_top_color(
 		Color(0.39, 0.35, 0.19),
 		clampf(nutrient * 0.55, 0.0, 0.16)
 	)
+	match biome_state:
+		LivingTerrainScript.BIOME_PRODUCER:
+			base = base.lerp(Color(0.20, 0.48, 0.22), 0.34)
+		LivingTerrainScript.BIOME_BIOFILM:
+			base = base.lerp(Color(0.15, 0.42, 0.38), 0.38)
+		LivingTerrainScript.BIOME_DETRITAL:
+			base = base.lerp(Color(0.32, 0.20, 0.10), 0.38)
+		LivingTerrainScript.BIOME_FUNGAL:
+			base = base.lerp(Color(0.43, 0.31, 0.24), 0.42)
+		LivingTerrainScript.BIOME_ANOXIC:
+			base = base.lerp(Color(0.08, 0.13, 0.14), 0.58)
+		LivingTerrainScript.BIOME_DISTURBED:
+			base = base.lerp(Color(0.52, 0.31, 0.14), 0.34)
 	return base
 
 

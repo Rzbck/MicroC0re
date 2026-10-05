@@ -17,6 +17,17 @@ const TERRAIN_MASS_THRESHOLD := 1600
 const TERRAIN_ULTRA_THRESHOLD := 4500
 const FRAGMENT_BUCKET_SIZE := 4.0
 
+const BIOME_OPEN := 0
+const BIOME_PRODUCER := 1
+const BIOME_BIOFILM := 2
+const BIOME_DETRITAL := 3
+const BIOME_FUNGAL := 4
+const BIOME_ANOXIC := 5
+const BIOME_DISTURBED := 6
+const BIOME_STATE_COUNT := 7
+const BIOME_UPDATE_INTERVAL := 1.0
+const BIOME_TRANSITION_SECONDS := 9.0
+
 var world_size := Vector2.ZERO
 var width: int = 0
 var height: int = 0
@@ -35,6 +46,11 @@ var _fragment_agents: Array = []
 var revision: int = 0
 var excavated_total: float = 0.0
 var deposited_total: float = 0.0
+var biome_states: PackedByteArray = PackedByteArray()
+var biome_transition_pressure: PackedFloat32Array = PackedFloat32Array()
+var biome_ages: PackedFloat32Array = PackedFloat32Array()
+var biome_transitions_total: int = 0
+var _biome_accumulator: float = 0.0
 
 # Bounded mobile physical cassettes. When an organism disappears, one sampled
 # capability module can remain in the environment for a short time. Any current
@@ -55,6 +71,12 @@ func _init(seed_value: int = 1, p_world_size: Vector2 = Vector2(192.0, 128.0)) -
 	heights.resize(width * height)
 	_relax_delta.resize(width * height)
 	_relax_delta.fill(0.0)
+	biome_states.resize(width * height)
+	biome_states.fill(BIOME_OPEN)
+	biome_transition_pressure.resize(width * height)
+	biome_transition_pressure.fill(0.0)
+	biome_ages.resize(width * height)
+	biome_ages.fill(0.0)
 	_fragment_grid_width = maxi(
 		1,
 		ceili(world_size.x / FRAGMENT_BUCKET_SIZE)
@@ -106,6 +128,36 @@ func height_delta_at_grid(x: int, y: int) -> float:
 	var sy: int = clampi(y, 0, height - 1)
 	var index: int = _index(sx, sy)
 	return float(heights[index]) - float(baseline_heights[index])
+
+
+func biome_state_at_grid(x: int, y: int) -> int:
+	var sx: int = clampi(x, 0, width - 1)
+	var sy: int = clampi(y, 0, height - 1)
+	return int(biome_states[_index(sx, sy)])
+
+
+func sample_biome_state(position: Vector2) -> int:
+	var gx: int = clampi(roundi(position.x / CELL_SIZE), 0, width - 1)
+	var gy: int = clampi(roundi(position.y / CELL_SIZE), 0, height - 1)
+	return int(biome_states[_index(gx, gy)])
+
+
+func biome_metrics() -> Dictionary:
+	var counts := PackedInt32Array()
+	counts.resize(BIOME_STATE_COUNT)
+	counts.fill(0)
+	for state in biome_states:
+		counts[int(state)] += 1
+	return {
+		"open": counts[BIOME_OPEN],
+		"producer": counts[BIOME_PRODUCER],
+		"biofilm": counts[BIOME_BIOFILM],
+		"detrital": counts[BIOME_DETRITAL],
+		"fungal": counts[BIOME_FUNGAL],
+		"anoxic": counts[BIOME_ANOXIC],
+		"disturbed": counts[BIOME_DISTURBED],
+		"transitions": biome_transitions_total,
+	}
 
 
 func world_position_for_grid(x: int, y: int) -> Vector2:
@@ -224,6 +276,80 @@ func advance_from_sim(sim: Variant, dt: float) -> void:
 		_relax_accumulator = 0.0
 		_relax_slopes(relax_dt)
 
+	_biome_accumulator += dt
+	if _biome_accumulator >= BIOME_UPDATE_INTERVAL:
+		var biome_dt: float = _biome_accumulator
+		_biome_accumulator = 0.0
+		_advance_biome_succession(sim, biome_dt)
+
+
+
+func _candidate_biome_state(sim: Variant, x: int, y: int) -> int:
+	var world: Vector2 = world_position_for_grid(x, y)
+	var producer: float = float(sim.producer_biomass.sample_nearest_world(world))
+	var eps_value: float = float(sim.eps.sample_nearest_world(world))
+	var detritus_value: float = float(sim.detritus.sample_nearest_world(world))
+	var fungal_value: float = float(sim.fungal_enzyme.sample_nearest_world(world))
+	var oxygen_value: float = float(sim.oxygen.sample_nearest_world(world))
+	var waste_value: float = float(sim.waste.sample_nearest_world(world))
+	var quorum_value: float = float(sim.quorum_signal.sample_nearest_world(world))
+	var disturbed: float = absf(height_delta_at_grid(x, y))
+
+	if oxygen_value < 0.11 and (waste_value > 0.06 or detritus_value > 0.07):
+		return BIOME_ANOXIC
+	if fungal_value > 0.035 or (fungal_value > 0.010 and detritus_value > 0.10):
+		return BIOME_FUNGAL
+	if eps_value > 0.10 or (eps_value > 0.055 and quorum_value > 0.08):
+		return BIOME_BIOFILM
+	if producer > 0.12 and oxygen_value > 0.14:
+		return BIOME_PRODUCER
+	if detritus_value > 0.075:
+		return BIOME_DETRITAL
+	if disturbed > 0.30:
+		return BIOME_DISTURBED
+	return BIOME_OPEN
+
+
+func _advance_biome_succession(sim: Variant, dt: float) -> void:
+	for y in range(height):
+		for x in range(width):
+			var index: int = _index(x, y)
+			var current: int = int(biome_states[index])
+			var candidate: int = _candidate_biome_state(sim, x, y)
+			biome_ages[index] = float(biome_ages[index]) + dt
+
+			if candidate == current:
+				biome_transition_pressure[index] = maxf(
+					0.0,
+					float(biome_transition_pressure[index]) - dt * 0.65
+				)
+				continue
+
+			biome_transition_pressure[index] = (
+				float(biome_transition_pressure[index]) + dt
+			)
+			if float(biome_transition_pressure[index]) < BIOME_TRANSITION_SECONDS:
+				continue
+
+			biome_states[index] = candidate
+			biome_transition_pressure[index] = 0.0
+			biome_ages[index] = 0.0
+			biome_transitions_total += 1
+
+
+func _biome_stability(index: int) -> float:
+	match int(biome_states[index]):
+		BIOME_PRODUCER:
+			return 0.16
+		BIOME_BIOFILM:
+			return 0.22
+		BIOME_FUNGAL:
+			return 0.10
+		BIOME_DETRITAL:
+			return -0.04
+		BIOME_DISTURBED:
+			return -0.12
+	return 0.0
 
 
 func _terrain_agent_dt(sim: Variant) -> float:
@@ -500,6 +626,28 @@ func _advance_agent(
 		0.0,
 		1.0
 	)
+	var biome_state: int = sample_biome_state(position)
+	var habitat_tolerance: float = (
+		float(agent.gene_dormancy)
+		if "gene_dormancy" in agent
+		else 0.82
+	)
+	match biome_state:
+		BIOME_ANOXIC:
+			var anoxic_cost: float = 0.010 / maxf(0.45, habitat_tolerance)
+			if "gene_light_use" in agent:
+				anoxic_cost *= 1.35
+			agent.energy = maxf(0.0, float(agent.energy) - anoxic_cost * dt)
+		BIOME_BIOFILM:
+			if "gene_adhesion" in agent:
+				agent.energy = float(agent.energy) + 0.0025 * float(agent.gene_adhesion) * dt
+		BIOME_PRODUCER:
+			if "gene_light_use" in agent:
+				agent.energy = float(agent.energy) + 0.0018 * float(agent.gene_light_use) * dt
+		BIOME_DETRITAL, BIOME_FUNGAL:
+			if "gene_detritus" in agent:
+				agent.energy = float(agent.energy) + 0.0018 * float(agent.gene_detritus) * dt
+
 	var values: Array = agent.physical_genome.evaluate_context(
 		clampf(uphill / 1.25, 0.0, 1.0),
 		carrying_signal,
@@ -558,6 +706,19 @@ func _advance_agent(
 		)
 		agent.angle = wrapf(float(agent.angle) + turn * 0.075, -PI, PI)
 
+	var substrate_factor: float = 1.0
+	match biome_state:
+		BIOME_PRODUCER:
+			substrate_factor = 0.84
+		BIOME_BIOFILM:
+			substrate_factor = 0.76
+		BIOME_FUNGAL:
+			substrate_factor = 0.92
+		BIOME_DETRITAL:
+			substrate_factor = 1.10
+		BIOME_DISTURBED:
+			substrate_factor = 1.24
+
 	var capacity: float = 0.26 + carry * 0.34
 	agent.terrain_action_clock = float(agent.terrain_action_clock) + dt * (
 		0.50 + dig * 0.56 + deposit_strength * 0.25
@@ -614,7 +775,7 @@ func _advance_agent(
 		)
 		var requested: float = minf(
 			capacity - float(agent.carried_soil),
-			0.13 + dig * 0.18
+			(0.13 + dig * 0.18) * substrate_factor
 		)
 		var removed: float = excavate(
 			dig_target,
@@ -719,12 +880,16 @@ func _relax_pair(
 	var ha: float = float(heights[a])
 	var hb: float = float(heights[b])
 	var difference: float = ha - hb
-	if absf(difference) <= TALUS_HEIGHT:
+	var local_talus: float = (
+		TALUS_HEIGHT
+		+ (_biome_stability(a) + _biome_stability(b)) * 0.5
+	)
+	if absf(difference) <= local_talus:
 		return false
 
 	var transfer: float = minf(
 		absf(difference) * 0.12,
-		(absf(difference) - TALUS_HEIGHT) * 0.5
+		(absf(difference) - local_talus) * 0.5
 	) * clampf(dt * 10.0, 0.0, 1.0)
 	if transfer <= 0.0:
 		return false
