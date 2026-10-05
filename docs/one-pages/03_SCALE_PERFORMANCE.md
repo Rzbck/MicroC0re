@@ -48,7 +48,10 @@ Reported speed must use simulation-time / wall-time, never requested speed.
 
 ## Current tranche
 
-Dense bacterial terrain updates are deterministic cohorts: every organism keeps its terrain/biome behavior, but expensive physical evaluation is distributed in time with compensated `dt`.
+- Dense bacterial terrain updates are deterministic cohorts: every organism keeps its terrain/biome behavior, but expensive physical evaluation is distributed in time with compensated `dt`.
+- Phenotype-species identity is now cold cached state on bacteria and is invalidated only by phenotype/genome changes. Hot population/render loops no longer repeatedly classify unchanged cells.
+
+This is the first explicit hot/cold split for #20; stable biological IDs remain unchanged.
 
 ## Next structural milestone
 

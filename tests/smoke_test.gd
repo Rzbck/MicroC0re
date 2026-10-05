@@ -154,6 +154,24 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Cold phenotype classification cache: repeated reads should reuse the
+	# stable species ID, then recompute only after phenotype invalidation.
+	var species_cache_probe = PetriSimulationScript.new(73006)
+	species_cache_probe.seed_demo(12)
+	var cached_cell = species_cache_probe.bacteria[0]
+	var cached_species: int = species_cache_probe.phenotype_species_id(cached_cell, 0)
+	if bool(cached_cell.phenotype_species_dirty):
+		errors.append("performance: phenotype species cache did not settle")
+	if species_cache_probe.phenotype_species_id(cached_cell, 0) != cached_species:
+		errors.append("performance: phenotype species cache was unstable")
+	cached_cell.gene_size = 1.54
+	cached_cell.phenotype_species_dirty = true
+	var recomputed_species: int = species_cache_probe.phenotype_species_id(cached_cell, 0)
+	if bool(cached_cell.phenotype_species_dirty):
+		errors.append("performance: phenotype species cache failed to refresh")
+	if int(cached_cell.phenotype_species_cache) != recomputed_species:
+		errors.append("performance: phenotype species cache stored wrong value")
+
 	# Trophic capacity regression: safety ceilings are guards, not population
 	# targets. Predator carrying capacities must respond to prey abundance.
 	var capacity_probe = PetriSimulationScript.new(73004)

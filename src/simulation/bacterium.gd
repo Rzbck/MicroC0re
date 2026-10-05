@@ -84,6 +84,11 @@ var mutation_rate: float = 0.08
 var genome: Variant = null
 var ecotype_id: int = 0
 var ecotype_label: String = "generalist"
+
+# Coarse phenotype-species identity is cold derived state. It is cached so hot
+# population/render loops do not repeatedly reread and quantize many genes.
+var phenotype_species_cache: int = -1
+var phenotype_species_dirty: bool = true
 var genome_event: String = "founder"
 var structural_mutations: int = 0
 var genome_recombination_events: int = 0
@@ -185,6 +190,7 @@ func configure_founder(p_rng: RandomNumberGenerator) -> void:
 	genome_event = String(genome.last_event)
 	structural_mutations = 0
 	genome_recombination_events = 0
+	phenotype_species_dirty = true
 
 	_apply_size_phenotype()
 
@@ -274,6 +280,7 @@ func inherit_and_mutate(parent: Variant, p_rng: RandomNumberGenerator) -> void:
 	genome_event = String(genome.last_event)
 	ecotype_id = int(genome.ecotype_hash())
 	guild = int(genome.baseline_guild())
+	phenotype_species_dirty = true
 
 	_apply_size_phenotype()
 
@@ -305,6 +312,7 @@ func integrate_genome_module(
 		structural_mutations += int(genome.last_structural_changes)
 		genome_event = String(genome.last_event)
 		ecotype_id = int(genome.ecotype_hash())
+		phenotype_species_dirty = true
 	return changed
 
 

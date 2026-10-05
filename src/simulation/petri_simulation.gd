@@ -2894,9 +2894,12 @@ func _advance_cell(cell: Variant, dt: float) -> void:
 		cell.expression_quorum = float(
 			genome_values[EvolvableGenomeScript.MODULE_QUORUM_SIGNAL]
 		)
+		var previous_guild: int = int(cell.guild)
 		cell.guild = int(
 			cell.genome.dominant_guild_from_values(genome_values)
 		)
+		if int(cell.guild) != previous_guild:
+			cell.phenotype_species_dirty = true
 		cell.ecotype_label = String(
 			cell.genome.phenotype_label_from_values(genome_values)
 		)
@@ -3350,6 +3353,13 @@ func _species_mix(signature: int, value: int) -> int:
 func phenotype_species_id(agent: Variant, family_code: int) -> int:
 	# Exact ecotypes are intentionally much finer than species. A species only
 	# changes when meaningful phenotype/niche thresholds are crossed.
+	if (
+		family_code == 0
+		and not bool(agent.phenotype_species_dirty)
+		and int(agent.phenotype_species_cache) >= 0
+	):
+		return int(agent.phenotype_species_cache)
+
 	var signature: int = 1009 + family_code * 100003
 	match family_code:
 		0:
@@ -3382,6 +3392,10 @@ func phenotype_species_id(agent: Variant, family_code: int) -> int:
 			signature = _species_mix(signature, _species_bin(float(agent.gene_branch), 0.45, 1.85))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_enzyme), 0.50, 1.75))
 			signature = _species_mix(signature, _species_bin(float(agent.gene_efficiency), 0.55, 1.65))
+
+	if family_code == 0:
+		agent.phenotype_species_cache = signature
+		agent.phenotype_species_dirty = false
 	return signature
 
 
@@ -4003,6 +4017,9 @@ func _integrate_dna_fragment(cell: Variant, fragment: Variant) -> void:
 
 	if fragment.has_module_payload():
 		cell.integrate_genome_module(fragment.module_payload, rng)
+
+	# Scalar transformation can cross a phenotype-species threshold.
+	cell.phenotype_species_dirty = true
 
 
 func _bacterium_trait_value(cell: Variant, trait_kind: int) -> float:
