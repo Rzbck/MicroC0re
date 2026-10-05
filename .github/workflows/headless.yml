@@ -113,6 +113,33 @@ jobs:
           $body | Set-Content smoke-failure.md -Encoding utf8
           gh issue comment 67 --body-file smoke-failure.md
 
+      - name: Run 10-minute ecology soak
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        run: |
+          $output = & godot --headless --path . --script tests/ecology_soak.gd 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $lines = @($output | Where-Object { $_ -match '^ecology_soak' })
+          $body = @(
+            ('### CI ecology soak ' + $env:GITHUB_SHA)
+            ''
+            'Ten simulated minutes with ecological seed-bank guards:'
+            ''
+            '```text'
+          )
+          $body += $lines
+          $body += '```'
+          $body | Set-Content -Path ecology-soak.md -Encoding utf8
+          exit $code
+
+      - name: Publish ecology soak to issue 67
+        if: github.event_name == 'push' && github.ref == 'refs/heads/rebuild/pixel-microscope-v0.2'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 67 --body-file ecology-soak.md
+
       - name: Run 5k CPU scale benchmark
         shell: pwsh
         run: |
