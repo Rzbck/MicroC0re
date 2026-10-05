@@ -301,56 +301,80 @@ Do not overreact to CI runner variance; compare repeated runs and subsystem timi
 
 # Last maintainer local telemetry before current HEAD
 
-The latest local session currently published in issue #66 is:
+The latest local session published in issue #66 is:
 
-- issue comment ID: **5993344228**
-- build: **`27b3ab4967d7`**
-- duration: 307 s (~5.1 min)
+- issue comment ID: **5995934156**
+- build: **`2222688b09e9`**
+- duration: 426 s (~7.1 min)
 - Windows / NVIDIA / Forward+
-- final bacteria: 1268
+- final bacteria: **1447**
 
 Performance:
-- sim step p50: **27.22 ms**
-- core p50: **14.44 ms**
-- terrain p50: **3.93 ms**
-- FPS p50: **8**
-- achieved speed p50: **0.48x**
+- frame max p50 / p95: **115.88 / 150 ms**
+- sim step p50: **16.34 ms**
+- core p50: **23.44 ms**
+- terrain p50: **9.62 ms**
+- FPS p50 / minimum: **18 / 6**
+- achieved speed p50: **0.62x**
+
+Ecology:
+- bacteria final: **1447**
+- protozoa final: **3**
+- ciliates final: **1**
+- flagellates final: **1**
+- algae final: **12**
+- decomposers final: **0**
+- hyphae final: **3**
+- predator reproduction: **0 proto / 0 ciliate / 0 flagellate**
+- bacterial reproduction: **1595**
+- predation events: **195 proto / 121 ciliate / 47 flagellate**
 
 Evolution:
-- phenotype species final / peak: **29 / 47**
-- ecotypes final / peak: **1053 / 1062**
-- generation: 24
-- structural mutations: ~2899
-- HGT: 0
+- phenotype species final / peak: **57 / 57**
+- ecotypes final / peak: **1158 / 1158**
+- generation: 20
+- structural mutations: ~3252
+- HGT: 10 / 11
 - transformations: 0
-- capability mixes: 15
-- refugia recoveries: 5
+- capability mixes: 29
+- refugia recoveries: 6
 
 Terraforming / biome:
-- excavated: ~1246
-- deposited: ~1030
-- producer: 179
-- biofilm: 1
-- detrital: 7
-- fungal: 0
-- anoxic: 0
-- disturbed: **2560**
-- recently modified: **2688**
+- excavated: ~61
+- deposited: ~21
+- producer: **592**
+- biofilm: **50**
+- detrital: **0**
+- fungal: **0**
+- anoxic: **0**
+- disturbed: 1
+- recently modified: 4
+
+The screenshot from this run exposed severe overview clutter from armor rectangles
+and reproduction circles. The report also exposed a hard ciliate balance bug:
+feeding capped energy at 16.0 while reproduction required 16.5.
 
 This run directly motivated:
-- `bc7d013 Make terraforming attribution readable`
-- `92acd60 Keep fast-forward frames responsive`
-- `2222688 Polish living microscope presentation`
+- `51e0a7d Rebalance living biome readability`
 
-Therefore **do not treat the 27b3ab4 local telemetry as validation of the current HEAD**.
-
-A new local run on `2222688` is the next required product-validation gate.
+Therefore **do not treat 2222688 as the current target**. The next required
+product-validation gate is a fresh local run on `51e0a7d` (or a newer
+documentation-only HEAD above it).
 
 ---
 
 # Recent commit chain to know
 
 Newest first:
+
+- `51e0a7d` — **Rebalance living biome readability**
+  - removes enclosing armor/reproduction geometry;
+  - density-aware overview batching with close-zoom detail recovery;
+  - phenotype species drive stronger bacterial silhouettes;
+  - fixes predator reproduction energy viability and earlier bacterial density pressure;
+  - strengthens detrital/fungal recycling and decomposer persistence;
+  - vegetation succession depends on living producer/exudate support;
+  - derived marsh / sand-bar / crag habitats affect steering and substrate cost.
 
 - `2222688` — **Polish living microscope presentation**
   - species silhouette/body-mark variation;
@@ -397,14 +421,14 @@ Earlier important architecture:
 
 # CI state at handoff
 
-For code commit `2222688`:
+For code commit `51e0a7d`:
 
-- PR workflow run **37303818118**: **SUCCESS**
-- push run was cancelled because newer workflow activity superseded it; do not interpret that cancellation as a code failure.
+- parser/import checks: **SUCCESS**
+- deterministic smoke test: **SUCCESS**
+- push workflow run **37323204693** continued into the 10-minute ecology soak at
+  the time this handoff note was refreshed.
 
-Current HEAD parses and passes the PR smoke/benchmark workflow.
-
-Local visual validation is still required.
+Local visual validation is still required; CI cannot judge readability.
 
 ---
 
@@ -412,7 +436,7 @@ Local visual validation is still required.
 
 Do this first, before adding more systems:
 
-1. Ask the maintainer to pull and run HEAD `2222688` if they have not already.
+1. Ask the maintainer to pull and run code commit `51e0a7d` (or newer) if they have not already.
 2. Have them test:
    - x1;
    - x4;
@@ -450,7 +474,7 @@ Do **not** start another large visual or ecology feature before seeing how `2222
 ### Species readability / coexistence
 The previous local run had >1000 ecotypes but only 29 visible species at the end.
 
-HEAD `2222688` increases phenotype resolution and visual species variation, but this has **not yet been locally validated**.
+Code commit `51e0a7d` adds stronger species silhouettes and density-aware overview rendering, but this has **not yet been locally validated**.
 
 Watch for:
 - too many organisms still appearing identical;
@@ -519,7 +543,7 @@ git log -1 --oneline
 Expected latest **code** commit beneath any documentation-only handoff commit(s):
 
 ```text
-2222688 Polish living microscope presentation
+51e0a7d Rebalance living biome readability
 ```
 
 Use `git log -3 --oneline` rather than assuming the documentation commit itself is the code baseline.
