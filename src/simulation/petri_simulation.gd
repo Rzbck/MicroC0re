@@ -777,7 +777,17 @@ func step(dt: float) -> void:
 					_recycle_dead_cell(cell)
 				continue
 
-			_advance_cell(cell, agent_dt)
+			var run_metabolism: bool = (
+				_current_metabolic_stride <= 1
+				or posmod(
+					int(cell.id) + _agent_tick,
+					_current_metabolic_stride
+				) == 0
+			)
+			if run_metabolism:
+				_advance_cell(cell, agent_dt)
+			else:
+				_advance_cell_motion_only(cell, agent_dt)
 
 			if bool(cell.dying):
 				continue
@@ -2825,10 +2835,6 @@ func _plasmid_burden(cell: Variant) -> float:
 
 
 func _advance_cell(cell: Variant, dt: float) -> void:
-	if not _should_run_metabolism(int(cell.id)):
-		_advance_cell_motion_only(cell, dt)
-		return
-
 	var metabolic_dt: float = dt * float(_current_metabolic_stride)
 	cell.age = float(cell.age) + dt
 

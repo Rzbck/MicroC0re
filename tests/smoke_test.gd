@@ -154,6 +154,23 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Direct cohort routing must remain equivalent to the legacy helper.
+	var routing_probe = PetriSimulationScript.new(73011)
+	routing_probe.seed_demo(16)
+	routing_probe._current_metabolic_stride = 5
+	routing_probe._agent_tick = 7
+	for routing_cell in routing_probe.bacteria:
+		var inline_route: bool = (
+			routing_probe._current_metabolic_stride <= 1
+			or posmod(
+				int(routing_cell.id) + routing_probe._agent_tick,
+				routing_probe._current_metabolic_stride
+			) == 0
+		)
+		if inline_route != routing_probe._should_run_metabolism(int(routing_cell.id)):
+			errors.append("performance: direct metabolic cohort routing diverged")
+			break
+
 	# Cached motility must equal the uncached phenotype formula and update
 	# after regulated expression changes.
 	var motion_probe = BacteriumScript.new(
