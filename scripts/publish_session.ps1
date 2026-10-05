@@ -95,6 +95,21 @@ foreach ($s in @($raw.samples)) {
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
         capability_fragments = I $s.capability_fragments
         ecotypes = I $s.ecotypes
+        species = I $s.species
+        species_bacteria = I $s.species_bacteria
+        species_protozoa = I $s.species_protozoa
+        species_ciliates = I $s.species_ciliates
+        species_flagellates = I $s.species_flagellates
+        species_algae = I $s.species_algae
+        species_decomposers = I $s.species_decomposers
+        species_hyphae = I $s.species_hyphae
+        biome_producer = I $s.biome_producer
+        biome_biofilm = I $s.biome_biofilm
+        biome_detrital = I $s.biome_detrital
+        biome_fungal = I $s.biome_fungal
+        biome_anoxic = I $s.biome_anoxic
+        biome_disturbed = I $s.biome_disturbed
+        biome_transitions = I $s.biome_transitions
         lineage_bins = I $s.lineage_bins
         max_generation = I $s.max_generation
         structural_mutations = I $s.structural_mutations
@@ -132,6 +147,21 @@ foreach ($s in @($raw.long_samples)) {
         soil_excavated = [Math]::Round((N $s.soil_excavated), 3)
         soil_deposited = [Math]::Round((N $s.soil_deposited), 3)
         ecotypes = I $s.ecotypes
+        species = I $s.species
+        species_bacteria = I $s.species_bacteria
+        species_protozoa = I $s.species_protozoa
+        species_ciliates = I $s.species_ciliates
+        species_flagellates = I $s.species_flagellates
+        species_algae = I $s.species_algae
+        species_decomposers = I $s.species_decomposers
+        species_hyphae = I $s.species_hyphae
+        biome_producer = I $s.biome_producer
+        biome_biofilm = I $s.biome_biofilm
+        biome_detrital = I $s.biome_detrital
+        biome_fungal = I $s.biome_fungal
+        biome_anoxic = I $s.biome_anoxic
+        biome_disturbed = I $s.biome_disturbed
+        biome_transitions = I $s.biome_transitions
         lineage_bins = I $s.lineage_bins
         max_generation = I $s.max_generation
         structural_mutations = I $s.structural_mutations
@@ -188,6 +218,7 @@ $actualSpeedValues = @($safeSamples | ForEach-Object { [double]$_.actual_speed }
 $fpsValues = @($safeSamples | ForEach-Object { [double]$_.fps })
 $agentValues = @($safeSamples | ForEach-Object { [double]$_.agents })
 $ecotypeValues = @($safeSamples | ForEach-Object { [double]$_.ecotypes })
+$speciesValues = @($safeSamples | ForEach-Object { [double]$_.species })
 $generationValues = @($safeSamples | ForEach-Object { [double]$_.max_generation })
 $structuralValues = @($safeSamples | ForEach-Object { [double]$_.structural_mutations })
 $hgtValues = @($safeSamples | ForEach-Object { [double]$_.hgt_events })
@@ -302,6 +333,36 @@ if ($historySamples.Count -gt 0) {
 }
 $timelineText = $timelineLines -join [Environment]::NewLine
 
+$diversityLines = New-Object System.Collections.Generic.List[string]
+$diversityLines.Add("t_s species bSp pSp cSp fSp aSp dSp hSp bioP bioB bioD bioF bioA bioX bioT")
+if ($historySamples.Count -gt 0) {
+    $divStride = [Math]::Max(1, [int][Math]::Ceiling($historySamples.Count / 180.0))
+    for ($i = 0; $i -lt $historySamples.Count; $i += $divStride) {
+        $s = $historySamples[$i]
+        $diversityLines.Add((
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15}" -f
+            (I $s.t_s),(I $s.species),(I $s.species_bacteria),(I $s.species_protozoa),
+            (I $s.species_ciliates),(I $s.species_flagellates),(I $s.species_algae),
+            (I $s.species_decomposers),(I $s.species_hyphae),(I $s.biome_producer),
+            (I $s.biome_biofilm),(I $s.biome_detrital),(I $s.biome_fungal),
+            (I $s.biome_anoxic),(I $s.biome_disturbed),(I $s.biome_transitions)
+        ))
+    }
+    $lastIndex = $historySamples.Count - 1
+    if (($lastIndex % $divStride) -ne 0) {
+        $s = $historySamples[$lastIndex]
+        $diversityLines.Add((
+            "{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15}" -f
+            (I $s.t_s),(I $s.species),(I $s.species_bacteria),(I $s.species_protozoa),
+            (I $s.species_ciliates),(I $s.species_flagellates),(I $s.species_algae),
+            (I $s.species_decomposers),(I $s.species_hyphae),(I $s.biome_producer),
+            (I $s.biome_biofilm),(I $s.biome_detrital),(I $s.biome_fungal),
+            (I $s.biome_anoxic),(I $s.biome_disturbed),(I $s.biome_transitions)
+        ))
+    }
+}
+$diversityText = $diversityLines -join [Environment]::NewLine
+
 $summary = @"
 ### Session $sessionId
 
@@ -330,8 +391,9 @@ Ecological history: $historyStart s → $historyEnd s ($([Math]::Round($historyC
 | decomposers | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.decomposers }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.decomposers }) 1.0),0)) | $(FinalValue "decomposers") |
 | hyphae | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.hyphae }) 0.0),0)) | $([Math]::Round((Percentile @($safeSamples | ForEach-Object { [double]$_.hyphae }) 1.0),0)) | $(FinalValue "hyphae") |
 
-Evolution final/peak: ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
+Evolution final/peak: species $(FinalValue "species")/$([Math]::Round((Percentile $speciesValues 1.0),0)), ecotypes $(FinalValue "ecotypes")/$([Math]::Round((Percentile $ecotypeValues 1.0),0)), lineage bins $(FinalValue "lineage_bins"), generation $(FinalValue "max_generation")/$([Math]::Round((Percentile $generationValues 1.0),0)), structural mutations $(FinalValue "structural_mutations")/$([Math]::Round((Percentile $structuralValues 1.0),0)), HGT $(FinalValue "hgt_events")/$([Math]::Round((Percentile $hgtValues 1.0),0)), transformations $(FinalValue "transformations"), capability mixes $(FinalValue "capability_mix_events"), refugia recoveries $(FinalValue "refugia_recoveries").  
 Terraforming final: excavated $([Math]::Round((N $lastSample.soil_excavated),2)), deposited $([Math]::Round((N $lastSample.soil_deposited),2)).  
+Biome final: producer $(FinalValue "biome_producer"), biofilm $(FinalValue "biome_biofilm"), detrital $(FinalValue "biome_detrital"), fungal $(FinalValue "biome_fungal"), anoxic $(FinalValue "biome_anoxic"), disturbed $(FinalValue "biome_disturbed"), transitions $(FinalValue "biome_transitions").  
 Interactions final: proto predation $(PredProto $historyLast), ciliate predation $(PredCiliate $historyLast), flagellate predation $(PredFlagellate $historyLast), prey escapes $(EscapeTotal $historyLast).  
 Reproduction final: bacteria $(EventValue $historyLast "repro_bacteria"), protozoa $(EventValue $historyLast "repro_protozoa"), ciliates $(EventValue $historyLast "repro_ciliates"), flagellates $(EventValue $historyLast "repro_flagellates"), algae $(EventValue $historyLast "repro_algae"), decomposers $(EventValue $historyLast "repro_decomposers"), hyphae $(EventValue $historyLast "repro_hyphae").  
 Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $($counters.selection_hits)/$($counters.selection_attempts), menu opens $($counters.menu_opens).
@@ -341,6 +403,15 @@ Inputs: rotations $($counters.rotations), zooms $($counters.zooms), selections $
 
 ```text
 $timelineText
+```
+
+</details>
+
+<details>
+<summary>Species and biome succession timeline (≤180 rows)</summary>
+
+```text
+$diversityText
 ```
 
 </details>
