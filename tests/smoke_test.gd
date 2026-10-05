@@ -154,6 +154,33 @@ func _init() -> void:
 	) > 0.0001:
 		errors.append("performance: nearest scalar-field sampling mismatch")
 
+	# Dense frequency metadata is sampled adaptively; the hard population
+	# ceiling remains exact because births use the packed population size.
+	var metadata_probe = PetriSimulationScript.new(73010)
+	metadata_probe.seed_demo(12)
+	if metadata_probe._population_metadata_stride() != 1:
+		errors.append("performance: small population metadata should remain exact")
+	while metadata_probe.bacteria.size() < PetriSimulationScript.AGENT_MASS_THRESHOLD:
+		metadata_probe.bacteria.append(
+			BacteriumScript.new(
+				910000 + metadata_probe.bacteria.size(),
+				Vector2(32.0, 32.0),
+				0.0
+			)
+		)
+	if metadata_probe._population_metadata_stride() != 2:
+		errors.append("performance: mass population metadata stride mismatch")
+	while metadata_probe.bacteria.size() < PetriSimulationScript.AGENT_ULTRA_THRESHOLD:
+		metadata_probe.bacteria.append(
+			BacteriumScript.new(
+				920000 + metadata_probe.bacteria.size(),
+				Vector2(36.0, 36.0),
+				0.0
+			)
+		)
+	if metadata_probe._population_metadata_stride() != 4:
+		errors.append("performance: ultra population metadata stride mismatch")
+
 	# Bacterial population compaction removes only dead/consumed cells,
 	# preserves survivor order and appends births once.
 	var compact_probe = PetriSimulationScript.new(73009)

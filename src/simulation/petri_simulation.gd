@@ -663,6 +663,7 @@ func seed_demo(count: int = 36) -> void:
 		decomposers.append(yeast)
 
 	_refresh_refugia_memory()
+	_refresh_population_metadata()
 	_resolve_all_contacts()
 	_rebuild_id_maps()
 
@@ -741,10 +742,17 @@ func step(dt: float) -> void:
 		var agents_start: int = Time.get_ticks_usec()
 		var pending_births: Array = _population_buffer
 		pending_births.clear()
-		var living_start: int = _refresh_population_metadata()
+		var metadata_stride: int = _population_metadata_stride()
+		if (
+			metadata_stride <= 1
+			or posmod(_agent_tick, metadata_stride) == 0
+		):
+			_refresh_population_metadata()
+		# Use total packed population for the hard ceiling. This is conservative
+		# while consumed/dying cells await compaction and cannot over-admit births.
 		var available_bacterial_births: int = maxi(
 			0,
-			bacteria_population_limit - living_start
+			bacteria_population_limit - bacteria.size()
 		)
 		var bacteria_identity_changed: bool = false
 
@@ -3476,6 +3484,15 @@ func bacteria_render_snapshot() -> Dictionary:
 
 func _ecotype_pressure_bin(ecotype_id: int) -> int:
 	return posmod(ecotype_id, ECOTYPE_PRESSURE_BIN_COUNT)
+
+
+func _population_metadata_stride() -> int:
+	var count: int = bacteria.size()
+	if count >= AGENT_ULTRA_THRESHOLD:
+		return 4
+	if count >= AGENT_MASS_THRESHOLD:
+		return 2
+	return 1
 
 
 func _refresh_population_metadata() -> int:
