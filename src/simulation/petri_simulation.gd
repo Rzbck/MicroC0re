@@ -5,6 +5,7 @@ const ScalarFieldScript = preload("res://src/simulation/scalar_field.gd")
 const EvolvableGenomeScript = preload("res://src/simulation/evolvable_genome.gd")
 const DNAFragmentScript = preload("res://src/simulation/dna_fragment.gd")
 const BacteriumScript = preload("res://src/simulation/bacterium.gd")
+const BacteriaHotStoreScript = preload("res://src/simulation/bacteria_hot_store.gd")
 const ProtozoanScript = preload("res://src/simulation/protozoan.gd")
 const CiliateScript = preload("res://src/simulation/ciliate.gd")
 const FlagellateScript = preload("res://src/simulation/flagellate.gd")
@@ -141,6 +142,8 @@ var _density_corrections: PackedVector2Array = PackedVector2Array()
 var _density_nearest: PackedInt32Array = PackedInt32Array()
 var _lineage_counts: PackedInt32Array = PackedInt32Array()
 var _bacteria_by_id: Dictionary = {}
+var _bacteria_dense_index_by_id: Dictionary = {}
+var bacteria_hot_store: Variant = BacteriaHotStoreScript.new()
 var _edible_by_id: Dictionary = {}
 var _active_transfer_recipient_ids: PackedInt32Array = PackedInt32Array()
 var _ecotype_counts: PackedInt32Array = PackedInt32Array()
@@ -414,6 +417,8 @@ func _init(seed_value: int = 1) -> void:
 
 func seed_demo(count: int = 36) -> void:
 	bacteria.clear()
+	bacteria_hot_store.clear()
+	_bacteria_dense_index_by_id.clear()
 	protozoa.clear()
 	ciliates.clear()
 	flagellates.clear()
@@ -670,6 +675,7 @@ func seed_demo(count: int = 36) -> void:
 
 	_refresh_refugia_memory()
 	_refresh_population_metadata()
+	_rebuild_bacteria_hot_store()
 	_resolve_all_contacts()
 	_rebuild_id_maps()
 
@@ -765,7 +771,11 @@ func step(dt: float) -> void:
 		# Hot-path rule: do not rebuild/copy the population array on ordinary
 		# ticks. Cells mutate in place; only completed death/division triggers
 		# one stable compaction pass at the end of the tick.
-		for cell in bacteria:
+		if bacteria_hot_store.size() != bacteria.size():
+			_rebuild_bacteria_hot_store()
+
+		for cell_index in range(bacteria.size()):
+			var cell: Variant = bacteria[cell_index]
 			cell.adhesion_timer = maxf(0.0, float(cell.adhesion_timer) - agent_dt)
 
 			if bool(cell.consumed):
@@ -773,6 +783,7 @@ func step(dt: float) -> void:
 				continue
 
 			if int(cell.engulfed_by_id) >= 0:
+				_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if bool(cell.dying):
@@ -781,6 +792,8 @@ func step(dt: float) -> void:
 					bacteria_identity_changed = true
 					cell.alive = false
 					_recycle_dead_cell(cell)
+				else:
+					_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			var run_metabolism: bool = (
@@ -796,6 +809,7 @@ func step(dt: float) -> void:
 				_advance_cell_motion_only(cell, agent_dt)
 
 			if bool(cell.dying):
+				_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if bool(cell.dividing):
@@ -815,10 +829,14 @@ func step(dt: float) -> void:
 						cell.dividing = false
 						cell.division_progress = 0.0
 						cell.energy = minf(float(cell.energy), base_division_energy * 0.92)
+						_sync_bacteria_hot_cell(cell_index)
+				else:
+					_sync_bacteria_hot_cell(cell_index)
 				continue
 
 			if _ready_to_begin_division(cell):
 				cell.begin_division()
+			_sync_bacteria_hot_cell(cell_index)
 
 		if bacteria_identity_changed:
 			_compact_bacteria_population(pending_births)
@@ -884,6 +902,7 @@ func _compact_bacteria_population(pending_births: Array) -> void:
 	if not pending_births.is_empty():
 		bacteria.append_array(pending_births)
 		pending_births.clear()
+	_rebuild_bacteria_hot_store()
 
 
 func _chemistry_dt_for_population() -> float:
@@ -1772,6 +1791,7 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 		if escape_axis.length_squared() <= 0.000001:
 			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
 		prey.position = Vector2(prey.position) + escape_axis * 0.70
+		_sync_bacteria_hot_object(prey)
 		flagellate.finish_feed()
 		return
 
@@ -1789,12 +1809,14 @@ func _advance_flagellate_feed(flagellate: Variant, dt: float) -> void:
 		mouth,
 		clampf(dt * (4.0 + progress * 6.0), 0.0, 1.0)
 	)
+	_sync_bacteria_hot_object(prey)
 
 	if progress >= 1.0:
 		_record_predation("flagellate", prey)
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
+		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
 			1.8,
@@ -2177,6 +2199,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		if escape_axis.length_squared() <= 0.000001:
 			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
 		prey.position = Vector2(prey.position) + escape_axis * 1.2
+		_sync_bacteria_hot_object(prey)
 		proto.finish_engulf()
 		return
 
@@ -2195,6 +2218,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		float(proto.angle) + PI * 0.5,
 		clampf(dt * 4.0, 0.0, 1.0)
 	)
+	_sync_bacteria_hot_object(prey)
 
 	var wobble: float = sin(float(proto.deform_phase) * 2.3) * 0.22
 	proto.angle = wrapf(float(proto.angle) + wobble * dt, -PI, PI)
@@ -2204,6 +2228,7 @@ func _advance_protozoan_engulf(proto: Variant, dt: float) -> void:
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
+		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
 			2.6,
@@ -2520,6 +2545,7 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		if escape_axis.length_squared() <= 0.000001:
 			escape_axis = Vector2.RIGHT.rotated(float(prey.angle))
 		prey.position = Vector2(prey.position) + escape_axis * 0.95
+		_sync_bacteria_hot_object(prey)
 		ciliate.finish_feed()
 		return
 
@@ -2543,12 +2569,14 @@ func _advance_ciliate_feed(ciliate: Variant, dt: float) -> void:
 		float(ciliate.angle),
 		clampf(dt * 7.0, 0.0, 1.0)
 	)
+	_sync_bacteria_hot_object(prey)
 
 	if progress >= 1.0:
 		_record_predation("ciliate", prey)
 		prey.consumed = true
 		prey.alive = false
 		prey.engulfed_by_id = -1
+		_sync_bacteria_hot_object(prey)
 		detritus.add_radial_world(
 			Vector2(prey.position),
 			2.2,
@@ -3405,63 +3433,39 @@ func species_visual_hue(agent: Variant, family_code: int) -> float:
 	return float(posmod(species_id * 73 + family_code * 131, 997)) / 997.0
 
 
+func _sync_bacteria_hot_cell(index: int) -> void:
+	if index < 0 or index >= bacteria.size():
+		return
+	if bacteria_hot_store.size() != bacteria.size():
+		bacteria_hot_store.resize(bacteria.size())
+	var cell: Variant = bacteria[index]
+	bacteria_hot_store.write_cell(
+		index,
+		cell,
+		species_visual_hue(cell, 0)
+	)
+
+
+func _sync_bacteria_hot_object(cell: Variant) -> void:
+	if cell == null:
+		return
+	var dense_index: int = int(
+		_bacteria_dense_index_by_id.get(int(cell.id), -1)
+	)
+	if dense_index >= 0 and dense_index < bacteria.size():
+		_sync_bacteria_hot_cell(dense_index)
+
+
+func _rebuild_bacteria_hot_store() -> void:
+	bacteria_hot_store.resize(bacteria.size())
+	for i in range(bacteria.size()):
+		_sync_bacteria_hot_cell(i)
+
+
 func bacteria_render_snapshot() -> Dictionary:
-	# Rendering reads a compact immutable-at-call-time view instead of walking
-	# RefCounted bacteria directly. This is an incremental bridge toward #20:
-	# simulation objects remain authoritative for biology while presentation
-	# consumes dense packed state.
-	var positions := PackedVector2Array()
-	var angles := PackedFloat32Array()
-	var lengths := PackedFloat32Array()
-	var radii := PackedFloat32Array()
-	var gene_sizes := PackedFloat32Array()
-	var burrow_depths := PackedFloat32Array()
-	var species_hues := PackedFloat32Array()
-	var lineage_hues := PackedFloat32Array()
-	var states := PackedByteArray()
-
-	var count: int = 0
-	for cell in bacteria:
-		if cell == null or bool(cell.consumed):
-			continue
-		count += 1
-	positions.resize(count)
-	angles.resize(count)
-	lengths.resize(count)
-	radii.resize(count)
-	gene_sizes.resize(count)
-	burrow_depths.resize(count)
-	species_hues.resize(count)
-	lineage_hues.resize(count)
-	states.resize(count)
-
-	var write_index: int = 0
-	for cell in bacteria:
-		if cell == null or bool(cell.consumed):
-			continue
-		positions[write_index] = Vector2(cell.position)
-		angles[write_index] = float(cell.angle)
-		lengths[write_index] = float(cell.length)
-		radii[write_index] = float(cell.radius)
-		gene_sizes[write_index] = float(cell.gene_size)
-		burrow_depths[write_index] = float(cell.burrow_depth)
-		species_hues[write_index] = species_visual_hue(cell, 0)
-		lineage_hues[write_index] = float(cell.lineage_hue)
-		states[write_index] = 1 if bool(cell.dying) else 0
-		write_index += 1
-
-	return {
-		"positions": positions,
-		"angles": angles,
-		"lengths": lengths,
-		"radii": radii,
-		"gene_sizes": gene_sizes,
-		"burrow_depths": burrow_depths,
-		"species_hues": species_hues,
-		"lineage_hues": lineage_hues,
-		"states": states,
-	}
-
+	if bacteria_hot_store.size() != bacteria.size():
+		_rebuild_bacteria_hot_store()
+	return bacteria_hot_store.render_snapshot()
 
 func _ecotype_pressure_bin(ecotype_id: int) -> int:
 	return posmod(ecotype_id, ECOTYPE_PRESSURE_BIN_COUNT)
@@ -4341,8 +4345,11 @@ func _damage_cue_direction(position: Vector2) -> Vector2:
 
 func _rebuild_bacteria_id_map() -> void:
 	_bacteria_by_id.clear()
-	for cell in bacteria:
+	_bacteria_dense_index_by_id.clear()
+	for i in range(bacteria.size()):
+		var cell: Variant = bacteria[i]
 		_bacteria_by_id[int(cell.id)] = cell
+		_bacteria_dense_index_by_id[int(cell.id)] = i
 
 
 func _rebuild_edible_id_map() -> void:
@@ -4558,6 +4565,7 @@ func _restore_refugium(kind: int, parent: Variant) -> bool:
 		5: _event_inc("refugia_hyphae")
 		6:
 			_event_inc("refugia_bacteria")
+			_rebuild_bacteria_hot_store()
 			_rebuild_bacteria_id_map()
 	if "cooldown" in child:
 		child.cooldown = 2.5
@@ -4801,8 +4809,9 @@ func _resolve_all_contacts() -> void:
 	if bacteria.size() > EXACT_MECHANICS_LIMIT:
 		mechanics_mode_last = 1
 		_resolve_density_contacts()
-		for dense_cell in bacteria:
-			_constrain_to_world(dense_cell)
+		for dense_index in range(bacteria.size()):
+			_constrain_to_world(bacteria[dense_index])
+			_sync_bacteria_hot_cell(dense_index)
 		return
 
 	mechanics_mode_last = 0
@@ -4857,8 +4866,9 @@ func _resolve_all_contacts() -> void:
 						_resolve_pair(cell, bacteria[j])
 					j = _grid_next[j]
 
-	for cell in bacteria:
-		_constrain_to_world(cell)
+	for exact_index in range(bacteria.size()):
+		_constrain_to_world(bacteria[exact_index])
+		_sync_bacteria_hot_cell(exact_index)
 
 
 func _density_neighbor_visit_cap() -> int:
@@ -4980,6 +4990,8 @@ func _resolve_density_contacts() -> void:
 func _rebuild_spatial_grid() -> void:
 	_grid_head.fill(-1)
 	var count: int = bacteria.size()
+	if bacteria_hot_store.size() != count:
+		_rebuild_bacteria_hot_store()
 	_grid_next.resize(count)
 	_grid_next.fill(-1)
 	_mech_positions.resize(count)
@@ -4988,14 +5000,14 @@ func _rebuild_spatial_grid() -> void:
 	_max_half_body_length = 0.0
 
 	for i in range(count):
-		var cell: Variant = bacteria[i]
-		var position: Vector2 = Vector2(cell.position)
+		var position: Vector2 = bacteria_hot_store.positions[i]
+		var state: int = int(bacteria_hot_store.states[i])
 		_mech_positions[i] = position
-		_mech_radii[i] = float(cell.radius)
+		_mech_radii[i] = float(bacteria_hot_store.radii[i])
 		var active: bool = (
-			not bool(cell.dying)
-			and not bool(cell.consumed)
-			and int(cell.engulfed_by_id) < 0
+			(state & int(BacteriaHotStoreScript.STATE_DYING)) == 0
+			and (state & int(BacteriaHotStoreScript.STATE_CONSUMED)) == 0
+			and (state & int(BacteriaHotStoreScript.STATE_ENGULFED)) == 0
 		)
 		_mech_active[i] = 1 if active else 0
 		if not active:
@@ -5003,7 +5015,7 @@ func _rebuild_spatial_grid() -> void:
 
 		_max_half_body_length = maxf(
 			_max_half_body_length,
-			float(cell.length) * 0.5
+			float(bacteria_hot_store.lengths[i]) * 0.5
 		)
 		var x: int = clampi(
 			floori(position.x / SPATIAL_BUCKET_SIZE),

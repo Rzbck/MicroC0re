@@ -274,6 +274,36 @@ func _init() -> void:
 	if not births.is_empty():
 		errors.append("performance: bacterial compaction failed to recycle birth buffer")
 
+	# Persistent bacterial hot store stays aligned with dense biological order.
+	var hot_probe = PetriSimulationScript.new(73013)
+	hot_probe.seed_demo(20)
+	if hot_probe.bacteria_hot_store.size() != hot_probe.bacteria.size():
+		errors.append("performance: hot-store size diverged after seed")
+	else:
+		for hot_i in range(hot_probe.bacteria.size()):
+			if (
+				int(hot_probe.bacteria_hot_store.ids[hot_i])
+				!= int(hot_probe.bacteria[hot_i].id)
+			):
+				errors.append("performance: hot-store stable ID alignment failed")
+				break
+	var hot_first = hot_probe.bacteria[0]
+	hot_first.position += Vector2(3.0, 1.0)
+	hot_probe._sync_bacteria_hot_cell(0)
+	if hot_probe.bacteria_hot_store.positions[0].distance_to(
+		Vector2(hot_first.position)
+	) > 0.0001:
+		errors.append("performance: hot-store inline position sync failed")
+	var hot_dead = hot_probe.bacteria[1]
+	hot_dead.consumed = true
+	var hot_births: Array = []
+	hot_probe._compact_bacteria_population(hot_births)
+	hot_probe._rebuild_bacteria_id_map()
+	if hot_probe.bacteria_hot_store.size() != hot_probe.bacteria.size():
+		errors.append("performance: hot-store size diverged after compaction")
+	elif int(hot_probe.bacteria_hot_store.ids[1]) != int(hot_probe.bacteria[1].id):
+		errors.append("performance: hot-store compaction alignment failed")
+
 	# Far-render bacteria are exported as packed dense state rather than
 	# requiring the renderer to traverse RefCounted cell objects.
 	var render_probe = PetriSimulationScript.new(73008)
