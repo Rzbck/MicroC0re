@@ -926,6 +926,8 @@ func _init() -> void:
 	biome_sim.oxygen.fill(0.02)
 	biome_sim.waste.fill(0.30)
 	biome_sim.detritus.fill(0.12)
+	biome_terrain.water_depths.fill(0.18)
+	biome_terrain.soil_moisture.fill(0.72)
 	biome_terrain._advance_biome_succession(
 		biome_sim,
 		LivingTerrainScript.BIOME_TRANSITION_SECONDS + 0.1
